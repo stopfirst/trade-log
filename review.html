@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E4E6E0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="장마감 복기">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>장 마감 복기</title>
+<style>
+  :root{
+    --paper:#E4E6E0; --paper2:#F2F3EF; --paper3:#D9DCD3;
+    --ink:#1B2530; --ink2:#48545F; --ink3:#7C8894;
+    --rule:#C4C8BE; --seal:#B3312A; --jade:#2F6B57; --amber:#8A6A22;
+    --sans:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0; padding:0; background:var(--paper); color:var(--ink); font-family:var(--sans); -webkit-text-size-adjust:100%;}
+  body{padding:0 0 calc(28px + env(safe-area-inset-bottom,0px));}
+  .wrap{max-width:560px; margin:0 auto; padding:16px;}
+
+  header{border-bottom:1px solid var(--rule); padding-bottom:12px; margin-bottom:16px;}
+  .eyebrow{font-family:var(--mono); font-size:10px; letter-spacing:.18em; color:var(--ink3);}
+  h1{font-size:20px; font-weight:600; margin:2px 0 0;}
+  .navlink{display:block; text-align:right; margin-top:10px; font-size:12px; color:var(--ink2); text-decoration:none; border-bottom:1px solid var(--rule); padding-bottom:2px;}
+  .sync-status{font-family:var(--mono); font-size:11px; margin-top:6px; color:var(--ink3);}
+  .sync-status.ok{color:var(--jade);} .sync-status.bad{color:var(--seal);}
+
+  .card{border:1px solid var(--rule); background:var(--paper2); padding:14px; margin-bottom:16px;}
+  .ch{font-size:13px; font-weight:600; margin:0 0 12px;}
+  .lab{font-size:11px; color:var(--ink2); display:block; margin-bottom:5px;}
+  .cap{font-size:10px; color:var(--ink3); margin-left:5px;}
+  input,textarea{width:100%; background:var(--paper2); border:1px solid var(--rule); border-radius:2px; padding:10px; font-size:15px; color:var(--ink); font-family:var(--sans);}
+  textarea{line-height:1.65; resize:vertical; display:block; font-size:14px; min-height:9.4em; height:9.4em;}
+  input:focus,textarea:focus{outline:2px solid var(--seal); outline-offset:1px;}
+  input[type=date]{-webkit-appearance:none; appearance:none; min-height:41px; font-family:var(--mono);}
+  label{display:block; margin-bottom:12px;}
+  ::placeholder{color:#A9B0A8;}
+
+  button{font-family:inherit; cursor:pointer; border:none; border-radius:2px; transition:transform .07s ease, box-shadow .12s ease; -webkit-tap-highlight-color:transparent;}
+  button:active{transform:scale(.97); box-shadow:inset 0 3px 0 rgba(0,0,0,.18);}
+  .btn{display:block; width:calc(100% + 28px); margin:16px -14px -14px; padding:15px; background:var(--seal); color:#fff; font-size:14px; font-weight:600;}
+  .btn:disabled{background:#C3C7BE; color:#8A9199; cursor:not-allowed; transform:none;}
+  .mini{padding:8px 12px; font-size:12px; border:1px solid var(--rule); background:var(--paper2); color:var(--ink2);}
+
+  .tape{background:var(--ink); color:var(--paper2); padding:14px; margin:-14px -14px 14px;}
+  .tape-hd{font-size:10px; color:#8894A0; letter-spacing:.1em; font-family:var(--mono);}
+  .tape-g{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:10px;}
+  .tape-g div{display:flex; flex-direction:column; gap:2px;}
+  .tape-g span{font-size:10px; color:#8894A0;}
+  .tape-g b{font-family:var(--mono); font-size:19px; font-variant-numeric:tabular-nums;}
+  .tape-list{margin-top:12px; padding-top:10px; border-top:1px solid #35414D; font-family:var(--mono); font-size:11px; color:#AEB8C2; line-height:1.7;}
+  .plus{color:#6FBF9E;} .minus{color:#F0A59E;}
+
+  .emos{display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px;}
+  .emo{padding:9px 4px; border:1px solid var(--rule); background:var(--paper2); font-size:11px; color:var(--ink2); text-align:center;}
+  .emo b{display:block; font-family:var(--mono); font-size:11px; font-weight:600;}
+  .emo i{font-style:normal; font-size:9px; color:var(--ink3);}
+  .emo.on{background:var(--ink); border-color:var(--ink); color:#fff;}
+  .emo.on i{color:rgba(255,255,255,.7);}
+  .emo.on.bad{background:var(--seal); border-color:var(--seal);}
+  .emo.on.warn{background:var(--amber); border-color:var(--amber);}
+
+
+  .list{list-style:none; margin:0; padding:0;}
+  .rv{border-bottom:1px solid var(--rule); border-left:3px solid var(--paper3); padding:12px 0 12px 11px;}
+  .rv.good{border-left-color:var(--jade);} .rv.bad{border-left-color:var(--seal);}
+  .rv-h{display:flex; justify-content:space-between; align-items:baseline; gap:10px; cursor:pointer;}
+  .rv-d{font-family:var(--mono); font-size:14px; font-weight:600;}
+  .rv-t{font-family:var(--mono); font-size:9px; letter-spacing:.06em; color:var(--ink3); border:1px solid var(--rule); padding:1px 4px; margin-left:6px;}
+  .rv-r{font-family:var(--mono); font-size:16px; font-variant-numeric:tabular-nums;}
+  .rv-p{font-size:12px; color:var(--ink2); margin-top:5px; line-height:1.5; cursor:pointer;}
+  .rv-body{display:none; margin-top:10px;}
+  .rv.on .rv-body{display:block;}
+  .rv-sec{margin-bottom:8px;}
+  .rv-sec span{font-size:10px; color:var(--ink3); display:block; margin-bottom:2px;}
+  .rv-sec p{font-size:13px; margin:0; line-height:1.6; white-space:pre-wrap;}
+  .rv-act{display:flex; gap:6px; margin-top:10px;}
+  .empty{padding:36px 0; text-align:center; color:var(--ink3); font-size:13px; line-height:1.8;}
+  .hint{font-size:11px; color:var(--ink3); line-height:1.6; margin:8px 0 0;}
+  .toast{position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:var(--ink); color:var(--paper2); font-size:12px; padding:11px 16px; border-radius:2px; opacity:0; pointer-events:none; transition:opacity .2s; z-index:90;}
+  .toast.on{opacity:1;}
+  .ovl{position:fixed; inset:0; z-index:95; background:rgba(20,28,36,.6); display:flex; align-items:center; justify-content:center; padding:24px;}
+  .dlg{background:var(--paper); border-top:3px solid var(--seal); padding:20px; max-width:340px; width:100%;}
+  .dlg-t{font-size:16px; font-weight:600;}
+  .dlg-s{font-size:12px; color:var(--ink2); line-height:1.6; margin:8px 0 18px;}
+  .dlg-b{display:flex; gap:8px;}
+  .dlg-b .mini{flex:1; padding:12px; font-size:13px;}
+  .mini.danger{background:var(--seal); border-color:var(--seal); color:#fff; font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">SESSION REVIEW</div>
+    <h1>장 마감 복기</h1>
+    <div class="sync-status" id="syncStatus">—</div>
+    <a class="navlink" href="index.html">← 매매기록</a>
+  </header>
+
+  <div class="card">
+    <label><span class="lab">복기할 날짜</span><input id="day" type="date"></label>
+
+    <div class="tape">
+      <div class="tape-hd">그날의 숫자</div>
+      <div class="tape-g">
+        <div><span>진입</span><b id="t-in">0</b></div>
+        <div><span>청산</span><b id="t-out">0</b></div>
+        <div><span>실현 R</span><b id="t-r">—</b></div>
+      </div>
+      <div class="tape-list" id="t-list">기록 없음</div>
+    </div>
+
+    <span class="lab">장을 마친 지금 상태</span>
+    <div class="emos" id="emos"></div>
+
+    <div style="margin-top:16px">
+      <label><span class="lab">잘한 것<em class="cap">그대로 반복할 것</em></span><textarea id="good" rows="6" maxlength="500"></textarea></label>
+      <label><span class="lab">아쉬운 것<em class="cap">원인까지</em></span><textarea id="bad" rows="6" maxlength="500"></textarea></label>
+      <label><span class="lab">내일 할 것<em class="cap">행동 하나만</em></span><textarea id="next" rows="6" maxlength="500"></textarea></label>
+    </div>
+
+    <button class="btn" id="save">저장</button>
+  </div>
+
+  <ul class="list" id="list"></ul>
+  <div class="empty" id="empty">아직 복기가 없습니다.<br>매매가 없던 날도 남길 만합니다 — 관망도 결정이니까요.</div>
+</div>
+
+<div class="ovl" id="ovl" style="display:none">
+  <div class="dlg">
+    <div class="dlg-t">이 복기를 삭제할까요?</div>
+    <div class="dlg-s" id="dlgS"></div>
+    <div class="dlg-b"><button class="mini" id="dlgNo">취소</button><button class="mini danger" id="dlgYes">삭제</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ── 저장소 — 매매기록과 같은 키를 쓴다 ── */
+var MEM = {};
+async function readRaw(k){
+  try{ if(window.storage){ var r = await window.storage.get(k,false); if(r&&r.value) return r.value; } }catch(e){}
+  try{ var v = localStorage.getItem("tl:"+k); if(v) return v; }catch(e){}
+  return MEM[k] || null;
+}
+async function writeRaw(k,raw){
+  try{ if(window.storage) await window.storage.set(k,raw,false); }catch(e){}
+  try{ localStorage.setItem("tl:"+k,raw); }catch(e){}
+  MEM[k] = raw;
+}
+async function loadJSON(k,d){ try{ var r = await readRaw(k); return r ? JSON.parse(r) : d; }catch(e){ return d; } }
+function saveJSON(k,v){ return writeRaw(k, JSON.stringify(v)); }
+
+var KEY = { trades:"simple:trades", set:"simple:settings", grave:"simple:graveyard", sync:"simple:sync", reviews:"simple:reviews" };
+var GIST_FILE = "trade-log.json";
+
+var trades = [], graveyard = [], settings = {}, reviews = {};
+var sync = { token:"", gist:"", last:0 }, syncing = false, pushTimer = null;
+var draft = { emotion:null };
+var openDays = {};
+
+var $ = function(id){ return document.getElementById(id); };
+function num(v){ var n = parseFloat(String(v==null?"":v).replace(/[, ]/g,"")); return isFinite(n) ? n : null; }
+function pad2(x){ return String(x).padStart(2,"0"); }
+function dateStr(ts){ var d = new Date(ts||Date.now()); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
+function rTxt(v){ return v==null ? "—" : (v>0?"+":"")+v.toFixed(2)+"R"; }
+function toast(m){ var t=$("toast"); t.textContent=m; t.classList.add("on"); setTimeout(function(){t.classList.remove("on");},2200); }
+
+/* 새벽에 열면 직전 세션(어제)을 기본값으로 — 22:30 장을 보고 자정 넘겨 적는 경우 */
+function defaultDay(){
+  var d = new Date();
+  if(d.getHours() < 6) d.setDate(d.getDate()-1);
+  return dateStr(d.getTime());
+}
+
+var EMOS = [
+  { id:"CALM", ko:"평온", cls:"" },
+  { id:"CONFIDENT", ko:"확신", cls:"" },
+  { id:"ANXIOUS", ko:"불안", cls:"warn" },
+  { id:"FOMO", ko:"조급", cls:"bad" },
+  { id:"REVENGE", ko:"만회욕", cls:"bad" },
+  { id:"EUPHORIA", ko:"도취", cls:"bad" }
+];
+
+/* ── 매매기록에서 그날 숫자를 읽어온다 (읽기 전용) ── */
+function fillsOf(t){
+  if(t.fills && t.fills.length) return t.fills;
+  return t.exit ? [{ portion:"100", price:t.exit }] : [];
+}
+function validFills(t){
+  return fillsOf(t).filter(function(f){ return num(f.price)!=null && (num(f.portion)||0) > 0; });
+}
+function rOf(t){
+  if(t.rManual!=null && t.rManual!=="") return num(t.rManual);
+  var e=num(t.entry), s=num(t.stop);
+  if(e==null||s==null||e-s===0) return null;
+  var fs = validFills(t);
+  if(!fs.length) return null;
+  return fs.reduce(function(a,f){ return a + ((num(f.price)-e)/(e-s))*((num(f.portion)||0)/100); }, 0);
+}
+function acctR(t){ var r = rOf(t); return r==null ? null : r*(num(t.riskR)||1); }
+
+function dayNumbers(ds){
+  var entered = trades.filter(function(t){ return dateStr(t.at) === ds; });
+  var closed = trades.filter(function(t){ return t.closedAt && dateStr(t.closedAt) === ds; });
+  var realized = closed.reduce(function(a,t){ var v = acctR(t); return v==null ? a : a+v; }, 0);
+  return { entered:entered, closed:closed, realized: closed.length ? realized : null };
+}
+
+function renderTape(){
+  var ds = $("day").value || defaultDay();
+  var n = dayNumbers(ds);
+  $("t-in").textContent = n.entered.length;
+  $("t-out").textContent = n.closed.length;
+  var rb = $("t-r");
+  rb.textContent = rTxt(n.realized);
+  rb.className = n.realized==null ? "" : (n.realized>0 ? "plus" : n.realized<0 ? "minus" : "");
+  var lines = [];
+  n.entered.forEach(function(t){ lines.push("진입  "+t.name+"  "+(t.riskR||1)+"R"); });
+  n.closed.forEach(function(t){
+    var v = acctR(t);
+    lines.push("청산  "+t.name+"  "+(v==null?"":rTxt(v)));
+  });
+  $("t-list").textContent = lines.length ? lines.join("\n") : "이날은 매매가 없습니다";
+}
+
+/* ── 폼 ── */
+function renderEmos(){
+  var box = $("emos"); box.innerHTML = "";
+  EMOS.forEach(function(e){
+    var b = document.createElement("button");
+    b.className = "emo " + e.cls + (draft.emotion===e.id ? " on" : "");
+    b.innerHTML = '<b>'+e.id+'</b><i>'+e.ko+'</i>';
+    b.addEventListener("click", function(){ draft.emotion = draft.emotion===e.id ? null : e.id; renderEmos(); });
+    box.appendChild(b);
+  });
+}
+function loadDay(){
+  var ds = $("day").value;
+  var r = reviews[ds];
+  draft = { emotion: r ? r.emotion : null };
+  $("good").value = r ? (r.good||"") : "";
+  $("bad").value = r ? (r.bad||"") : "";
+  $("next").value = r ? (r.next||"") : "";
+  $("save").textContent = r ? "수정 저장" : "저장";
+  renderEmos(); renderTape();
+}
+
+function saveDay(){
+  var ds = $("day").value;
+  if(!ds){ toast("날짜를 고르세요"); return; }
+  var n = dayNumbers(ds);
+  reviews[ds] = {
+    date: ds, emotion: draft.emotion,
+    good: $("good").value.trim(), bad: $("bad").value.trim(), next: $("next").value.trim(),
+    realized: n.realized, nIn: n.entered.length, nOut: n.closed.length,
+    updatedAt: Date.now()
+  };
+  saveJSON(KEY.reviews, reviews);
+  schedulePush();
+  render(); loadDay();
+  toast(ds + " 복기 저장됨");
+}
+
+/* ── 목록 ── */
+function render(){
+  var list = $("list"); list.innerHTML = "";
+  var days = Object.keys(reviews).sort().reverse();
+  $("empty").style.display = days.length ? "none" : "block";
+  days.forEach(function(ds){
+    var r = reviews[ds];
+    var li = document.createElement("li");
+    li.className = "rv " + (r.realized!=null && r.realized>0 ? "good" : r.realized!=null && r.realized<0 ? "bad" : "") + (openDays[ds] ? " on" : "");
+    var em = r.emotion ? '<span class="rv-t">'+r.emotion+'</span>' : "";
+    var flag = "";
+    li.innerHTML =
+      '<div class="rv-h"><div><span class="rv-d">'+ds.slice(5).replace("-","/")+'</span>'+em+flag+'</div>'+
+        '<div class="rv-r '+(r.realized==null?"":r.realized>0?"plus":r.realized<0?"minus":"")+'">'+
+        (r.realized!=null ? rTxt(r.realized) : (r.nIn ? "청산 없음" : "매매 없음"))+'</div></div>'+
+      '<div class="rv-p"></div>'+
+      '<div class="rv-body">'+
+        (r.good ? '<div class="rv-sec"><span>잘한 것</span><p></p></div>' : "")+
+        (r.bad ? '<div class="rv-sec"><span>아쉬운 것</span><p></p></div>' : "")+
+        (r.next ? '<div class="rv-sec"><span>내일 할 것</span><p></p></div>' : "")+
+        '<div class="rv-act"><button class="mini" data-edit="1">이 날로 불러오기</button><button class="mini" data-del="1">삭제</button></div>'+
+      '</div>';
+    li.querySelector(".rv-p").textContent = (r.next || r.bad || r.good || "").split("\n")[0];
+    var ps = li.querySelectorAll(".rv-sec p"), vals = [r.good, r.bad, r.next].filter(Boolean);
+    ps.forEach(function(p,i){ p.textContent = vals[i]; });
+
+    li.querySelector(".rv-h").addEventListener("click", function(){
+      var on = li.classList.toggle("on");
+      if(on) openDays[ds] = 1; else delete openDays[ds];
+    });
+    li.querySelector(".rv-p").addEventListener("click", function(){
+      var on = li.classList.toggle("on");
+      if(on) openDays[ds] = 1; else delete openDays[ds];
+    });
+    li.querySelector("[data-edit]").addEventListener("click", function(){
+      $("day").value = ds; loadDay();
+      window.scrollTo({ top:0, behavior:"smooth" });
+    });
+    li.querySelector("[data-del]").addEventListener("click", function(){
+      pendingDelete = function(){
+        delete reviews[ds]; saveJSON(KEY.reviews, reviews); schedulePush(); render(); loadDay(); toast("삭제됨");
+      };
+      $("dlgS").textContent = ds + " 복기";
+      $("ovl").style.display = "flex";
+    });
+    list.appendChild(li);
+  });
+}
+
+var pendingDelete = null;
+$("dlgNo").addEventListener("click", function(){ pendingDelete=null; $("ovl").style.display="none"; });
+$("ovl").addEventListener("click", function(e){ if(e.target===$("ovl")){ pendingDelete=null; $("ovl").style.display="none"; } });
+$("dlgYes").addEventListener("click", function(){ var f=pendingDelete; pendingDelete=null; $("ovl").style.display="none"; if(f) f(); });
+
+/* ── 동기화 — 매매기록과 같은 Gist ── */
+function syncState(txt, cls){ var e=$("syncStatus"); e.textContent=txt; e.className="sync-status "+(cls||""); }
+function syncReady(){ return !!(sync.token && sync.gist); }
+function isEditing(){
+  var a = document.activeElement;
+  return !!(a && (a.tagName==="INPUT" || a.tagName==="TEXTAREA"));
+}
+async function gh(path, opts){
+  opts = opts || {};
+  var res = await fetch("https://api.github.com"+path, {
+    method: opts.method || "GET",
+    headers: { "Authorization":"Bearer "+sync.token, "Accept":"application/vnd.github+json", "Content-Type":"application/json" },
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  if(!res.ok) throw new Error(res.status===401 ? "토큰이 거부됨" : res.status===404 ? "Gist를 찾을 수 없음" : "GitHub 오류 "+res.status);
+  return res.json();
+}
+function payload(){
+  return { v:3, at:Date.now(), trades:trades, graveyard:graveyard, settings:settings, reviews:reviews };
+}
+function mergeRemote(remote){
+  if(!remote || typeof remote!=="object") return;
+  /* 매매 기록은 이 페이지에서 건드리지 않는다 — 원격을 그대로 받는다 */
+  if(Array.isArray(remote.trades)) trades = remote.trades;
+  if(Array.isArray(remote.graveyard)) graveyard = remote.graveyard;
+  if(remote.settings) settings = remote.settings;
+  var rr = remote.reviews || {};
+  Object.keys(rr).forEach(function(k){
+    var mine = reviews[k];
+    if(!mine || (num(rr[k].updatedAt)||0) > (num(mine.updatedAt)||0)) reviews[k] = rr[k];
+  });
+  saveJSON(KEY.trades, trades); saveJSON(KEY.grave, graveyard);
+  saveJSON(KEY.set, settings); saveJSON(KEY.reviews, reviews);
+}
+async function doSync(manual){
+  if(!syncReady()){ syncState("동기화 미연결 — 매매기록에서 설정하세요"); return; }
+  if(syncing) return;
+  if(!manual && isEditing()){ schedulePush(); return; }
+  syncing = true; syncState("동기화 중…");
+  try{
+    var g = await gh("/gists/"+sync.gist);
+    var f = g.files && g.files[GIST_FILE];
+    if(f && f.content) mergeRemote(JSON.parse(f.content));
+    var body = { files:{} }; body.files[GIST_FILE] = { content: JSON.stringify(payload(), null, 1) };
+    await gh("/gists/"+sync.gist, { method:"PATCH", body:body });
+    sync.last = Date.now(); saveJSON(KEY.sync, sync);
+    var d = new Date(sync.last);
+    syncState("동기화됨 "+pad2(d.getHours())+":"+pad2(d.getMinutes()), "ok");
+    render(); renderTape();
+  }catch(e){
+    var off = (e.message||"").indexOf("Failed to fetch")>=0 || !navigator.onLine;
+    syncState(off ? "오프라인 — 기기에만 저장됨" : e.message, "bad");
+  }finally{ syncing = false; }
+}
+function schedulePush(){
+  if(!syncReady()) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(function(){ doSync(false); }, 2500);
+}
+
+$("day").addEventListener("change", loadDay);
+$("save").addEventListener("click", saveDay);
+$("syncStatus").addEventListener("click", function(){ doSync(true); });
+window.addEventListener("online", function(){ if(syncReady()) doSync(false); });
+
+(async function(){
+  trades = await loadJSON(KEY.trades, []); if(!Array.isArray(trades)) trades = [];
+  graveyard = await loadJSON(KEY.grave, []); if(!Array.isArray(graveyard)) graveyard = [];
+  settings = await loadJSON(KEY.set, {}) || {};
+  reviews = await loadJSON(KEY.reviews, {}) || {};
+  sync = await loadJSON(KEY.sync, { token:"", gist:"", last:0 }) || { token:"", gist:"", last:0 };
+  $("day").value = defaultDay();
+  loadDay(); render();
+  if(syncReady()) doSync(false); else syncState("동기화 미연결 — 매매기록에서 설정하세요");
+})();
+</script>
+</body>
+</html>

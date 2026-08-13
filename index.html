@@ -32,6 +32,7 @@
   .unit span{font-size:11px; color:#9AA6B0;}
   .unit b{font-family:var(--mono); font-size:15px;}
 
+  .navlink{display:block; text-align:right; margin-top:10px; font-size:12px; color:var(--ink2); text-decoration:none; border-bottom:1px solid var(--rule); padding-bottom:2px;}
   .row{display:flex; gap:8px;}
   .row>*{flex:1; min-width:0;}
   label{display:flex; flex-direction:column; gap:5px;}
@@ -180,6 +181,7 @@
     <div class="eyebrow">TRADE LOG · 1R = 1%</div>
     <h1>매매 기록</h1>
     <div class="unit"><span>1R</span><b id="unit">계좌 금액을 넣으세요</b></div>
+    <a class="navlink" href="review.html">장 마감 복기 →</a>
   </header>
 
   <div class="card">
@@ -303,7 +305,8 @@ async function loadJSON(k,d){ try{ var r = await readRaw(k); return r ? JSON.par
 function saveJSON(k,v){ return writeRaw(k, JSON.stringify(v)); }
 
 /* ── 상태 ── */
-var KEY = { trades:"simple:trades", set:"simple:settings", grave:"simple:graveyard", sync:"simple:sync" };
+var KEY = { trades:"simple:trades", set:"simple:settings", grave:"simple:graveyard", sync:"simple:sync", reviews:"simple:reviews" };
+var reviews = {};   /* 장마감 복기 — review.html에서 쓴다. 여기서는 동기화만 중계 */
 var groupBy = "all";
 var openIds = {};
 var trades = [], settings = { account:"", fx:"", limD:"", limW:"", limM:"" }, market = "KR", riskR = 1, overrideOnce = false, formValid = false, graveyard = [], sync = { token:"", gist:"", last:0 }, pushTimer = null, syncing = false;
@@ -448,7 +451,7 @@ async function gh(path, opts){
 }
 
 function payload(){
-  return { v:2, at:Date.now(), trades:trades, graveyard:graveyard, settings:settings };
+  return { v:3, at:Date.now(), trades:trades, graveyard:graveyard, settings:settings, reviews:reviews };
 }
 function mergeRemote(remote){
   if(!remote || typeof remote!=="object") return;
@@ -473,7 +476,14 @@ function mergeRemote(remote){
     settings = rs;
     ["account","fx","limD","limW","limM"].forEach(function(id){ $(id).value = settings[id] || ""; });
   }
-  saveJSON(KEY.trades, trades); saveJSON(KEY.grave, graveyard); saveJSON(KEY.set, settings);
+  var rr = remote.reviews || {};
+  Object.keys(rr).forEach(function(k){
+    var mine = reviews[k];
+    if(!mine || (num(rr[k].updatedAt)||0) > (num(mine.updatedAt)||0)) reviews[k] = rr[k];
+  });
+
+  saveJSON(KEY.trades, trades); saveJSON(KEY.grave, graveyard);
+  saveJSON(KEY.set, settings); saveJSON(KEY.reviews, reviews);
 }
 
 /* 목록 안의 입력칸에 커서가 있으면 재렌더가 글쓰기를 끊는다 */
@@ -1050,6 +1060,7 @@ $("save").addEventListener("click", function(){
 (async function(){
   trades = await loadJSON(KEY.trades, []); if(!Array.isArray(trades)) trades = [];
   graveyard = await loadJSON(KEY.grave, []); if(!Array.isArray(graveyard)) graveyard = [];
+  reviews = await loadJSON(KEY.reviews, {}) || {};
   var d0 = { account:"", fx:"", limD:"", limW:"", limM:"", baseAt:0 };
   settings = await loadJSON(KEY.set, d0) || d0;
   sync = await loadJSON(KEY.sync, { token:"", gist:"", last:0 }) || { token:"", gist:"", last:0 };
