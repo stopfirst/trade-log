@@ -84,6 +84,7 @@
   .mkt{display:flex; gap:4px;}
   .mkt button{flex:1; padding:9px; font-size:12px; border:1px solid var(--rule); background:var(--paper2); color:var(--ink2);}
   .mkt button.on{background:var(--ink); border-color:var(--ink); color:var(--paper2);}
+  .rbtns input.on{background:var(--ink); border-color:var(--ink); color:var(--paper2);}
 
   .sync-head{display:flex; justify-content:space-between; align-items:center; gap:10px; cursor:pointer;}
   .sync-status{font-family:var(--mono); font-size:13px; margin-top:3px;}
@@ -161,6 +162,14 @@
   .sum span{font-family:var(--mono); font-size:9px; letter-spacing:.1em; color:#9AA6B0;}
   .sum b{font-family:var(--mono); font-size:16px; font-variant-numeric:tabular-nums;}
   .empty{padding:36px 0; text-align:center; color:var(--ink3); font-size:13px; line-height:1.8;}
+  .ovl{position:fixed; inset:0; z-index:90; background:rgba(20,28,36,.6); display:flex; align-items:center; justify-content:center; padding:24px;}
+  .dlg{background:var(--paper); border-top:3px solid var(--seal); padding:20px; max-width:340px; width:100%;}
+  .dlg-t{font-size:16px; font-weight:600;}
+  .dlg-s{font-size:12px; color:var(--ink2); line-height:1.6; margin:8px 0 18px;}
+  .dlg-b{display:flex; gap:8px;}
+  .dlg-b .mini{flex:1; padding:12px; font-size:13px;}
+  .mini.danger{background:var(--seal); border-color:var(--seal); color:#fff; font-weight:600;}
+  .tundo{margin-left:12px; background:none; border:1px solid #6B7885; color:var(--paper2); font-size:11px; padding:4px 9px; border-radius:2px;}
   .toast{position:fixed; left:50%; bottom:84px; transform:translateX(-50%); background:var(--ink); color:var(--paper2); font-size:12px; padding:10px 16px; border-radius:2px; opacity:0; pointer-events:none; transition:opacity .2s;}
   .toast.on{opacity:1;}
 </style>
@@ -265,6 +274,16 @@
   <div><span>누적 R = 계좌 %</span><b id="s-r">—</b></div>
   <div><span>평균 R</span><b id="s-acct">—</b></div>
 </div>
+<div class="ovl" id="ovl" style="display:none">
+  <div class="dlg">
+    <div class="dlg-t">이 기록을 삭제할까요?</div>
+    <div class="dlg-s" id="dlgS"></div>
+    <div class="dlg-b">
+      <button class="mini" id="dlgNo">취소</button>
+      <button class="mini danger" id="dlgYes">삭제</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -309,7 +328,29 @@ function dateToTs(str){
   if(a.length!==3 || !a[0]) return null;
   return new Date(a[0], a[1]-1, a[2], 12, 0, 0).getTime();
 }
-function toast(m){ var t=$("toast"); t.textContent=m; t.classList.add("on"); setTimeout(function(){t.classList.remove("on");},2000); }
+var toastTimer = null;
+function toast(m, actionLabel, fn){
+  var t = $("toast");
+  t.innerHTML = "";
+  t.appendChild(document.createTextNode(m));
+  if(actionLabel){
+    var b = document.createElement("button");
+    b.className = "tundo"; b.textContent = actionLabel;
+    b.addEventListener("click", function(){ t.classList.remove("on"); fn(); });
+    t.appendChild(b);
+  }
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove("on"); }, actionLabel ? 7000 : 2200);
+}
+
+/* ── 삭제 확인 ── */
+var pendingDelete = null;
+function askDelete(t, onYes){
+  pendingDelete = onYes;
+  $("dlgS").textContent = (t.name || "이 기록") + " · " + dateStr(t.at) + " — 되돌릴 수 있지만 잠깐뿐입니다.";
+  $("ovl").style.display = "flex";
+}
 
 /* 1R = 계좌 1%. 손절폭과 감수할 R이 정해지면 비중은 하나로 결정된다.
    비중% = 감수R × 100 / 손절폭% */
@@ -435,9 +476,17 @@ function mergeRemote(remote){
   saveJSON(KEY.trades, trades); saveJSON(KEY.grave, graveyard); saveJSON(KEY.set, settings);
 }
 
+/* 목록 안의 입력칸에 커서가 있으면 재렌더가 글쓰기를 끊는다 */
+function isEditing(){
+  var a = document.activeElement;
+  if(!a || (a.tagName !== "INPUT" && a.tagName !== "TEXTAREA")) return false;
+  return !!(a.closest && a.closest(".list"));
+}
 async function doSync(manual){
   if(!syncReady()){ syncState("미연결", "off"); return; }
   if(syncing) return;
+  /* 근거를 적는 중이면 뒤로 미룬다 — 화면이 다시 그려지면 커서와 키보드가 날아간다 */
+  if(!manual && isEditing()){ schedulePush(); return; }
   syncing = true; syncState("동기화 중…", "");
   try{
     var g = await gh("/gists/"+sync.gist);
@@ -748,9 +797,20 @@ function render(){
 
     li.querySelector("[data-del]").addEventListener("click", function(ev){
       ev.stopPropagation();
-      trades = trades.filter(function(x){ return x.id !== t.id; });
-      graveyard.push({ id:t.id, at:Date.now() });
-      persistTrades(); render(); toast("삭제됨");
+      askDelete(t, function(){
+        var idx = trades.findIndex(function(x){ return x.id === t.id; });
+        var backup = trades[idx];
+        var stone = { id:t.id, at:Date.now() };
+        trades = trades.filter(function(x){ return x.id !== t.id; });
+        graveyard.push(stone);
+        persistTrades(); render();
+        toast(t.name + " 삭제됨", "되돌리기", function(){
+          graveyard = graveyard.filter(function(g){ return g !== stone; });
+          backup.updatedAt = Date.now();
+          trades.splice(Math.max(0, idx), 0, backup);
+          persistTrades(); render(); toast("복구됨");
+        });
+      });
     });
 
     [".it-head",".it-price",".it-size"].forEach(function(sel){
@@ -926,6 +986,12 @@ document.querySelectorAll("[data-p]").forEach(function(b){
     render();
   });
 });
+$("dlgNo").addEventListener("click", function(){ pendingDelete = null; $("ovl").style.display = "none"; });
+$("ovl").addEventListener("click", function(e){ if(e.target === $("ovl")){ pendingDelete = null; $("ovl").style.display = "none"; } });
+$("dlgYes").addEventListener("click", function(){
+  var fn = pendingDelete; pendingDelete = null; $("ovl").style.display = "none";
+  if(fn) fn();
+});
 window.addEventListener("online", function(){ if(syncReady()) doSync(false); });
 $("override").addEventListener("click", function(){ overrideOnce = true; syncSave(); });
 document.querySelectorAll("[data-mkt]").forEach(function(b){
@@ -935,20 +1001,30 @@ document.querySelectorAll("[data-mkt]").forEach(function(b){
     preview();
   });
 });
-function setRisk(v, fromCustom){
+function setRisk(v){
   riskR = v;
   document.querySelectorAll("[data-r]").forEach(function(b){
-    b.classList.toggle("on", !fromCustom && parseFloat(b.getAttribute("data-r"))===v);
+    b.classList.toggle("on", parseFloat(b.getAttribute("data-r")) === v);
   });
-  if(!fromCustom) $("rcustom").value = "";
+  $("rcustom").value = "";
+  $("rcustom").classList.remove("on");
   preview();
 }
 document.querySelectorAll("[data-r]").forEach(function(b){
-  b.addEventListener("click", function(){ setRisk(parseFloat(b.getAttribute("data-r")), false); });
+  b.addEventListener("click", function(){ setRisk(parseFloat(b.getAttribute("data-r"))); });
 });
+/* 직접 입력 — "0.8"처럼 0부터 치는 중에는 칸을 절대 건드리지 않는다.
+   0이나 "0." 같은 중간 상태에서는 직전 값을 유지하고, 유효한 양수일 때만 반영. */
 $("rcustom").addEventListener("input", function(e){
+  document.querySelectorAll("[data-r]").forEach(function(b){ b.classList.remove("on"); });
+  e.target.classList.add("on");
   var v = num(e.target.value);
-  if(v && v>0) setRisk(v, true); else setRisk(1, false);
+  if(v != null && v > 0) riskR = v;
+  preview();
+});
+$("rcustom").addEventListener("blur", function(e){
+  var v = num(e.target.value);
+  if(v == null || v <= 0) setRisk(1);
 });
 
 $("save").addEventListener("click", function(){
