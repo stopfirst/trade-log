@@ -272,9 +272,9 @@
 
 <div class="sum">
   <div><span>건수</span><b id="s-n">0</b></div>
-  <div><span>승률</span><b id="s-win">—</b></div>
+  <div><span id="s-win-l">승률</span><b id="s-win">—</b></div>
   <div><span>누적 R = 계좌 %</span><b id="s-r">—</b></div>
-  <div><span>평균 R</span><b id="s-acct">—</b></div>
+  <div><span id="s-avg-l">평균 R</span><b id="s-acct">—</b></div>
 </div>
 <div class="ovl" id="ovl" style="display:none">
   <div class="dlg">
@@ -915,14 +915,18 @@ function renderAcctUp(){
 
 function summary(){
   /* R은 계좌 기준 고정 단위. 1R = 계좌 1%이므로 누적 R이 곧 계좌 수익률이다. */
-  /* 누적 R은 부분청산까지 포함(실현된 돈이므로). 승률·평균은 완전 종료 건만. */
+  /* 누적 R과 평균 R은 반드시 같은 모집단으로 낸다. 한쪽만 부분청산을 빼면 부호가 어긋난다.
+     승률만 완전 종료 건 — 절반 판 매매를 이겼다/졌다로 셀 수 없으니까. */
   var all = trades.filter(function(t){ return acctR(t) != null; });
   var sum = all.reduce(function(a,t){ return a + acctR(t); }, 0);
   var fin = all.filter(isDone).map(acctR);
+  var sign = function(v){ return (v>0?"+":"")+v.toFixed(2)+"R"; };
   $("s-n").textContent = trades.length;
   $("s-win").textContent = fin.length ? Math.round(fin.filter(function(r){return r>0;}).length/fin.length*100)+"%" : "—";
-  $("s-r").textContent = all.length ? (sum>0?"+":"")+sum.toFixed(2)+"R" : "—";
-  $("s-acct").textContent = fin.length ? (fin.reduce(function(a,b){return a+b;},0)/fin.length>0?"+":"")+(fin.reduce(function(a,b){return a+b;},0)/fin.length).toFixed(2)+"R" : "—";
+  $("s-win-l").textContent = fin.length ? "승률 · 종료 "+fin.length : "승률";
+  $("s-r").textContent = all.length ? sign(sum) : "—";
+  $("s-acct").textContent = all.length ? sign(sum/all.length) : "—";
+  $("s-avg-l").textContent = all.length ? "평균 R · "+all.length+"건" : "평균 R";
   renderPerf(); renderAcctUp();
 }
 
