@@ -53,7 +53,17 @@
   .frow .fp{flex:0 0 68px; text-align:center; padding:8px 4px; font-size:13px;}
   .frow .fv{flex:1; padding:8px 10px; font-size:13px;}
   .frow .fx{flex:0 0 34px; padding:8px 0; border:1px solid var(--rule); background:var(--paper2); color:var(--ink3); font-size:14px; border-radius:2px;}
-  .addfill{width:100%;}
+  .addfill,.addentry{width:100%;}
+  .eavg{font-family:var(--mono); font-size:11px; color:var(--ink2);}
+  .eavg.pyr{color:var(--jade); font-weight:600;}
+  .frow .fx0{flex:0 0 34px; text-align:center; font-size:9px; color:var(--ink3); font-family:var(--mono);}
+  .stoprow{display:flex; gap:8px; align-items:flex-end;}
+  .stoprow .ed{flex:1;}
+  .stoprow .sv.down{border-color:var(--seal); color:var(--seal);}
+  .riskbox{flex:0 0 96px; display:flex; flex-direction:column; gap:3px; align-items:flex-end;}
+  .riskbox span{font-size:10px; color:var(--ink3);}
+  .rnow{font-family:var(--mono); font-size:16px; font-variant-numeric:tabular-nums;}
+  .rnow.over{color:var(--seal); font-weight:600;}
   .edb{display:flex; flex-direction:column; gap:4px;}
   .edb>span{font-size:10px; color:var(--ink3);}
   input[type=date]{-webkit-appearance:none; appearance:none; min-height:41px;}
@@ -381,27 +391,85 @@ function qtyOf(entry, stop, mult, acctKrw, market, fx){
 }
 
 /* 분할 청산 — 각 회차는 {portion, price}. 옛 기록의 단일 exit도 100% 1회로 읽는다. */
+/* ── 포지션 ──
+   진입은 여러 번(피라미딩), 청산도 여러 번. 둘 다 수량 기준으로 다룬다.
+   평균단가가 생기므로 R은 "실현 손익 ÷ 1R 금액"으로 구한다.
+   단일 진입·단일 청산이면 예전 (청산가-진입가)/(진입가-손절가) 공식과 정확히 같은 값이 나온다. */
+function entriesOf(t){
+  if(t.entries && t.entries.length) return t.entries;
+  var sh = num(t.shares), p = num(t.entry);
+  return (sh!=null && p!=null) ? [{ id:"e0", shares:String(sh), price:t.entry }] : [];
+}
+function validEntries(t){
+  return entriesOf(t).filter(function(e){ return num(e.price)!=null && (num(e.shares)||0) > 0; });
+}
 function fillsOf(t){
   if(t.fills && t.fills.length) return t.fills;
   return t.exit ? [{ id:"f0", portion:"100", price:t.exit }] : [];
 }
 function validFills(t){
-  return fillsOf(t).filter(function(f){ return num(f.price)!=null && (num(f.portion)||0) > 0; });
+  return fillsOf(t).filter(function(f){
+    return num(f.price)!=null && ((num(f.shares)||0) > 0 || (num(f.portion)||0) > 0);
+  });
+}
+
+function posOf(t){
+  var es = validEntries(t);
+  var totalSh = es.reduce(function(a,e){ return a + num(e.shares); }, 0);
+  var cost = es.reduce(function(a,e){ return a + num(e.shares)*num(e.price); }, 0);
+  var avg = totalSh ? cost/totalSh : null;
+  var fs = validFills(t);
+  /* 옛 기록은 비중(%)만 있다 — 총수량 기준으로 수량으로 환산해 읽는다 */
+  var outSh = fs.reduce(function(a,f){
+    var sh = num(f.shares);
+    if(sh == null && totalSh) sh = totalSh * (num(f.portion)||0)/100;
+    return a + (sh||0);
+  }, 0);
+  var open = totalSh ? Math.max(0, totalSh - outSh) : 0;
+  var pnl = avg==null ? null : fs.reduce(function(a,f){
+    var sh = num(f.shares);
+    if(sh == null && totalSh) sh = totalSh * (num(f.portion)||0)/100;
+    return a + (sh||0)*(num(f.price)-avg);
+  }, 0);
+  var acct = num(t.acctAt) || num(settings.account);
+  var fx = t.market==="US" ? (num(t.fx) || num(settings.fx)) : 1;
+  var unit = (acct && fx) ? acct*0.01 : null;          /* 1R 금액(원) */
+  var stop = num(t.stop);
+  return {
+    totalSh: totalSh, avg: avg, cost: cost, outSh: outSh, open: open, pnl: pnl, unit: unit, fx: fx,
+    R: (unit && pnl!=null && fs.length) ? (pnl*fx)/unit : null,
+    openRisk: (unit && avg!=null && stop!=null) ? Math.max(0, avg-stop)*open*fx/unit : null,
+    done: totalSh > 0 && open <= totalSh*0.005
+  };
 }
 function closedPct(t){
-  return validFills(t).reduce(function(a,f){ return a + (num(f.portion)||0); }, 0);
+  var p = posOf(t);
+  return p.totalSh ? p.outSh/p.totalSh*100 : 0;
 }
-function isDone(t){ return closedPct(t) >= 99.5; }
+function isDone(t){ return posOf(t).done; }
 
+/* 손절폭 배수 — 자리 선정의 질을 보는 보조 지표 */
 function rOf(t){
-  if(t.rManual!=null && t.rManual!=="") { var m = num(t.rManual); return m; }
-  var e=num(t.entry), s=num(t.stop);
-  if(e==null||s==null||e-s===0) return null;
-  var fs = validFills(t);
-  if(!fs.length) return null;
-  return fs.reduce(function(a,f){
-    return a + ((num(f.price)-e)/(e-s)) * ((num(f.portion)||0)/100);
-  }, 0);
+  if(t.rManual!=null && t.rManual!=="") return num(t.rManual);
+  /* 최초 손절 기준 — 스탑을 올려도 "자리가 얼마나 좋았나"는 변하지 않아야 한다 */
+  var p = posOf(t), stop = num(t.stop0 != null ? t.stop0 : t.stop);
+  if(!p.outSh || p.avg==null || stop==null || p.avg-stop===0) return null;
+  return (p.pnl/p.outSh)/(p.avg-stop);
+}
+/* 접힘 상태 한 줄 — 날짜 · 수량(진입 회차) · 금액 · 비중 */
+function sizeBits(t){
+  var d = new Date(t.at || Date.now());
+  var p = posOf(t), acct = num(t.acctAt) || num(settings.account);
+  var out = [pad2(d.getMonth()+1)+"/"+pad2(d.getDate())];
+  var nEnt = validEntries(t).length;
+  if(p.totalSh) out.push(fmt(p.totalSh)+"주" + (nEnt>1 ? " ("+nEnt+"회)" : ""));
+  else if(t.market==="US" && !p.fx) out.push("환율 입력 필요");
+  if(p.cost) out.push(t.market==="US" ? usd(p.cost) : won(p.cost));
+  if(p.cost && acct && p.fx){
+    var wgt = p.cost*p.fx/acct*100;
+    out.push('비중 <b'+(wgt>25?' class="over"':'')+'>'+wgt.toFixed(1)+'%</b>');
+  }
+  return out;
 }
 function rClass(r){ return r==null ? "flat" : r>0 ? "plus" : r<0 ? "minus" : "flat"; }
 function rText(r){ return r==null ? "—" : (r>0?"+":"")+r.toFixed(2)+"R"; }
@@ -492,22 +560,46 @@ function isEditing(){
   if(!a || (a.tagName !== "INPUT" && a.tagName !== "TEXTAREA")) return false;
   return !!(a.closest && a.closest(".list"));
 }
+/* 원격에 내가 모르는 변경이 있는가 — 있으면 병합이 필요하고, 병합은 화면을 다시 그린다 */
+function hasIncoming(remote){
+  if(!remote) return false;
+  var mine = {};
+  trades.forEach(function(t){ mine[t.id] = num(t.updatedAt)||t.at||0; });
+  var rt = remote.trades || [];
+  for(var i=0;i<rt.length;i++){
+    var o = rt[i]; if(!o || !o.id) continue;
+    if(mine[o.id] === undefined) return true;
+    if((num(o.updatedAt)||o.at||0) > mine[o.id]) return true;
+  }
+  if((remote.graveyard||[]).length !== graveyard.length) return true;
+  if(remote.settings && (num(remote.settings.updatedAt)||0) > (num(settings.updatedAt)||0)) return true;
+  var rr = remote.reviews || {};
+  for(var k in rr){ if(!reviews[k] || (num(rr[k].updatedAt)||0) > (num(reviews[k].updatedAt)||0)) return true; }
+  return false;
+}
+
 async function doSync(manual){
   if(!syncReady()){ syncState("미연결", "off"); return; }
   if(syncing) return;
-  /* 근거를 적는 중이면 뒤로 미룬다 — 화면이 다시 그려지면 커서와 키보드가 날아간다 */
-  if(!manual && isEditing()){ schedulePush(); return; }
-  syncing = true; syncState("동기화 중…", "");
+  syncing = true;
+  var editing = !manual && isEditing();
+  if(!editing) syncState("동기화 중…", "");
   try{
     var g = await gh("/gists/"+sync.gist);
     var file = g.files && g.files[GIST_FILE];
-    if(file && file.content) mergeRemote(JSON.parse(file.content));
+    var remote = (file && file.content) ? JSON.parse(file.content) : null;
+
+    /* 입력 중인데 원격에 새 변경이 있으면 병합을 미룬다 — 지금 그리면 커서가 날아간다.
+       원격에 새 게 없으면 내 변경만 올린다. 올리는 건 화면을 건드리지 않는다. */
+    if(editing && hasIncoming(remote)){ schedulePush(); return; }
+    if(!editing && remote) mergeRemote(remote);
+
     var body = { files:{} }; body.files[GIST_FILE] = { content: JSON.stringify(payload(), null, 1) };
     await gh("/gists/"+sync.gist, { method:"PATCH", body:body });
     sync.last = Date.now(); saveJSON(KEY.sync, sync);
     var d = new Date(sync.last);
     syncState("동기화됨 "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"), "ok");
-    render(); preview();
+    if(!editing){ render(); preview(); }
   }catch(e){
     var off = (e && e.message && e.message.indexOf("Failed to fetch")>=0) || !navigator.onLine;
     syncState(off ? "오프라인 — 기기에만 저장됨" : (e.message||"동기화 실패"), "bad");
@@ -530,7 +622,20 @@ function periodStart(kind){
   return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
 }
 function closedAtOf(t){ return num(t.closedAt) || t.at || 0; }
-function acctR(t){ var r = rOf(t); return r==null ? null : r*(num(t.riskR)||1); }
+function acctR(t){
+  if(t.rManual!=null && t.rManual!=="") return num(t.rManual);
+  var p = posOf(t);
+  if(p.R != null) return p.R;
+  /* 수량·계좌를 모르는 옛 기록 폴백 — 비중 기반 */
+  var e=num(t.entry), s=num(t.stop);
+  if(e==null||s==null||e-s===0) return null;
+  var fs = validFills(t);
+  if(!fs.length) return null;
+  var mult = fs.reduce(function(a,f){
+    return a + ((num(f.price)-e)/(e-s)) * ((num(f.portion)||0)/100);
+  }, 0);
+  return mult*(num(t.riskR)||1);
+}
 function realizedSince(ts){
   return trades.reduce(function(a,t){
     var v = acctR(t);
@@ -698,11 +803,7 @@ function render(){
     li.className = "item " + (r==null ? "open" : r>0 ? "win" : r<0 ? "loss" : "open");
 
     var dd = new Date(t.at || Date.now());
-    var bits = [pad2(dd.getMonth()+1)+"/"+pad2(dd.getDate())];
-    if(sh!=null) bits.push(fmt(sh)+"주");
-    if(spent!=null) bits.push(t.market==="US" ? usd(spent) : won(spent));
-    else if(t.market==="US" && !fx) bits.push("환율 입력 필요");
-    if(z) bits.push('비중 <b'+(z.weight>25?' class="over"':'')+'>'+z.weight.toFixed(1)+'%</b>');
+    var bits = sizeBits(t);
 
     li.innerHTML =
       '<div class="it-head">'+
@@ -720,7 +821,15 @@ function render(){
       (t.review ? '<div class="it-review"></div>' : '')+
       '<div class="it-edit">'+
         '<label class="edb"><span>진입근거</span><textarea class="ta" rows="2" maxlength="140" data-f="entryNote"></textarea></label>'+
-        '<div class="fills"><div class="fh"><span>청산 (비중 % · 가격)</span><b class="frem"></b></div>'+
+        '<div class="fills"><div class="fh"><span>진입 (수량 · 가격)</span><b class="eavg"></b></div>'+
+          '<div class="erows"></div>'+
+          '<button class="mini addentry">추가 진입 (피라미딩)</button>'+
+        '</div>'+
+        '<div class="stoprow">'+
+          '<label class="ed"><span>손절가</span><input class="sv" inputmode="decimal"></label>'+
+          '<div class="riskbox"><span>남은 리스크</span><b class="rnow">—</b></div>'+
+        '</div>'+
+        '<div class="fills"><div class="fh"><span>청산 (수량 · 가격)</span><b class="frem"></b></div>'+
           '<div class="frows"></div>'+
           '<button class="mini addfill">청산 추가</button>'+
         '</div>'+
@@ -753,21 +862,60 @@ function render(){
 
     /* ── 분할 청산 ── */
     function refreshRow(){
-      var mv2 = rOf(t), rr = mv2==null ? null : mv2*mult;
+      var p = posOf(t), rr = acctR(t), mv2 = rOf(t);
       if(rr != null && !t.closedAt) t.closedAt = t.backfill ? (t.at || Date.now()) : Date.now();
       if(rr == null) t.closedAt = null;
       var on = li.classList.contains("on");
       li.className = "item " + (rr==null ? "open" : rr>0 ? "win" : rr<0 ? "loss" : "open") + (on ? " on" : "");
       var re = li.querySelector(".it-r");
-      var pctClosed = closedPct(t);
       re.textContent = rr==null ? "미청산" : rText(rr);
       re.className = "it-r " + rClass(rr);
       li.querySelector(".it-acct").textContent = mv2==null ? ""
-        : (isDone(t) ? "손절폭 "+(mv2>0?"+":"")+mv2.toFixed(1)+"배" : "실현 "+Math.round(pctClosed)+"% · 잔여 "+Math.round(100-pctClosed)+"%");
+        : (p.done ? "손절폭 "+(mv2>0?"+":"")+mv2.toFixed(1)+"배"
+                  : "실현 "+fmt(p.outSh)+"주 · 잔여 "+fmt(p.open)+"주");
+
+      /* 진입 요약 — 평균단가와 총수량 */
+      var ea = li.querySelector(".eavg");
+      ea.textContent = p.totalSh ? "평균 "+fmt(p.avg,2)+" · "+fmt(p.totalSh)+"주" : "";
+      ea.className = "eavg" + (validEntries(t).length > 1 ? " pyr" : "");
+
+      /* 남은 리스크 — 피라미딩하면 손절을 올리지 않는 한 커진다 */
+      var rn = li.querySelector(".rnow");
+      if(p.open <= 0){ rn.textContent = "종료"; rn.className = "rnow"; }
+      else if(p.openRisk == null){ rn.textContent = "—"; rn.className = "rnow"; }
+      else {
+        rn.textContent = p.openRisk.toFixed(2)+"R";
+        rn.className = "rnow" + (p.openRisk > mult + 0.005 ? " over" : "");
+      }
+
       var rem = li.querySelector(".frem");
-      rem.textContent = pctClosed>0 ? "잔여 "+Math.round(Math.max(0,100-pctClosed))+"%" : "";
-      rem.className = "frem" + (pctClosed > 100.5 ? " over" : "");
+      rem.textContent = p.totalSh ? "잔여 "+fmt(p.open)+"주" : "";
+      rem.className = "frem" + (p.outSh > p.totalSh + 0.5 ? " over" : "");
+
+      var sz = li.querySelector(".it-size");
+      if(sz) sz.innerHTML = sizeBits(t).join(" · ")+'<span class="caret">▾</span>';
       summary(); renderLimits();
+    }
+
+    function drawEntries(){
+      var box = li.querySelector(".erows");
+      box.innerHTML = "";
+      (t.entries||[]).forEach(function(en, i){
+        var row = document.createElement("div");
+        row.className = "frow";
+        row.innerHTML = '<input class="fp" inputmode="decimal" placeholder="수량"><input class="fv" inputmode="decimal" placeholder="가격">'+
+                        (i===0 ? '<span class="fx0">최초</span>' : '<button class="fx">×</button>');
+        var pi = row.querySelector(".fp"), vi = row.querySelector(".fv");
+        pi.value = en.shares || ""; vi.value = en.price || "";
+        pi.addEventListener("input", function(){ en.shares = pi.value; touch(t); persistTrades(); refreshRow(); });
+        vi.addEventListener("input", function(){ en.price = vi.value; touch(t); persistTrades(); refreshRow(); });
+        var x = row.querySelector(".fx");
+        if(x) x.addEventListener("click", function(ev){
+          ev.stopPropagation();
+          t.entries.splice(i,1); touch(t); persistTrades(); drawEntries(); refreshRow();
+        });
+        box.appendChild(row);
+      });
     }
 
     function drawFills(){
@@ -776,10 +924,10 @@ function render(){
       (t.fills||[]).forEach(function(fl, i){
         var row = document.createElement("div");
         row.className = "frow";
-        row.innerHTML = '<input class="fp" inputmode="decimal" placeholder="%"><input class="fv" inputmode="decimal" placeholder="가격"><button class="fx">×</button>';
+        row.innerHTML = '<input class="fp" inputmode="decimal" placeholder="수량"><input class="fv" inputmode="decimal" placeholder="가격"><button class="fx">×</button>';
         var pi = row.querySelector(".fp"), vi = row.querySelector(".fv");
-        pi.value = fl.portion || ""; vi.value = fl.price || "";
-        pi.addEventListener("input", function(){ fl.portion = pi.value; touch(t); persistTrades(); refreshRow(); });
+        pi.value = fl.shares || ""; vi.value = fl.price || "";
+        pi.addEventListener("input", function(){ fl.shares = pi.value; touch(t); persistTrades(); refreshRow(); });
         vi.addEventListener("input", function(){ fl.price = vi.value; touch(t); persistTrades(); refreshRow(); });
         row.querySelector(".fx").addEventListener("click", function(ev){
           ev.stopPropagation();
@@ -789,19 +937,55 @@ function render(){
       });
     }
 
-    /* 옛 단일 청산 기록을 1회 100% 분할로 옮긴다 — 옮긴 뒤 exit는 비워 중복 계산을 막는다 */
+    /* 옛 기록 이전 — 단일 진입/청산을 수량 기준 목록으로 옮긴다 */
+    var migrated = false;
+    if(!t.entries){
+      t.entries = entriesOf(t).map(function(e,i){ return { id:"e"+i, shares:e.shares, price:e.price }; });
+      migrated = true;
+    }
     if(!t.fills){
       t.fills = fillsOf(t).map(function(f,i){ return { id:"f"+i, portion:f.portion, price:f.price }; });
-      if(t.exit){ t.exit = ""; touch(t); persistTrades(); }
+      if(t.exit) t.exit = "";
+      migrated = true;
     }
-    drawFills();
-    refreshRow();
+    /* 비중(%)만 있는 옛 청산 → 수량으로 환산 */
+    var tot0 = validEntries(t).reduce(function(a,e){ return a + num(e.shares); }, 0);
+    if(tot0){
+      (t.fills||[]).forEach(function(f){
+        if(f.shares == null && f.portion != null){
+          f.shares = String(Math.round(tot0 * (num(f.portion)||0)/100));
+          delete f.portion; migrated = true;
+        }
+      });
+    }
+    if(migrated){ touch(t); persistTrades(); }
+
+    var sv = li.querySelector(".sv");
+    sv.value = t.stop || "";
+    sv.addEventListener("input", function(){
+      t.stop = sv.value; touch(t); persistTrades();
+      var s0 = num(t.stop0 != null ? t.stop0 : t.stop);
+      sv.classList.toggle("down", num(t.stop)!=null && s0!=null && num(t.stop) < s0);
+      refreshRow();
+    });
+    if(t.stop0 == null && t.stop){ t.stop0 = t.stop; }
+
+    drawEntries(); drawFills(); refreshRow();
+
+    li.querySelector(".addentry").addEventListener("click", function(ev){
+      ev.stopPropagation();
+      t.entries = t.entries || [];
+      t.entries.push({ id:"e"+Date.now(), shares:"", price:"" });
+      touch(t); persistTrades(); drawEntries(); refreshRow();
+      var rows = li.querySelectorAll(".erows .frow");
+      var last = rows[rows.length-1]; if(last) last.querySelector(".fp").focus();
+    });
 
     li.querySelector(".addfill").addEventListener("click", function(ev){
       ev.stopPropagation();
-      var left = Math.max(0, 100 - closedPct(t));
+      var p = posOf(t);
       t.fills = t.fills || [];
-      t.fills.push({ id:"f"+Date.now(), portion: t.fills.length ? String(Math.round(left)) : "100", price:"" });
+      t.fills.push({ id:"f"+Date.now(), shares: p.open ? String(Math.round(p.open)) : "", price:"" });
       touch(t); persistTrades(); drawFills(); refreshRow();
     });
 
@@ -975,14 +1159,16 @@ $("acctApply").addEventListener("click", function(){
 });
 
 $("csv").addEventListener("click", function(){
-  var head = ["진입일","종목","시장","감수R","진입가","손절가","청산내역","청산비중%","수량","결과R","손절폭배수","진입근거","청산근거","복기"];
+  var head = ["진입일","종목","시장","감수R","진입내역","손절가","청산내역","평균단가","총수량","결과R","손절폭배수","진입근거","청산근거","복기"];
   var esc = function(v){ return '"'+String(v==null?"":v).replace(/"/g,'""')+'"'; };
   var rows = trades.slice().sort(function(a,b){ return (a.at||0)-(b.at||0); }).map(function(t){
     var mv = rOf(t), mult = num(t.riskR)||1;
-    var detail = validFills(t).map(function(f){ return f.portion+"%@"+f.price; }).join(" / ");
-    return [dateStr(t.at), t.name, t.market, mult, t.entry, t.stop, detail,
-            closedPct(t) || "", t.shares==null?"":t.shares,
-            mv==null?"":(mv*mult).toFixed(2), mv==null?"":mv.toFixed(2),
+    var pp = posOf(t);
+    var entryDetail = validEntries(t).map(function(e){ return e.shares+"주@"+e.price; }).join(" / ");
+    var detail = validFills(t).map(function(f){ return (f.shares||f.portion+"%")+"@"+f.price; }).join(" / ");
+    return [dateStr(t.at), t.name, t.market, mult, entryDetail, t.stop, detail,
+            pp.avg==null?"":pp.avg.toFixed(2), pp.totalSh||"",
+            acctR(t)==null?"":acctR(t).toFixed(2), mv==null?"":mv.toFixed(2),
             t.entryNote||"", t.exitNote||"", t.review||""].map(esc).join(",");
   });
   var blob = new Blob(["\ufeff"+head.map(esc).join(",")+"\n"+rows.join("\n")], {type:"text/csv;charset=utf-8"});
@@ -1007,6 +1193,12 @@ $("dlgYes").addEventListener("click", function(){
   if(fn) fn();
 });
 window.addEventListener("online", function(){ if(syncReady()) doSync(false); });
+/* 입력 중에는 동기화를 미루므로(재렌더 방지), 손을 떼거나 앱을 벗어나면 반드시 밀어 올린다 */
+document.addEventListener("focusout", function(){ if(syncReady()) schedulePush(); });
+document.addEventListener("visibilitychange", function(){
+  if(document.visibilityState === "hidden" && syncReady()) doSync(true);
+});
+window.addEventListener("pagehide", function(){ if(syncReady()) doSync(true); });
 $("override").addEventListener("click", function(){ overrideOnce = true; syncSave(); });
 document.querySelectorAll("[data-mkt]").forEach(function(b){
   b.addEventListener("click", function(){
@@ -1048,7 +1240,9 @@ $("save").addEventListener("click", function(){
   var t = { id:"t"+Date.now(), name:$("name").value.trim(), market:market,
             entry:$("entry").value, stop:$("stop").value, exit:"", rManual:"", riskR:riskR,
             entryNote: clamp2($("entryNote").value.trim()), exitNote:"", review:"", fills:[],
-            shares: q ? q.shares : null, acctAt:settings.account, at:at,
+            shares: q ? q.shares : null,
+            entries: q ? [{ id:"e0", shares:String(q.shares), price:$("entry").value }] : [],
+            stop0: $("stop").value, acctAt:settings.account, at:at,
             backfill: !isToday, closedAt:null, override: overrideOnce || false };
   touch(t); trades.unshift(t);
   trades.sort(function(a,b){ return (b.at||0) - (a.at||0); });
