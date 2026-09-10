@@ -553,6 +553,7 @@ function groupStats(list){
    기기마다 브라우저 저장소가 따로라 중간 저장소를 하나 둔다.
    병합은 id 기준, 같은 id면 updatedAt이 최신인 쪽. 삭제는 묘비(graveyard)로 남겨 부활을 막는다. */
 var GIST_FILE = "trade-log.json";
+var lastPushed = null, cooldownUntil = 0;
 function touch(t){ t.updatedAt = Date.now(); return t; }
 function persistTrades(){ saveJSON(KEY.trades, trades); saveJSON(KEY.grave, graveyard); schedulePush(); }
 
@@ -571,7 +572,23 @@ async function gh(path, opts){
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   if(!res.ok){
-    var msg = res.status===401 ? "토큰이 거부됨" : res.status===404 ? "Gist를 찾을 수 없음" : "GitHub 오류 "+res.status;
+    var msg;
+    if(res.status === 401) msg = "토큰이 거부됨 — 다시 발급하세요";
+    else if(res.status === 404) msg = "Gist를 찾을 수 없음";
+    else if(res.status === 403 || res.status === 429){
+      /* GitHub은 호출이 잦으면 403/429로 잠깐 막는다. 남은 한도가 0이면 한도 초과, 아니면 2차 제한 */
+      var remain = res.headers.get ? res.headers.get("x-ratelimit-remaining") : null;
+      var wait = res.headers.get ? (res.headers.get("retry-after") || res.headers.get("x-ratelimit-reset")) : null;
+      var mins = null;
+      if(wait){
+        var w = parseInt(wait, 10);
+        mins = w > 1e9 ? Math.ceil((w*1000 - Date.now())/60000) : Math.ceil(w/60);
+      }
+      cooldownUntil = Date.now() + Math.max(60000, (mins || 2)*60000);
+      msg = "GitHub 호출 한도 — " + (mins ? mins+"분" : "잠시") + " 뒤 자동 재시도";
+      if(remain === "0") msg = "GitHub 시간당 한도 소진 — " + (mins ? mins+"분" : "잠시") + " 뒤 자동 재시도";
+    }
+    else msg = "GitHub 오류 " + res.status;
     var e = new Error(msg); e.status = res.status; throw e;
   }
   return res.json();
@@ -640,6 +657,19 @@ function hasIncoming(remote){
 async function doSync(manual){
   if(!syncReady()){ syncState("미연결", "off"); return; }
   if(syncing) return;
+  /* 한도에 걸린 동안은 아예 두드리지 않는다 — 계속 두드리면 제한이 길어진다 */
+  if(Date.now() < cooldownUntil){
+    if(manual){
+      var left = Math.ceil((cooldownUntil - Date.now())/1000);
+      toast("GitHub 한도 대기 중 — " + (left>60 ? Math.ceil(left/60)+"분" : left+"초") + " 남음");
+    }
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(function(){ doSync(false); }, Math.max(5000, cooldownUntil - Date.now() + 1000));
+    return;
+  }
+  /* 올릴 내용이 그대로면 건너뛴다. 자동 동기화가 같은 내용을 반복해 올리면 한도만 깎는다 */
+  var snap = JSON.stringify(payload().trades) + JSON.stringify(reviews) + JSON.stringify(settings);
+  if(!manual && snap === lastPushed && Date.now() - (sync.last||0) < 600000) return;
   syncing = true;
   var editing = !manual && isEditing();
   if(!editing) syncState("동기화 중…", "");
@@ -655,6 +685,7 @@ async function doSync(manual){
 
     var body = { files:{} }; body.files[GIST_FILE] = { content: JSON.stringify(payload(), null, 1) };
     await gh("/gists/"+sync.gist, { method:"PATCH", body:body });
+    lastPushed = JSON.stringify(payload().trades) + JSON.stringify(reviews) + JSON.stringify(settings);
     sync.last = Date.now(); saveJSON(KEY.sync, sync);
     var d = new Date(sync.last);
     syncState("동기화됨 "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"), "ok");
@@ -668,7 +699,7 @@ async function doSync(manual){
 function schedulePush(){
   if(!syncReady()) return;
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(function(){ doSync(false); }, 2500);
+  pushTimer = setTimeout(function(){ doSync(false); }, 8000);
 }
 
 /* ── 기간 손실 한도 ──
@@ -1309,14 +1340,22 @@ function renderOpen(){
   var open = trades.filter(function(t){ var p = posOf(t); return p.totalSh > 0 && p.open > 0; });
   if(!open.length){ el.style.display = "none"; return; }
   el.style.display = "flex";
+  /* 합계는 보유 전 종목. 목록만 위험이 큰 순으로 6개까지 보여준다 */
   var total = 0, unknown = 0;
-  var lines = open.slice(0,6).map(function(t){
+  var rows = open.map(function(t){
     var p = posOf(t);
-    if(p.openRisk == null){ unknown++; return t.name + "  —"; }
+    if(p.openRisk == null){ unknown++; return { name:t.name, risk:null }; }
     total += p.openRisk;
-    return t.name + "  " + p.openRisk.toFixed(2) + "R";
+    return { name:t.name, risk:p.openRisk };
+  }).sort(function(a,b){ return (b.risk||0) - (a.risk||0); });
+
+  var lines = rows.slice(0,6).map(function(r){
+    return r.name + "  " + (r.risk==null ? "—" : r.risk.toFixed(2)+"R");
   });
-  if(open.length > 6) lines.push("외 " + (open.length-6) + "건");
+  if(rows.length > 6){
+    var rest = rows.slice(6).reduce(function(a,r){ return a + (r.risk||0); }, 0);
+    lines.push("외 " + (rows.length-6) + "건  " + rest.toFixed(2) + "R");
+  }
   $("os-n").textContent = "보유 " + open.length + "종목";
   $("os-list").textContent = lines.join("\n");
   var b = $("os-r");
@@ -1417,10 +1456,16 @@ $("dlgYes").addEventListener("click", function(){
 window.addEventListener("online", function(){ if(syncReady()) doSync(false); });
 /* 입력 중에는 동기화를 미루므로(재렌더 방지), 손을 떼거나 앱을 벗어나면 반드시 밀어 올린다 */
 document.addEventListener("focusout", function(){ if(syncReady()) schedulePush(); });
+function syncOnLeave(){
+  if(!syncReady()) return;
+  var snap = JSON.stringify(payload().trades) + JSON.stringify(reviews) + JSON.stringify(settings);
+  if(snap === lastPushed) return;      /* 바뀐 게 없으면 두드리지 않는다 */
+  doSync(true);
+}
 document.addEventListener("visibilitychange", function(){
-  if(document.visibilityState === "hidden" && syncReady()) doSync(true);
+  if(document.visibilityState === "hidden") syncOnLeave();
 });
-window.addEventListener("pagehide", function(){ if(syncReady()) doSync(true); });
+window.addEventListener("pagehide", syncOnLeave);
 $("override").addEventListener("click", function(){ overrideOnce = true; syncSave(); });
 document.querySelectorAll("[data-mkt]").forEach(function(b){
   b.addEventListener("click", function(){
