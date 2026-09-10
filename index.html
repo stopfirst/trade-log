@@ -222,9 +222,9 @@
       <label><span class="lab">환율 (선택)</span><input id="fx" inputmode="decimal" placeholder="1380"></label>
     </div>
     <div class="row">
-      <label><span class="lab">일 한도 (R)</span><input id="limD" inputmode="decimal" placeholder="2"></label>
-      <label><span class="lab">주 한도 (R)</span><input id="limW" inputmode="decimal" placeholder="4"></label>
-      <label><span class="lab">월 한도 (R)</span><input id="limM" inputmode="decimal" placeholder="6"></label>
+      <label><span class="lab">일 한도 (%)</span><input id="limD" inputmode="decimal" placeholder="2"></label>
+      <label><span class="lab">주 한도 (%)</span><input id="limW" inputmode="decimal" placeholder="4"></label>
+      <label><span class="lab">월 한도 (%)</span><input id="limM" inputmode="decimal" placeholder="6"></label>
     </div>
     <div class="acct-up" id="acctUp" style="display:none">
       <div><span class="lab">마지막 갱신 이후 실현</span><b id="au-r">—</b></div>
@@ -260,9 +260,9 @@
       </div>
       <label><span class="lab">진입근거 <em class="cap">최대 2줄</em></span><textarea id="entryNote" class="ta" rows="2" maxlength="140" placeholder="이 자리에 들어가는 이유"></textarea></label>
       <label><span class="lab">진입일</span><input id="tradeDate" type="date"></label>
-      <label><span class="lab">감수할 리스크</span>
+      <label><span class="lab">위험 배정 <em class="cap">계좌 대비 %</em></span>
         <div class="mkt rbtns">
-          <button data-r="0.5">0.5R</button><button data-r="1" class="on">1R</button><button data-r="2">2R</button>
+          <button data-r="0.5">0.5%</button><button data-r="1" class="on">1%</button><button data-r="2">2%</button>
           <input id="rcustom" inputmode="decimal" placeholder="직접" style="flex:0 0 62px; text-align:center; padding:9px 4px; font-size:12px">
         </div>
       </label>
@@ -289,18 +289,18 @@
   <div class="card" id="perfCard" style="display:none">
     <h2 class="ch">성과 <span id="perfN"></span></h2>
     <div class="pgrid">
-      <div class="pm"><span>기대값</span><b id="p-exp">—</b><i>매매 1건당 평균</i></div>
+      <div class="pm"><span>기대값 (R)</span><b id="p-exp">—</b><i>매매 1건당 평균</i></div>
       <div class="pm"><span>손익비</span><b id="p-po">—</b><i>평균수익 ÷ 평균손실</i></div>
-      <div class="pm"><span>평균 수익</span><b id="p-aw">—</b></div>
-      <div class="pm"><span>평균 손실</span><b id="p-al">—</b></div>
-      <div class="pm"><span>최대 낙폭</span><b id="p-dd">—</b><i>고점 대비</i></div>
+      <div class="pm"><span>평균 수익 (R)</span><b id="p-aw">—</b></div>
+      <div class="pm"><span>평균 손실 (R)</span><b id="p-al">—</b></div>
+      <div class="pm"><span>최대 낙폭</span><b id="p-dd">—</b><i>계좌 고점 대비</i></div>
       <div class="pm"><span>최대 연속손실</span><b id="p-str">—</b></div>
     </div>
     <div class="curve"><svg id="eq" viewBox="0 0 300 64" preserveAspectRatio="none"></svg></div>
     <p class="hint" id="p-note"></p>
 
     <div class="dash">
-      <div class="dh"><h3>기간별</h3>
+      <div class="dh"><h3>기간별 계좌 손익</h3>
         <div class="mkt psw"><button data-pp="week" class="on">주별</button><button data-pp="month">월별</button></div>
       </div>
       <div id="d-period"></div>
@@ -308,7 +308,7 @@
       <div class="dh"><h3>보유 기간</h3></div>
       <div id="d-hold"></div>
 
-      <div class="dh"><h3>감수 R 배수별</h3></div>
+      <div class="dh"><h3>위험 배정별</h3></div>
       <div id="d-risk"></div>
 
       <div class="dh"><h3>연속 손실 직후</h3></div>
@@ -326,7 +326,7 @@
 <div class="sum">
   <div><span>건수</span><b id="s-n">0</b></div>
   <div><span id="s-win-l">승률</span><b id="s-win">—</b></div>
-  <div><span>누적 R = 계좌 %</span><b id="s-r">—</b></div>
+  <div><span>누적 계좌 %</span><b id="s-r">—</b></div>
   <div><span id="s-avg-l">평균 R</span><b id="s-acct">—</b></div>
 </div>
 <div class="ovl" id="ovl" style="display:none">
@@ -532,6 +532,9 @@ function sizeBits(t){
 }
 function rClass(r){ return r==null ? "flat" : r>0 ? "plus" : r<0 ? "minus" : "flat"; }
 function rText(r){ return r==null ? "—" : (r>0?"+":"")+r.toFixed(2)+"R"; }
+/* 계좌 손익 % — 위험 배정(%)과 거래 R배수를 곱한 결과 */
+function pText(v, dp){ return v==null ? "—" : (v>0?"+":"")+v.toFixed(dp==null?2:dp)+"%"; }
+function riskPct(t){ return num(t.riskR) || 1; }
 
 /* ── 기간 묶음 ── 진입일 기준으로 묶는다 */
 function weekKey(ts){ var d = new Date(ts); d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.getTime(); }
@@ -764,8 +767,8 @@ function renderLimits(){
   var html = '<div class="lim-grid">' + L.map(function(x){
     if(!x.lim) return '<div class="lim"><span>'+x.label+'</span><b class="off">미설정</b></div>';
     return '<div class="lim'+(x.hit?" hit":"")+'">'+
-             '<span>'+x.label+' · 한도 '+x.lim+'R</span>'+
-             '<b>'+(x.sum>0?"+":"")+x.sum.toFixed(2)+'R</b>'+
+             '<span>'+x.label+' · 한도 '+x.lim+'%</span>'+
+             '<b>'+pText(x.sum)+'</b>'+
              '<span class="lim-bar"><i style="width:'+(x.ratio*100).toFixed(0)+'%"></i></span>'+
            '</div>';
   }).join('') + '</div>';
@@ -832,8 +835,8 @@ function preview(){
     $("o-weight").textContent = q.weight.toFixed(1)+"%";
     $("o-loss").textContent = "-"+q.lossPct.toFixed(2)+"%";
     var gap = Math.abs(q.realR - riskR)/riskR*100;
-    if(q.weight > 25) note = "비중 "+q.weight.toFixed(1)+"% — 한 종목에 이만큼 넣을지 먼저 판단하세요. 갭하락이 나면 감수한 "+riskR+"R보다 더 잃습니다.";
-    else if(gap > 5) note = "1주 단위로 버림하면서 실제 리스크는 "+q.realR.toFixed(2)+"R이 됩니다.";
+    if(q.weight > 25) note = "비중 "+q.weight.toFixed(1)+"% — 한 종목에 이만큼 넣을지 먼저 판단하세요. 갭하락이 나면 배정한 "+riskR+"%보다 더 잃습니다.";
+    else if(gap > 5) note = "1주 단위로 버림하면서 실제 위험은 계좌의 "+q.realR.toFixed(2)+"%가 됩니다.";
     else if(z.stopPct > 20) note = "손절 폭이 넓어 수량이 적어집니다. 자리 자체를 다시 볼 만합니다.";
     if(acct) note = (note ? note+" " : "") + "손절 시 "+won(q.lossKrw)+" 손실.";
   }
@@ -878,8 +881,8 @@ function render(){
     var mult = num(t.riskR) || 1;
     var ent = num(t.entry), stp = num(t.stop);
     var z = sizing(ent, stp, mult);
-    var mv = rOf(t);                 /* 손절폭 배수 — 자리 선정의 질 */
-    var r = mv==null ? null : mv*mult; /* 계좌 R (1R = 계좌 1%) — 실제 손익 */
+    var mv = rOf(t);      /* 거래 R배수 — 최초 위험의 몇 배를 벌었나 (자리와 운영의 질) */
+    var r = acctR(t);     /* 계좌 손익 % — 위험 배정을 곱한 실제 결과 */
 
     /* 저장 당시 환율이 없어 수량이 비어 있으면 지금 설정으로 다시 계산한다 */
     var sh = num(t.shares);
@@ -898,11 +901,11 @@ function render(){
     li.innerHTML =
       '<div class="it-head">'+
         '<div class="it-id"><span class="it-name"></span>'+
-          '<span class="it-tag">'+t.market+'</span><span class="it-tag">'+mult+'R</span>'+
+          '<span class="it-tag">'+t.market+'</span><span class="it-tag">'+mult+'%</span>'+
           (t.override ? '<span class="it-tag tag-ovr">한도초과</span>' : '')+'</div>'+
         '<div class="it-res">'+
-          '<div class="it-r '+rClass(r)+'">'+(r==null?"미청산":rText(r))+'</div>'+
-          '<div class="it-acct">'+(mv==null?"":"손절폭 "+(mv>0?"+":"")+mv.toFixed(1)+"배")+'</div>'+
+          '<div class="it-r '+rClass(mv)+'">'+(mv==null?"미청산":rText(mv))+'</div>'+
+          '<div class="it-acct">'+(r==null?"":"계좌 "+pText(r))+'</div>'+
         '</div>'+
       '</div>'+
       '<div class="it-price">'+(ent!=null&&stp!=null ? fmt(ent,2)+' → '+fmt(stp,2)+
@@ -953,18 +956,18 @@ function render(){
     /* ── 분할 청산 ── */
     function refreshRow(){
       var p = posOf(t), rr = acctR(t), mv2 = rOf(t);
-      if(rr != null){
+      if(rr != null || mv2 != null){
         var lts = lastFillTs(t);
         t.closedAt = lts != null ? lts : (t.closedAt || (t.backfill ? (t.at || Date.now()) : Date.now()));
       } else t.closedAt = null;
       var on = li.classList.contains("on");
-      li.className = "item " + (rr==null ? "open" : rr>0 ? "win" : rr<0 ? "loss" : "open") + (on ? " on" : "");
+      li.className = "item " + (mv2==null ? "open" : mv2>0 ? "win" : mv2<0 ? "loss" : "open") + (on ? " on" : "");
       var re = li.querySelector(".it-r");
-      re.textContent = rr==null ? "미청산" : rText(rr);
-      re.className = "it-r " + rClass(rr);
-      li.querySelector(".it-acct").textContent = mv2==null ? ""
-        : (p.done ? "손절폭 "+(mv2>0?"+":"")+mv2.toFixed(1)+"배"
-                  : "실현 "+fmt(p.outSh)+"주 · 잔여 "+fmt(p.open)+"주");
+      re.textContent = mv2==null ? "미청산" : rText(mv2);
+      re.className = "it-r " + rClass(mv2);
+      li.querySelector(".it-acct").textContent = rr==null ? ""
+        : (p.done ? "계좌 "+pText(rr)
+                  : "계좌 "+pText(rr)+" · 잔여 "+fmt(p.open)+"주");
 
       /* 진입 요약 — 평균단가와 총수량 */
       var ea = li.querySelector(".eavg");
@@ -976,7 +979,7 @@ function render(){
       if(p.open <= 0){ rn.textContent = "종료"; rn.className = "rnow"; }
       else if(p.openRisk == null){ rn.textContent = "—"; rn.className = "rnow"; }
       else {
-        rn.textContent = p.openRisk.toFixed(2)+"R";
+        rn.textContent = p.openRisk.toFixed(2)+"%";
         rn.className = "rnow" + (p.openRisk > mult + 0.005 ? " over" : "");
       }
 
@@ -1127,14 +1130,16 @@ function render(){
 function perf(){
   var done = trades.filter(function(t){ return acctR(t) != null && isDone(t); })
     .sort(function(a,b){ return (a.closedAt||a.at||0) - (b.closedAt||b.at||0); });
-  var rs = done.map(acctR);
+  var rs = done.map(rOf).filter(function(v){ return v != null; });     /* 거래 R배수 */
+  var ps = done.map(acctR).filter(function(v){ return v != null; });   /* 계좌 손익 % */
   if(!rs.length) return null;
   var wins = rs.filter(function(v){ return v>0; }), losses = rs.filter(function(v){ return v<0; });
   var avg = function(a){ return a.length ? a.reduce(function(x,y){return x+y;},0)/a.length : 0; };
   var aw = avg(wins), al = avg(losses);
   var winRate = wins.length/rs.length;
+  /* 곡선과 낙폭은 계좌 % — 계좌가 실제로 얼마나 파였는지가 중요하다 */
   var cum = 0, peak = 0, dd = 0, streak = 0, maxStreak = 0, curve = [0];
-  rs.forEach(function(v){
+  ps.forEach(function(v){
     cum += v; curve.push(cum);
     if(cum > peak) peak = cum;
     if(peak - cum > dd) dd = peak - cum;
@@ -1155,7 +1160,7 @@ function perf(){
   /* 감수 R 배수별 — 확신이 클 때 크게 건 것이 실제로 옳았나 */
   var byRisk = {};
   done.forEach(function(t){
-    var k = String(num(t.riskR) || 1), v = acctR(t);
+    var k = String(riskPct(t)), v = acctR(t);
     var b = byRisk[k] = byRisk[k] || { n:0, sum:0, win:0 };
     b.n++; b.sum += v; if(v > 0) b.win++;
   });
@@ -1221,12 +1226,12 @@ function renderPerf(){
   put("p-exp", sign(P.exp), P.exp);
   var expNote = $("p-exp").parentNode.querySelector("i");
   if(expNote) expNote.textContent = (P.recentExp!=null && P.n > P.recentN)
-    ? "최근 "+P.recentN+"건 "+(P.recentExp>0?"+":"")+P.recentExp.toFixed(2)+"R"
+    ? "최근 "+P.recentN+"건 "+rText(P.recentExp)
     : "매매 1건당 평균";
   put("p-po", P.payoff==null ? "—" : P.payoff.toFixed(2), null);
   put("p-aw", P.aw ? sign(P.aw) : "—", P.aw);
   put("p-al", P.al ? sign(P.al) : "—", P.al);
-  put("p-dd", P.dd ? P.dd.toFixed(2)+"R" : "0R", P.dd);
+  put("p-dd", P.dd ? P.dd.toFixed(2)+"%" : "0%", P.dd);
   put("p-str", P.maxStreak+"건", null);
   drawCurve(P.curve);
   var notes = [];
@@ -1260,7 +1265,7 @@ function drawDash(P){
   var rows = periodPerf(perfPeriod);
   var maxAbs = Math.max.apply(null, rows.map(function(r){ return Math.abs(r.sum); }).concat([0.5]));
   $("d-period").innerHTML = rows.length
-    ? rows.map(function(r){ return bar(r.label, r.n+"건 "+r.win+"%", r.sum, maxAbs); }).join("")
+    ? rows.map(function(r){ return bar(r.label, r.n+"건 "+r.win+"%", r.sum, maxAbs, "%"); }).join("")
     : '<p class="hint">아직 종료된 매매가 없습니다.</p>';
 
   /* 보유 기간 */
@@ -1280,19 +1285,19 @@ function drawDash(P){
   var mx = Math.max.apply(null, ks.map(function(k){ return Math.abs(P.byRisk[k].sum); }).concat([0.5]));
   var rHtml = ks.length ? ks.map(function(k){
     var b = P.byRisk[k];
-    return bar(k+"R 로 진입", b.n+"건 "+Math.round(b.win/b.n*100)+"%", b.sum, mx);
+    return bar(k+"% 배정", b.n+"건 "+Math.round(b.win/b.n*100)+"%", b.sum, mx, "%");
   }).join("") : '<p class="hint">—</p>';
   var big = ks.filter(function(k){ return parseFloat(k) > 1 && P.byRisk[k].n >= 3; });
   var bigBad = big.filter(function(k){ return P.byRisk[k].sum/P.byRisk[k].n < 0; });
-  if(bigBad.length) rHtml += '<p class="dnote">1R을 넘겨 건 매매의 평균이 마이너스입니다. 확신의 크기와 결과가 반대로 가고 있다는 신호입니다.</p>';
+  if(bigBad.length) rHtml += '<p class="dnote">1%를 넘겨 배정한 매매의 평균이 마이너스입니다. 확신의 크기와 결과가 반대로 가고 있다는 신호입니다.</p>';
   $("d-risk").innerHTML = rHtml;
 
   /* 연속 손실 직후 */
   var a = P.afterLoss, o = P.other, aHtml = "";
   if(a.n >= 2){
     var aAvg = a.sum/a.n, oAvg = o.n ? o.sum/o.n : null;
-    aHtml = drow("2연패 직후 진입", a.n+"건 · 평균 "+sign(aAvg), aAvg>0?"plus":"minus")
-          + drow("그 외", (oAvg==null?"—":o.n+"건 · 평균 "+sign(oAvg)), oAvg>0?"plus":"minus");
+    aHtml = drow("2연패 직후 진입", a.n+"건 · 평균 "+pText(aAvg), aAvg>0?"plus":"minus")
+          + drow("그 외", (oAvg==null?"—":o.n+"건 · 평균 "+pText(oAvg)), oAvg>0?"plus":"minus");
     if(oAvg!=null && aAvg < oAvg - 0.2)
       aHtml += '<p class="dnote">연속 손절 뒤에 들어간 매매가 눈에 띄게 나쁩니다. 손실 한도를 낮추거나, 2연패 후 하루 쉬는 규칙을 붙일 만합니다.</p>';
   } else aHtml = '<p class="hint">2연패 직후 진입한 매매가 아직 적습니다.</p>';
@@ -1321,16 +1326,17 @@ function summary(){
   /* R은 계좌 기준 고정 단위. 1R = 계좌 1%이므로 누적 R이 곧 계좌 수익률이다. */
   /* 누적 R과 평균 R은 반드시 같은 모집단으로 낸다. 한쪽만 부분청산을 빼면 부호가 어긋난다.
      승률만 완전 종료 건 — 절반 판 매매를 이겼다/졌다로 셀 수 없으니까. */
+  /* 계좌 손익은 부분청산까지 포함(실현된 돈), R배수 평균은 완전 종료 건만 */
   var all = trades.filter(function(t){ return acctR(t) != null; });
   var sum = all.reduce(function(a,t){ return a + acctR(t); }, 0);
-  var fin = all.filter(isDone).map(acctR);
-  var sign = function(v){ return (v>0?"+":"")+v.toFixed(2)+"R"; };
+  var fin = all.filter(isDone);
+  var rs = fin.map(rOf).filter(function(v){ return v != null; });
   $("s-n").textContent = trades.length;
-  $("s-win").textContent = fin.length ? Math.round(fin.filter(function(r){return r>0;}).length/fin.length*100)+"%" : "—";
-  $("s-win-l").textContent = fin.length ? "승률 · 종료 "+fin.length : "승률";
-  $("s-r").textContent = all.length ? sign(sum) : "—";
-  $("s-acct").textContent = all.length ? sign(sum/all.length) : "—";
-  $("s-avg-l").textContent = all.length ? "평균 R · "+all.length+"건" : "평균 R";
+  $("s-win").textContent = rs.length ? Math.round(rs.filter(function(r){return r>0;}).length/rs.length*100)+"%" : "—";
+  $("s-win-l").textContent = rs.length ? "승률 · 종료 "+rs.length : "승률";
+  $("s-r").textContent = all.length ? pText(sum) : "—";
+  $("s-acct").textContent = rs.length ? rText(rs.reduce(function(a,b){return a+b;},0)/rs.length) : "—";
+  $("s-avg-l").textContent = rs.length ? "평균 R · "+rs.length+"건" : "평균 R";
   renderPerf(); renderAcctUp(); renderOpen();
 }
 
@@ -1350,16 +1356,16 @@ function renderOpen(){
   }).sort(function(a,b){ return (b.risk||0) - (a.risk||0); });
 
   var lines = rows.slice(0,6).map(function(r){
-    return r.name + "  " + (r.risk==null ? "—" : r.risk.toFixed(2)+"R");
+    return r.name + "  " + (r.risk==null ? "—" : r.risk.toFixed(2)+"%");
   });
   if(rows.length > 6){
     var rest = rows.slice(6).reduce(function(a,r){ return a + (r.risk||0); }, 0);
-    lines.push("외 " + (rows.length-6) + "건  " + rest.toFixed(2) + "R");
+    lines.push("외 " + (rows.length-6) + "건  " + rest.toFixed(2) + "%");
   }
   $("os-n").textContent = "보유 " + open.length + "종목";
   $("os-list").textContent = lines.join("\n");
   var b = $("os-r");
-  b.textContent = total.toFixed(2) + "R" + (unknown ? " +?" : "");
+  b.textContent = total.toFixed(2) + "%" + (unknown ? " +?" : "");
   var cap = num(settings.limD);
   b.className = (cap && total > cap * 2) ? "over" : "";
 }
@@ -1409,7 +1415,7 @@ $("acctApply").addEventListener("click", function(){
 });
 
 $("csv").addEventListener("click", function(){
-  var head = ["진입일","청산일","종목","시장","감수R","진입내역","손절가","청산내역","평균단가","총수량","결과R","손절폭배수","진입근거","청산근거","복기"];
+  var head = ["진입일","청산일","종목","시장","위험배정%","진입내역","손절가","청산내역","평균단가","총수량","거래R배수","계좌손익%","진입근거","청산근거","복기"];
   var esc = function(v){ return '"'+String(v==null?"":v).replace(/"/g,'""')+'"'; };
   var rows = trades.slice().sort(function(a,b){ return (a.at||0)-(b.at||0); }).map(function(t){
     var mv = rOf(t), mult = num(t.riskR)||1;
@@ -1422,7 +1428,7 @@ $("csv").addEventListener("click", function(){
     var lastOut = lastFillTs(t);
     return [dateStr(t.at), lastOut ? dateStr(lastOut) : "", t.name, t.market, mult, entryDetail, t.stop, detail,
             pp.avg==null?"":pp.avg.toFixed(2), pp.totalSh||"",
-            acctR(t)==null?"":acctR(t).toFixed(2), mv==null?"":mv.toFixed(2),
+            mv==null?"":mv.toFixed(2), acctR(t)==null?"":acctR(t).toFixed(2),
             t.entryNote||"", t.exitNote||"", t.review||""].map(esc).join(",");
   });
   var blob = new Blob(["\ufeff"+head.map(esc).join(",")+"\n"+rows.join("\n")], {type:"text/csv;charset=utf-8"});
