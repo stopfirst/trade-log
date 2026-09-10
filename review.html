@@ -111,7 +111,7 @@
       <div class="tape-g">
         <div><span>진입</span><b id="t-in">0</b></div>
         <div><span>청산</span><b id="t-out">0</b></div>
-        <div><span>실현 R</span><b id="t-r">—</b></div>
+        <div><span>실현 계좌 %</span><b id="t-r">—</b></div>
       </div>
       <div class="tape-list" id="t-list">기록 없음</div>
     </div>
@@ -161,7 +161,7 @@ var KEY = { trades:"simple:trades", set:"simple:settings", grave:"simple:graveya
 var GIST_FILE = "trade-log.json";
 
 var trades = [], graveyard = [], settings = {}, reviews = {};
-var sync = { token:"", gist:"", last:0 }, syncing = false, pushTimer = null;
+var sync = { token:"", gist:"", last:0 }, syncing = false, pushTimer = null, lastPushed = null, cooldownUntil = 0;
 var draft = { emotion:null };
 var openDays = {};
 
@@ -170,6 +170,10 @@ function num(v){ var n = parseFloat(String(v==null?"":v).replace(/[, ]/g,"")); r
 function pad2(x){ return String(x).padStart(2,"0"); }
 function dateStr(ts){ var d = new Date(ts||Date.now()); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
 function rTxt(v){ return v==null ? "—" : (v>0?"+":"")+v.toFixed(2)+"R"; }
+/* 계좌 손익 % — 위험 배정(계좌 %)과 거래 R배수를 곱한 결과 */
+function pTxt(v){ return v==null ? "—" : (v>0?"+":"")+v.toFixed(2)+"%"; }
+/* 거래 R배수 — 최초 위험 대비 몇 배 */
+
 function toast(m){ var t=$("toast"); t.textContent=m; t.classList.add("on"); setTimeout(function(){t.classList.remove("on");},2200); }
 
 /* 새벽에 열면 직전 세션(어제)을 기본값으로 — 22:30 장을 보고 자정 넘겨 적는 경우 */
@@ -188,23 +192,118 @@ var EMOS = [
   { id:"EUPHORIA", ko:"도취", cls:"bad" }
 ];
 
-/* ── 매매기록에서 그날 숫자를 읽어온다 (읽기 전용) ── */
+/* ── 매매기록에서 그날 숫자를 읽어온다 (읽기 전용) ──
+   계산은 매매기록 페이지와 동일해야 한다. 아래는 index.html에서 그대로 가져온 것 */
+/* ── 포지션 ──
+   진입은 여러 번(피라미딩), 청산도 여러 번. 둘 다 수량 기준으로 다룬다.
+   평균단가가 생기므로 계좌 손익 %는 "실현 손익 ÷ 계좌"로 구한다.
+   단일 진입·단일 청산이면 예전 (청산가-진입가)/(진입가-손절가) 공식과 정확히 같은 값이 나온다. */
+function entriesOf(t){
+  if(t.entries && t.entries.length) return t.entries;
+  var sh = num(t.shares), p = num(t.entry);
+  return (sh!=null && p!=null) ? [{ id:"e0", shares:String(sh), price:t.entry }] : [];
+}
+function validEntries(t){
+  return entriesOf(t).filter(function(e){ return num(e.price)!=null && (num(e.shares)||0) > 0; });
+}
 function fillsOf(t){
   if(t.fills && t.fills.length) return t.fills;
-  return t.exit ? [{ portion:"100", price:t.exit }] : [];
+  return t.exit ? [{ id:"f0", portion:"100", price:t.exit }] : [];
 }
 function validFills(t){
-  return fillsOf(t).filter(function(f){ return num(f.price)!=null && (num(f.portion)||0) > 0; });
+  return fillsOf(t).filter(function(f){
+    return num(f.price)!=null && ((num(f.shares)||0) > 0 || (num(f.portion)||0) > 0);
+  });
 }
+
+function posOf(t){
+  var es = validEntries(t);
+  var totalSh = es.reduce(function(a,e){ return a + num(e.shares); }, 0);
+  var cost = es.reduce(function(a,e){ return a + num(e.shares)*num(e.price); }, 0);
+  var avg = totalSh ? cost/totalSh : null;
+  var fs = validFills(t);
+  /* 옛 기록은 비중(%)만 있다 — 총수량 기준으로 수량으로 환산해 읽는다 */
+  var outSh = fs.reduce(function(a,f){
+    var sh = num(f.shares);
+    if(sh == null && totalSh) sh = totalSh * (num(f.portion)||0)/100;
+    return a + (sh||0);
+  }, 0);
+  var open = totalSh ? Math.max(0, totalSh - outSh) : 0;
+  var pnl = avg==null ? null : fs.reduce(function(a,f){
+    var sh = num(f.shares);
+    if(sh == null && totalSh) sh = totalSh * (num(f.portion)||0)/100;
+    return a + (sh||0)*(num(f.price)-avg);
+  }, 0);
+  var acct = num(t.acctAt) || num(settings.account);
+  var fx = t.market==="US" ? (num(t.fx) || num(settings.fx)) : 1;
+  var unit = (acct && fx) ? acct*0.01 : null;          /* 계좌 1% 금액(원) — 손익을 %로 환산하는 분모 */
+  var stop = num(t.stop);
+  return {
+    totalSh: totalSh, avg: avg, cost: cost, outSh: outSh, open: open, pnl: pnl, unit: unit, fx: fx,
+    R: (unit && pnl!=null && fs.length) ? (pnl*fx)/unit : null,
+    openRisk: (unit && avg!=null && stop!=null) ? Math.max(0, avg-stop)*open*fx/unit : null,
+    done: totalSh > 0 && open <= totalSh*0.005
+  };
+}
+function closedPct(t){
+  var p = posOf(t);
+  return p.totalSh ? p.outSh/p.totalSh*100 : 0;
+}
+function isDone(t){ return posOf(t).done; }
+
+/* 손절폭 배수 — 자리 선정의 질을 보는 보조 지표 */
 function rOf(t){
   if(t.rManual!=null && t.rManual!=="") return num(t.rManual);
+  /* 최초 손절 기준 — 스탑을 올려도 "자리가 얼마나 좋았나"는 변하지 않아야 한다 */
+  var p = posOf(t), stop = num(t.stop0 != null ? t.stop0 : t.stop);
+  if(!p.outSh || p.avg==null || stop==null || p.avg-stop===0) return null;
+  return (p.pnl/p.outSh)/(p.avg-stop);
+}
+/* 접힘 상태 한 줄 — 날짜 · 수량(진입 회차) · 금액 · 비중 */
+/* 회차 날짜 — 없으면 진입일로 본다 */
+function rowTs(t, r){ return r && r.date ? dateToTs(r.date) : null; }
+function lastFillTs(t){
+  var best = null;
+  validFills(t).forEach(function(f){
+    var ts = rowTs(t, f);
+    if(ts != null && (best == null || ts > best)) best = ts;
+  });
+  return best;
+}
+function mmdd(ts){ var d = new Date(ts); return pad2(d.getMonth()+1)+"/"+pad2(d.getDate()); }
+
+function sizeBits(t){
+  var d = new Date(t.at || Date.now());
+  var p = posOf(t), acct = num(t.acctAt) || num(settings.account);
+  var lastTs = lastFillTs(t);
+  var when = mmdd(t.at || Date.now());
+  if(lastTs != null && mmdd(lastTs) !== when) when += " → " + mmdd(lastTs);
+  else if(lastTs != null && p.done) when += " → 당일";
+  var out = [when];
+  var nEnt = validEntries(t).length;
+  if(p.totalSh) out.push(fmt(p.totalSh)+"주" + (nEnt>1 ? " ("+nEnt+"회)" : ""));
+  else if(t.market==="US" && !p.fx) out.push("환율 입력 필요");
+  if(p.cost) out.push(t.market==="US" ? usd(p.cost) : won(p.cost));
+  if(p.cost && acct && p.fx){
+    var wgt = p.cost*p.fx/acct*100;
+    out.push('비중 <b'+(wgt>25?' class="over"':'')+'>'+wgt.toFixed(1)+'%</b>');
+  }
+  return out;
+}
+function acctR(t){
+  if(t.rManual!=null && t.rManual!=="") return num(t.rManual);
+  var p = posOf(t);
+  if(p.R != null) return p.R;
+  /* 수량·계좌를 모르는 옛 기록 폴백 — 비중 기반 */
   var e=num(t.entry), s=num(t.stop);
   if(e==null||s==null||e-s===0) return null;
   var fs = validFills(t);
   if(!fs.length) return null;
-  return fs.reduce(function(a,f){ return a + ((num(f.price)-e)/(e-s))*((num(f.portion)||0)/100); }, 0);
+  var mult = fs.reduce(function(a,f){
+    return a + ((num(f.price)-e)/(e-s)) * ((num(f.portion)||0)/100);
+  }, 0);
+  return mult*(num(t.riskR)||1);
 }
-function acctR(t){ var r = rOf(t); return r==null ? null : r*(num(t.riskR)||1); }
 
 function dayNumbers(ds){
   var entered = trades.filter(function(t){ return dateStr(t.at) === ds; });
@@ -219,13 +318,14 @@ function renderTape(){
   $("t-in").textContent = n.entered.length;
   $("t-out").textContent = n.closed.length;
   var rb = $("t-r");
-  rb.textContent = rTxt(n.realized);
+  rb.textContent = pTxt(n.realized);
   rb.className = n.realized==null ? "" : (n.realized>0 ? "plus" : n.realized<0 ? "minus" : "");
   var lines = [];
-  n.entered.forEach(function(t){ lines.push("진입  "+t.name+"  "+(t.riskR||1)+"R"); });
+  n.entered.forEach(function(t){ lines.push("진입  "+t.name+"  위험 "+(t.riskR||1)+"%"); });
   n.closed.forEach(function(t){
     var v = acctR(t);
-    lines.push("청산  "+t.name+"  "+(v==null?"":rTxt(v)));
+    var tr = rOf(t);
+    lines.push("청산  "+t.name+"  "+(tr==null?"":rTxt(tr))+(v==null?"":"  계좌 "+pTxt(v)));
   });
   $("t-list").textContent = lines.length ? lines.join("\n") : "이날은 매매가 없습니다";
 }
@@ -282,7 +382,7 @@ function render(){
     li.innerHTML =
       '<div class="rv-h"><div><span class="rv-d">'+ds.slice(5).replace("-","/")+'</span>'+em+flag+'</div>'+
         '<div class="rv-r '+(r.realized==null?"":r.realized>0?"plus":r.realized<0?"minus":"")+'">'+
-        (r.realized!=null ? rTxt(r.realized) : (r.nIn ? "청산 없음" : "매매 없음"))+'</div></div>'+
+        (r.realized!=null ? pTxt(r.realized) : (r.nIn ? "청산 없음" : "매매 없음"))+'</div></div>'+
       '<div class="rv-p"></div>'+
       '<div class="rv-body">'+
         (r.good ? '<div class="rv-sec"><span>잘한 것</span><p></p></div>' : "")+
@@ -336,7 +436,20 @@ async function gh(path, opts){
     headers: { "Authorization":"Bearer "+sync.token, "Accept":"application/vnd.github+json", "Content-Type":"application/json" },
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
-  if(!res.ok) throw new Error(res.status===401 ? "토큰이 거부됨" : res.status===404 ? "Gist를 찾을 수 없음" : "GitHub 오류 "+res.status);
+  if(!res.ok){
+    var msg;
+    if(res.status===401) msg = "토큰이 거부됨";
+    else if(res.status===404) msg = "Gist를 찾을 수 없음";
+    else if(res.status===403 || res.status===429){
+      var wait = res.headers.get ? (res.headers.get("retry-after") || res.headers.get("x-ratelimit-reset")) : null;
+      var mins = null;
+      if(wait){ var x = parseInt(wait,10); mins = x > 1e9 ? Math.ceil((x*1000-Date.now())/60000) : Math.ceil(x/60); }
+      cooldownUntil = Date.now() + Math.max(60000, (mins||2)*60000);
+      msg = "GitHub 호출 한도 — " + (mins ? mins+"분" : "잠시") + " 뒤 자동 재시도";
+    }
+    else msg = "GitHub 오류 "+res.status;
+    throw new Error(msg);
+  }
   return res.json();
 }
 function payload(){
@@ -359,7 +472,14 @@ function mergeRemote(remote){
 async function doSync(manual){
   if(!syncReady()){ syncState("동기화 미연결 — 매매기록에서 설정하세요"); return; }
   if(syncing) return;
+  if(Date.now() < cooldownUntil){
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(function(){ doSync(false); }, Math.max(5000, cooldownUntil - Date.now() + 1000));
+    return;
+  }
   if(!manual && isEditing()){ schedulePush(); return; }
+  var snap = JSON.stringify(reviews);
+  if(!manual && snap === lastPushed && Date.now() - (sync.last||0) < 600000) return;
   syncing = true; syncState("동기화 중…");
   try{
     var g = await gh("/gists/"+sync.gist);
@@ -367,6 +487,7 @@ async function doSync(manual){
     if(f && f.content) mergeRemote(JSON.parse(f.content));
     var body = { files:{} }; body.files[GIST_FILE] = { content: JSON.stringify(payload(), null, 1) };
     await gh("/gists/"+sync.gist, { method:"PATCH", body:body });
+    lastPushed = JSON.stringify(reviews);
     sync.last = Date.now(); saveJSON(KEY.sync, sync);
     var d = new Date(sync.last);
     syncState("동기화됨 "+pad2(d.getHours())+":"+pad2(d.getMinutes()), "ok");
@@ -379,7 +500,7 @@ async function doSync(manual){
 function schedulePush(){
   if(!syncReady()) return;
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(function(){ doSync(false); }, 2500);
+  pushTimer = setTimeout(function(){ doSync(false); }, 8000);
 }
 
 $("day").addEventListener("change", loadDay);

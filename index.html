@@ -210,9 +210,9 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="eyebrow">TRADE LOG · 1R = 1%</div>
+    <div class="eyebrow">TRADE LOG</div>
     <h1>매매 기록</h1>
-    <div class="unit"><span>1R</span><b id="unit">계좌 금액을 넣으세요</b></div>
+    <div class="unit"><span id="unit-l">위험 배정</span><b id="unit">계좌 금액을 넣으세요</b></div>
     <a class="navlink" href="review.html">장 마감 복기 →</a>
   </header>
 
@@ -408,8 +408,8 @@ function askDelete(t, onYes){
   $("ovl").style.display = "flex";
 }
 
-/* 1R = 계좌 1%. 손절폭과 감수할 R이 정해지면 비중은 하나로 결정된다.
-   비중% = 감수R × 100 / 손절폭% */
+/* 위험 배정(계좌 %)과 손절폭이 정해지면 비중은 하나로 결정된다.
+   비중% = 위험배정% × 100 / 손절폭% */
 function sizing(entry, stop, r){
   if(entry==null || stop==null || entry<=0 || stop<=0 || stop>=entry) return null;
   var mult = (r==null || !isFinite(r) || r<=0) ? 1 : r;
@@ -436,7 +436,7 @@ function qtyOf(entry, stop, mult, acctKrw, market, fx){
 /* 분할 청산 — 각 회차는 {portion, price}. 옛 기록의 단일 exit도 100% 1회로 읽는다. */
 /* ── 포지션 ──
    진입은 여러 번(피라미딩), 청산도 여러 번. 둘 다 수량 기준으로 다룬다.
-   평균단가가 생기므로 R은 "실현 손익 ÷ 1R 금액"으로 구한다.
+   평균단가가 생기므로 계좌 손익 %는 "실현 손익 ÷ 계좌"로 구한다.
    단일 진입·단일 청산이면 예전 (청산가-진입가)/(진입가-손절가) 공식과 정확히 같은 값이 나온다. */
 function entriesOf(t){
   if(t.entries && t.entries.length) return t.entries;
@@ -476,7 +476,7 @@ function posOf(t){
   }, 0);
   var acct = num(t.acctAt) || num(settings.account);
   var fx = t.market==="US" ? (num(t.fx) || num(settings.fx)) : 1;
-  var unit = (acct && fx) ? acct*0.01 : null;          /* 1R 금액(원) */
+  var unit = (acct && fx) ? acct*0.01 : null;          /* 계좌 1% 금액(원) — 손익을 %로 환산하는 분모 */
   var stop = num(t.stop);
   return {
     totalSh: totalSh, avg: avg, cost: cost, outSh: outSh, open: open, pnl: pnl, unit: unit, fx: fx,
@@ -706,7 +706,7 @@ function schedulePush(){
 }
 
 /* ── 기간 손실 한도 ──
-   계좌 R 기준으로 센다. 2R로 넣어 손절된 건은 -1R이 아니라 -2R로 계산된다. */
+   계좌 손익 % 기준으로 센다. 2%를 배정해 손절된 건은 -1R이지만 계좌로는 -2%다. */
 function dayStart(d){ var x = new Date(d); x.setHours(0,0,0,0); return x.getTime(); }
 function periodStart(kind){
   var d = new Date(); d.setHours(0,0,0,0);
@@ -793,8 +793,16 @@ function syncSave(){
   }
 }
 
+/* 지금 고른 위험 배정이 실제 얼마인지 — 이 금액이 이 거래의 1R이다 */
+function renderUnit(){
+  var acct = num(settings.account);
+  $("unit-l").textContent = "위험 배정 " + riskR + "%";
+  $("unit").textContent = acct ? won(acct*riskR/100) + " = 이 거래의 1R" : "계좌 금액을 넣으세요";
+}
+
 /* ── 입력 미리보기 ── */
 function preview(){
+  renderUnit();
   var e = num($("entry").value), s = num($("stop").value);
   var acct = num(settings.account), fx = num(settings.fx);
   var z = sizing(e,s,riskR);
@@ -850,7 +858,7 @@ function preview(){
 /* ── 목록 ── */
 function render(){
   var acct = num(settings.account), fx = num(settings.fx);
-  $("unit").textContent = acct ? won(acct*0.01) + " (계좌의 1%)" : "계좌 금액을 넣으세요";
+  renderUnit();
 
   var list = $("list"); list.innerHTML = "";
   $("empty").style.display = trades.length ? "none" : "block";
@@ -874,7 +882,7 @@ function render(){
       hd.innerHTML = '<div class="gh-l">'+groupLabel(g.key, groupBy)+
         '<span>'+st.n+'건'+(st.win!=null ? " · 승률 "+st.win+"%" : "")+'</span></div>'+
         '<b class="'+(st.sum>0?"plus":st.sum<0?"minus":"flat")+'">'+
-        (st.closed ? (st.sum>0?"+":"")+st.sum.toFixed(2)+"R" : "—")+'</b>';
+        (st.closed ? pText(st.sum) : "—")+'</b>';
       list.appendChild(hd);
     }
     g.list.forEach(function(t){
@@ -1126,7 +1134,8 @@ function render(){
   renderLimits();
 }
 
-/* ── 성과 지표 ── 모두 R 단위. 통화가 섞여도 비교 가능한 이유가 이것이다. */
+/* ── 성과 지표 ──
+   셋업 품질은 거래 R배수, 돈에 미친 영향은 계좌 %. 단위를 섞지 않는다. */
 function perf(){
   var done = trades.filter(function(t){ return acctR(t) != null && isDone(t); })
     .sort(function(a,b){ return (a.closedAt||a.at||0) - (b.closedAt||b.at||0); });
@@ -1157,7 +1166,7 @@ function perf(){
     (acctR(t) > 0 ? hold.win : hold.loss).push(days);
   });
 
-  /* 감수 R 배수별 — 확신이 클 때 크게 건 것이 실제로 옳았나 */
+  /* 위험 배정별 — 확신이 클 때 크게 건 것이 실제로 옳았나 */
   var byRisk = {};
   done.forEach(function(t){
     var k = String(riskPct(t)), v = acctR(t);
@@ -1239,7 +1248,7 @@ function renderPerf(){
   if(P.exp <= 0 && P.n >= 10) notes.push("기대값이 0 이하입니다. 매매를 늘릴수록 손실이 쌓이는 구간입니다.");
   var limD = num(settings.limD);
   if(limD && P.maxStreak && Math.abs(P.al||0)*P.maxStreak > limD*1.5)
-    notes.push("최대 연속손실 "+P.maxStreak+"건이면 일 한도 "+limD+"R로는 자주 걸립니다. 한도나 사이즈 중 하나를 조정할 만합니다.");
+    notes.push("최대 연속손실 "+P.maxStreak+"건이면 일 한도 "+limD+"%로는 자주 걸립니다. 한도나 위험 배정 중 하나를 조정할 만합니다.");
   $("p-note").textContent = notes.join(" ");
   drawDash(P);
 }
@@ -1280,7 +1289,7 @@ function drawDash(P){
   } else hHtml = '<p class="hint">청산일이 기록된 매매가 쌓이면 계산됩니다.</p>';
   $("d-hold").innerHTML = hHtml;
 
-  /* 감수 R 배수별 */
+  /* 위험 배정별 */
   var ks = Object.keys(P.byRisk).sort(function(a,b){ return parseFloat(a)-parseFloat(b); });
   var mx = Math.max.apply(null, ks.map(function(k){ return Math.abs(P.byRisk[k].sum); }).concat([0.5]));
   var rHtml = ks.length ? ks.map(function(k){
@@ -1305,7 +1314,7 @@ function drawDash(P){
   $("d-after").innerHTML = aHtml;
 }
 
-/* ── 계좌 갱신 ── 1R은 계좌의 1%이므로 계좌가 변하면 1R도 변한다 */
+/* ── 계좌 갱신 ── 위험 배정은 계좌의 %이므로, 계좌가 변하면 같은 %도 금액이 달라진다 */
 function unreflected(){
   var base = num(settings.baseAt) || 0;
   return trades.reduce(function(a,t){
@@ -1318,12 +1327,12 @@ function renderAcctUp(){
   if(!acct || Math.abs(r) < 0.01){ el.style.display = "none"; return; }
   el.style.display = "flex";
   var b = $("au-r");
-  b.textContent = (r>0?"+":"")+r.toFixed(2)+"R  ≈ "+won(acct*r/100);
+  b.textContent = pText(r)+"  ≈ "+won(acct*r/100);
   b.className = r>0 ? "plus" : "minus";
 }
 
 function summary(){
-  /* R은 계좌 기준 고정 단위. 1R = 계좌 1%이므로 누적 R이 곧 계좌 수익률이다. */
+  /* 누적은 계좌 손익 %(실제 돈), 평균은 거래 R배수(셋업 품질). 단위가 다르니 라벨을 명확히 둔다. */
   /* 누적 R과 평균 R은 반드시 같은 모집단으로 낸다. 한쪽만 부분청산을 빼면 부호가 어긋난다.
      승률만 완전 종료 건 — 절반 판 매매를 이겼다/졌다로 셀 수 없으니까. */
   /* 계좌 손익은 부분청산까지 포함(실현된 돈), R배수 평균은 완전 종료 건만 */
@@ -1411,7 +1420,7 @@ $("acctApply").addEventListener("click", function(){
   settings.account = String(next); settings.baseAt = Date.now();
   $("account").value = settings.account;
   saveSettings(); preview(); render();
-  toast("계좌 "+won(next)+" · 1R "+won(next*0.01));
+  toast("계좌 "+won(next)+" · 1% = "+won(next*0.01));
 });
 
 $("csv").addEventListener("click", function(){
