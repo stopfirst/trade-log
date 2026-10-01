@@ -22,6 +22,15 @@
 @media(max-width:1150px){.calendar-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.calendar-stat.primary{grid-column:span 2}.calendar-bottom{grid-template-columns:1fr}}
 @media(max-width:600px){.calendar-toolbar{align-items:flex-start}.calendar-month-label{min-width:115px;font-size:15px}.calendar-stats{grid-template-columns:1fr 1fr;gap:9px}.calendar-stat{padding:14px}.calendar-stat.primary{grid-column:1/-1}.calendar-stat b{font-size:20px}.calendar-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.calendar-head.total,.calendar-week-total{display:none}.calendar-day{min-height:91px;padding:8px 6px}.calendar-day .day-pnl{font-size:11px;margin-top:11px;letter-spacing:-.04em}.calendar-day .day-r{font-size:8px}.calendar-day .day-trades{font-size:8px;margin-top:4px}.calendar-bottom{display:block;margin-top:16px}.calendar-trade-row{grid-template-columns:minmax(0,1fr) auto;gap:9px}.calendar-trade-row .value.r{display:none}}
 
+
+/* Weekly summary: a separate neutral column; daily and calculation logic unchanged. */
+.calendar-head.total,.calendar-week-total{border-left:3px solid #a5b5c3;border-right-color:#d6dfe7;border-bottom-color:#d6dfe7}
+.calendar-head.total{background:#dfe7ee;color:#405669;letter-spacing:.08em;font-weight:800}
+.calendar-week-total{background:#edf1f5;padding:14px 12px;gap:2px;box-shadow:inset 6px 0 0 #e3eaf0}
+.calendar-week-total b{max-width:100%;font-size:14px;line-height:1.5;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:#4f6272}
+.calendar-week-total b.positive{color:#186b60}
+.calendar-week-total b.negative{color:#a63d50}
+.calendar-week-total span{max-width:100%;color:#576c7c;font-size:10px;line-height:1.5;text-align:right;overflow-wrap:anywhere}
 </style></head><body>
 <div class="shell">
 <aside class="sidebar"><div class="brand"><div class="brand-mark" data-icon="brand"></div><div class="brand-name">TRADE<br>JOURNAL<small>US EQUITIES / USD</small></div></div><div class="nav-label">WORKSPACE</div><nav class="nav" aria-label="주 메뉴"><button data-page="dashboard" aria-label="대시보드" class="active"><i data-icon="dashboard"></i><span>대시보드</span></button><button data-page="records" aria-label="거래 기록"><i data-icon="records"></i><span>거래 기록</span><small id="navCount">0</small></button><button data-page="calendar" aria-label="월간 캘린더"><i data-icon="calendar"></i><span>월간 캘린더</span></button><button data-page="analysis" aria-label="복기 · 분석"><i data-icon="chart"></i><span>복기 · 분석</span></button><button data-page="settings" aria-label="설정"><i data-icon="settings"></i><span>설정</span></button></nav><div class="sidebar-foot"><div class="eyebrow">ACCOUNT BASIS · USD</div><div class="sidebar-balance" id="sideBalance">—</div><button class="side-backup" data-action="backup"><i data-icon="download"></i>사진 포함 백업</button><div class="storage-state" id="saveState"><span class="dot"></span>불러오는 중</div></div></aside>
