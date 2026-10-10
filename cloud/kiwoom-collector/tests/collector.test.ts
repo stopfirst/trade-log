@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {Collector,readConfig,phase,intervalFor,kstDate,materialHash,fullHash,makeLogger,SupabaseRpc} from '../src/collector.ts';
+import {Collector,readConfig,phase,intervalFor,kstDate,materialHash,fullHash,makeLogger,SupabaseRpc,normalizeCash,validateCashSpec,backfillDates,parseBackfillArgs,runBackfill,BACKFILL_MAX_DAYS} from '../src/collector.ts';
 
 const TOKEN='kwc_'+'A'.repeat(43);
 const ENV={SUPABASE_URL:'https://ktndayhrlhrlxtkirrvx.supabase.co',SUPABASE_KEY:'sb_publishable_testtesttesttest1234',KW_COLLECTOR_TOKEN:TOKEN,KIWOOM_APP_KEY:'app-key-secret-1',KIWOOM_SECRET:'kiwoom-secret-2',KIWOOM_ACCOUNT:'5512345678'};
@@ -12,12 +12,17 @@ const json=(d:any,status=200)=>new Response(JSON.stringify(d),{status,headers:{'
 const SESSION=Date.parse('2026-10-08T14:00:00Z');
 
 function world(){
- const st={price:'205.00',qty:'3',pnl:'-9.4902',kiwoomStatus:200,kiwoomCalls:[] as string[],pushes:[] as any[],heartbeats:[] as any[],supabaseStatus:200,supabaseBody:null as any,headers:[] as any[]};
+ const st={price:'205.00',qty:'3',pnl:'-9.4902',cash:'1500.25',cashStatus:200,cashCode:0 as any,rateOnce:new Set<string>(),apiError:new Map<string,number>(),orderDates:[] as string[],kiwoomStatus:200,kiwoomCalls:[] as string[],pushes:[] as any[],heartbeats:[] as any[],supabaseStatus:200,supabaseBody:null as any,headers:[] as any[]};
  const fetcher=(async(url:any,o:any)=>{const u=String(url);
   if(u.startsWith('https://api.kiwoom.com')){const api=o.headers['api-id']||'auth';st.kiwoomCalls.push(api);
    if(st.kiwoomStatus!==200)return new Response('x',{status:st.kiwoomStatus});
    if(api==='auth')return r({token:'oauth-token-xyz'});
    const b=JSON.parse(o.body);
+   if(api==='ust21160'){if(st.cashStatus!==200)return new Response('x',{status:st.cashStatus});return new Response(JSON.stringify({return_code:st.cashCode,return_msg:'ok',won_entr:'000000930965946',d0_setl_dt:'20261008',d0_usd_fx_entr:'1700.250',d1_setl_dt:'20261009',d1_usd_fx_entr:st.cash,d2_setl_dt:'20261012',d2_usd_fx_entr:st.cash,d3_setl_dt:'',d3_usd_fx_entr:'',d4_setl_dt:'',d4_usd_fx_entr:''}));}
+   if(api==='ust21150'){st.orderDates.push(b.ord_dt);if(st.rateOnce.has(b.ord_dt)){st.rateOnce.delete(b.ord_dt);return new Response(JSON.stringify({return_code:1700,return_msg:'허용된 API 요청 개수를 초과하였습니다.'}));}
+    if(st.apiError.has(b.ord_dt))return new Response(JSON.stringify({return_code:st.apiError.get(b.ord_dt),return_msg:'조회 불가'}));
+    if(b.ord_dt.endsWith('05'))return new Response(JSON.stringify({return_code:20,return_msg:'[2000](571758:해당계좌의체결내역이없습니다.)'}));}
+   if(api==='ust21640'&&b.cntr_dt.endsWith('05'))return new Response(JSON.stringify({return_code:20,return_msg:'[2000](571758:조회내역이없습니다.)'}));
    if(api==='ust21150')return r({result_list:[{ord_no:'000000252',crnc_code:'USD',stk_cd:'NVDA',slby_tp_nm:'매도',ord_qty:'1',cntr_qty:'1',cntr_uv:'201.3147',ord_remnq:'0',ord_stat_nm:'체결',cntr_time:'22:31:05'}]});
    if(api==='ust21070')return r({crnc_code:'USD',tot_evlt_amt:'615.00',result_list:[{stk_cd:'AAPL',crnc_code:'USD',poss_qty:st.qty,frgn_stk_book_uv:'200.10',now_pric:st.price,evlt_amt:'615.00',pl_amt:'14.70'}]});
    if(api==='ust21640')return r({tot_pl_amt:st.pnl,result_list:[{stk_cd:'NVDA',crnc_code:'USD',cntr_sellq:'1',avg_buy_uv:'210.1282',cntr_sella:'201.3147',pl_amt:st.pnl,cmsn:'0.6725',altx:'0.0042'}],_d:b.cntr_dt});
@@ -58,7 +63,9 @@ test('pushes the KiwoomJournal snapshot once, then only when something changes',
  await c.tick();
  assert.deepEqual(st.pushes.map(p=>p.p_snapshot.orderDate),['2026-10-07','2026-10-08'],'yesterday and today (Korean dates)');
  const p=st.pushes[0];assert.equal(p.p_token,TOKEN);assert.equal(p.p_snapshot.journalVersion,1);assert.equal(p.p_snapshot.source,'kiwoom');assert.match(p.p_snapshot.account,/^[0-9a-f]{16}$/);
- assert.ok(st.kiwoomCalls.every(a=>['auth','ust21150','ust21070','ust21640'].includes(a)),'read-only allowlist only');
+ assert.ok(st.kiwoomCalls.every(a=>['auth','ust21150','ust21070','ust21640','ust21160'].includes(a)),'read-only allowlist only');
+ assert.deepEqual(p.p_snapshot.summary.cash,{apiId:'ust21160',currency:'USD',usd:'1500.25',usdBasis:'d2',settleDate:'2026-10-12',usdD0:'1700.25',krw:'930965946',krwIncluded:false,asOf:SESSION},'USD cash after settlement attached to the snapshot');
+ assert.equal(st.kiwoomCalls.filter(a=>a==='ust21160').length,1,'cash queried once per round');
  assert.equal(st.headers[0].apikey,ENV.SUPABASE_KEY);assert.equal(st.headers[0].Authorization,undefined,'publishable key not sent as a JWT');
  assert.equal(st.heartbeats.length,1);
  // a minute later: nothing changed -> today queried, no push
@@ -123,4 +130,64 @@ test('bundled adapter is identical to the PC server adapter',async()=>{
  if(b!==null)assert.equal(a,b);
  const spec=JSON.parse(await readFile(new URL('../specs/kiwoom-journal-spec.json',import.meta.url),'utf8'));
  assert.ok(Object.values<any>(spec.apis).every(x=>!('response_example' in x)&&!('request_example' in x)),'published spec has no example payloads');
+});
+
+test('cash: spec fields, furthest settlement column, KRW never added, bad values refused',async()=>{
+ const spec=JSON.parse(await readFile(new URL('../specs/kiwoom-journal-spec.json',import.meta.url),'utf8'));
+ validateCashSpec(spec);assert.throws(()=>validateCashSpec({apis:{}}),/CASH_SPEC_MISMATCH/);
+ const c=normalizeCash({won_entr:'-00000001000',d0_setl_dt:'20260626',d0_usd_fx_entr:'18041599.000',d1_setl_dt:'20260629',d1_usd_fx_entr:'18041404.560',d2_setl_dt:'20260630',d2_usd_fx_entr:'18041404.560',d3_setl_dt:'20260701',d3_usd_fx_entr:'18041404.560',d4_setl_dt:'20260702',d4_usd_fx_entr:'18041404.560'},5);
+ assert.deepEqual(c,{apiId:'ust21160',currency:'USD',usd:'18041404.56',usdBasis:'d4',settleDate:'2026-07-02',usdD0:'18041599',krw:'-1000',krwIncluded:false,asOf:5});
+ assert.equal(normalizeCash({d0_setl_dt:'20261008',d0_usd_fx_entr:'0012.5'},1).usd,'12.5','only D0 present');
+ assert.throws(()=>normalizeCash({d0_usd_fx_entr:'abc'},1),/SCHEMA/);assert.throws(()=>normalizeCash({},1),/SCHEMA/);
+});
+
+test('cash failure never blocks the journal push; last good value is reused, then dropped after 6 h',async()=>{
+ const now={t:SESSION},{c,st,lines}=make(now);
+ st.cashStatus=500;await c.tick();assert.equal(st.pushes.length,2);assert.equal(st.pushes[0].p_snapshot.summary.cash,undefined,'no cash yet');
+ assert.ok(lines.some(l=>/예수금\(ust21160\) 조회 실패 KIWOOM_CASH_HTTP_500/.test(l)));assert.equal(c.lastError,null,'journal round still OK');
+ st.cashStatus=200;now.t+=60000;await c.tick();assert.equal(st.pushes.at(-1).p_snapshot.summary.cash.usd,'1500.25','cash change is material -> pushed at once');
+ st.cashCode=1700;now.t+=60000;await c.tick();assert.equal(c.cash.usd,'1500.25');assert.ok(lines.some(l=>/KIWOOM_CASH_API_ERROR_1700/.test(l)));
+ const s:any={account:'a',orderDate:'d',orders:[],realized:{},positions:[],summary:{currency:'USD'}};
+ assert.equal(c.withCash(s,await c.fetchCash(now.t+60000)).summary.cash.usd,'1500.25','reused while young');
+ assert.equal(await c.fetchCash(now.t+7*3600000),null,'dropped after 6 hours');
+ const off=make({t:SESSION},{KW_CASH_DISABLED:'1'});await off.c.tick();assert.ok(!off.st.kiwoomCalls.includes('ust21160'));
+});
+
+test('backfill: dates skip Korean Sundays only; arguments are checked against the 400-day Supabase window',()=>{
+ assert.deepEqual(backfillDates('2026-10-02','2026-10-06'),['2026-10-02','2026-10-03','2026-10-05','2026-10-06'],'Sat kept, Sun 10-04 skipped');
+ assert.equal(backfillDates('2026-10-02','2026-10-06',{includeSundays:true}).length,5);
+ assert.throws(()=>backfillDates('2026-10-06','2026-10-02'),/INVERTED/);
+ const t=SESSION; // KST 2026-10-08
+ assert.deepEqual(parseBackfillArgs(['node','c.ts','--backfill','2026-01-01'],t),{start:'2026-01-01',end:'2026-10-07',includeSundays:false,pushEmpty:false,delayMs:1500});
+ assert.equal(parseBackfillArgs(['node','c.ts','--backfill','2026-09-01','2026-09-30','--include-sundays','--delay-ms','3000'],t)!.delayMs,3000);
+ assert.equal(parseBackfillArgs(['node','c.ts'],t),null);
+ for(const bad of [['--backfill'],['--backfill','2026-13-01'],['--backfill','2026-10-01','2026-10-09'],['--backfill','2026-10-07','2026-10-01'],['--backfill','2025-01-01']])
+  assert.throws(()=>parseBackfillArgs(['node','c.ts',...bad],t),(e:any)=>e.message==='BACKFILL_ARGS'&&!!e.detail,bad.join(' '));
+ assert.equal(BACKFILL_MAX_DAYS,400);
+});
+
+test('backfill: one date at a time, rate limit waits and retries, empty days skipped, failures listed, pushes paced',async()=>{
+ const now={t:SESSION},{c,st,lines}=make(now);const waits:number[]=[];
+ st.rateOnce.add('20261002');st.apiError.set('20261006',1999);
+ const r=await runBackfill(c,{start:'2026-10-01',end:'2026-10-07'},async ms=>{waits.push(ms);now.t+=ms;});
+ // 10-04 is a Korean Sunday (skipped); 10-05 has no orders/realized (skipped); 10-06 Kiwoom error 1999 (listed)
+ assert.deepEqual(st.pushes.map(p=>p.p_snapshot.orderDate),['2026-10-01','2026-10-02','2026-10-03','2026-10-07']);
+ assert.deepEqual(r.failed,[{date:'2026-10-06',code:'KIWOOM_REVIEW_API_ERROR'}]);assert.equal(r.empty,1);assert.equal(r.pushed,4);assert.equal(r.stopped,null);
+ assert.ok(waits.includes(60000),'Kiwoom 1700 -> 60 s wait');assert.equal(st.orderDates.filter(d=>d==='20261002').length,2,'retried once');
+ assert.ok(st.pushes.every(p=>p.p_snapshot.summary.cash?.usd==='1500.25'),'current USD cash attached');
+ assert.ok(st.pushes.every(p=>p.p_snapshot.positions.length===1),'current holdings kept (asOf = backfill time)');
+ assert.ok(st.pushes.every((p,i)=>i===0||p.p_snapshot.asOf>st.pushes[i-1].p_snapshot.asOf),'asOf increases');
+ assert.ok(lines.some(l=>/\[1\/6\] 2026-10-01 전송/.test(l))&&lines.some(l=>/주문·실현손익 없음 · 건너뜀/.test(l))&&lines.some(l=>/백필 완료 · 전송 4일 · 기록 없음 1일 · 실패 1일 \(2026-10-06 KIWOOM_REVIEW_API_ERROR\)/.test(l)));
+ assert.equal(st.heartbeats.length,0,'backfill does not overwrite the service heartbeat');
+ const all=lines.join('\n');for(const s of [ENV.KIWOOM_APP_KEY,ENV.KIWOOM_SECRET,ENV.KIWOOM_ACCOUNT,TOKEN,'oauth-token-xyz'])assert.ok(!all.includes(s),'leaked '+s);
+});
+
+test('backfill: Supabase rate_limited waits 65 s and retries; token rejection stops the run',async()=>{
+ const now={t:SESSION},{c,st}=make(now);const waits:number[]=[];let limited=1;
+ const base=(c.rpc as any).fetcher;(c.rpc as any).fetcher=(async(u:any,o:any)=>{if(String(u).endsWith('kw_push')&&limited-->0)return json({ok:false,error:'rate_limited'});return base(u,o);}) as typeof fetch;
+ let r=await runBackfill(c,{start:'2026-10-06',end:'2026-10-07',pushEmpty:true},async ms=>{waits.push(ms);now.t+=ms;});
+ assert.ok(waits.includes(65000));assert.equal(r.pushed,2);
+ st.supabaseStatus=403;st.supabaseBody={message:'invalid collector token'};
+ r=await runBackfill(c,{start:'2026-10-01',end:'2026-10-03'},async ms=>{now.t+=ms;});
+ assert.equal(r.stopped,'SUPABASE_TOKEN_REJECTED');assert.equal(r.pushed,0);assert.equal(st.orderDates.filter(d=>d==='20261002').length,0,'stopped after the first date');
 });
