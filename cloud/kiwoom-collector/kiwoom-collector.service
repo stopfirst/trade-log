@@ -1,5 +1,5 @@
 [Unit]
-Description=Kiwoom US-stock cloud collector (trade journal v10)
+Description=Kiwoom US-stock cloud collector (trade journal v11)
 Wants=network-online.target
 After=network-online.target
 
