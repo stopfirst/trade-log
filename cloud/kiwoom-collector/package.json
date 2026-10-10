@@ -1,1 +1,1 @@
-{"name":"kiwoom-cloud-collector","version":"1.0.0","private":true,"type":"module","engines":{"node":">=24"},"scripts":{"start":"node --env-file=.env src/collector.ts","once":"node --env-file=.env src/collector.ts --once","test":"node --test tests/*.test.ts"}}
+{"name":"kiwoom-cloud-collector","version":"1.1.0","private":true,"type":"module","engines":{"node":">=24"},"scripts":{"start":"node --env-file=.env src/collector.ts","once":"node --env-file=.env src/collector.ts --once","test":"node --test tests/*.test.ts","backfill":"node --env-file=.env src/collector.ts --backfill"}}
