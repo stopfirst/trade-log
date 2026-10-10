@@ -1,0 +1,1 @@
+{"name":"trade-alert","version":"1.0.0","private":true,"type":"module","engines":{"node":">=22"},"scripts":{"start":"node --env-file=.env src/alert.mjs","once":"node --env-file=.env src/alert.mjs --once --dry-run","test":"node --test tests/*.test.mjs"}}
