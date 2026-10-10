@@ -1,0 +1,30 @@
+[Unit]
+Description=Kiwoom US-stock cloud collector (trade journal v10)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=kwcollector
+Group=kwcollector
+WorkingDirectory=/opt/kiwoom-collector
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning --env-file=/opt/kiwoom-collector/.env /opt/kiwoom-collector/src/collector.ts
+Restart=always
+RestartSec=60
+Environment=NODE_ENV=production
+# Hardening: the collector only needs outbound HTTPS.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target
