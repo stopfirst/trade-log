@@ -1,0 +1,1427 @@
+{
+ "apis": {
+  "접근토큰 발급(au10001)": {
+   "meta": {
+    "◀ API 리스트 이동": "",
+    "키움 REST API": "",
+    "API 정보": "",
+    "메뉴 위치": "OAuth 인증 > 접근토큰발급 > 접근토큰 발급(au10001)",
+    "API 명": "접근토큰 발급",
+    "API ID": "au10001",
+    "기본정보": "",
+    "Method": "POST",
+    "운영 도메인": "https://api.kiwoom.com",
+    "모의투자 도메인": "https://mockapi.kiwoom.com",
+    "URL": "/oauth2/token",
+    "Format": "JSON",
+    "Content-Type": "application/json;charset=UTF-8",
+    "개요": ""
+   },
+   "request": {
+    "header": [
+     {
+      "element": "api-id",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "TR명",
+      "type": "String",
+      "required": "Y",
+      "length": "10",
+      "description": "7자리 TR코드, ex) ka00001"
+     },
+     {
+      "element": "authorization",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "접근토큰",
+      "type": "String",
+      "required": "Y",
+      "length": "1000",
+      "description": "토큰 지정시 토큰타입(\"Bearer\") 붙혀서 호출 \n 예) Bearer Egicyx..."
+     },
+     {
+      "element": "cont-yn",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회여부",
+      "type": "String",
+      "required": "N",
+      "length": "1",
+      "description": "응답 Header의 연속조회여부값이 Y일 경우 다음데이터 요청시 응답 Header의 cont-yn값 세팅"
+     },
+     {
+      "element": "next-key",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회키",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": "응답 Header의 연속조회여부값이 Y일 경우 다음데이터 요청시 응답 Header의 next-key값 세팅"
+     }
+    ],
+    "body": [
+     {
+      "element": "grant_type",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "grant_type",
+      "type": "String",
+      "required": "Y",
+      "length": "",
+      "description": "client_credentials 입력"
+     },
+     {
+      "element": "appkey",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "앱키",
+      "type": "String",
+      "required": "Y",
+      "length": "",
+      "description": ""
+     },
+     {
+      "element": "secretkey",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "시크릿키",
+      "type": "String",
+      "required": "Y",
+      "length": "",
+      "description": ""
+     }
+    ]
+   },
+   "response": {
+    "header": [
+     {
+      "element": "api-id",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "TR명",
+      "type": "String",
+      "required": "Y",
+      "length": "10",
+      "description": "7자리 TR코드, ex) ka00001"
+     },
+     {
+      "element": "cont-yn",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회여부",
+      "type": "String",
+      "required": "N",
+      "length": "1",
+      "description": "다음 데이터가 있을시 Y값 전달"
+     },
+     {
+      "element": "next-key",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회키",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": "다음 데이터가 있을시 다음 키값 전달"
+     }
+    ],
+    "body": [
+     {
+      "element": "expires_dt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "만료일",
+      "type": "String",
+      "required": "Y",
+      "length": "",
+      "description": ""
+     },
+     {
+      "element": "token_type",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "토큰타입",
+      "type": "String",
+      "required": "Y",
+      "length": "",
+      "description": ""
+     },
+     {
+      "element": "token",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "접근토큰",
+      "type": "String",
+      "required": "Y",
+      "length": "",
+      "description": ""
+     }
+    ]
+   }
+  },
+  "미국주식 원장잔고확인(ust21070)": {
+   "meta": {
+    "◀ API 리스트 이동": "",
+    "키움 REST API": "",
+    "API 정보": "",
+    "메뉴 위치": "미국주식 > 계좌 > 미국주식 원장잔고확인(ust21070)",
+    "API 명": "미국주식 원장잔고확인",
+    "API ID": "ust21070",
+    "기본정보": "",
+    "Method": "POST",
+    "운영 도메인": "https://api.kiwoom.com",
+    "모의투자 도메인": "https://mockapi.kiwoom.com",
+    "URL": "/api/us/acnt",
+    "Format": "JSON",
+    "Content-Type": "application/json;charset=UTF-8",
+    "개요": "",
+    "미국주식 원장 잔고 정보를 조회합니다.": ""
+   },
+   "request": {
+    "header": [
+     {
+      "element": "api-id",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "TR명",
+      "type": "String",
+      "required": "Y",
+      "length": "10",
+      "description": "7자리 TR코드, ex) ka00001"
+     },
+     {
+      "element": "authorization",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "접근토큰",
+      "type": "String",
+      "required": "Y",
+      "length": "1000",
+      "description": "토큰 지정시 토큰타입(\"Bearer\") 붙혀서 호출 \n 예) Bearer Egicyx..."
+     },
+     {
+      "element": "cont-yn",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회여부",
+      "type": "String",
+      "required": "N",
+      "length": "1",
+      "description": "응답 Header의 연속조회여부값이 Y일 경우 다음데이터 요청시 응답 Header의 cont-yn값 세팅"
+     },
+     {
+      "element": "next-key",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회키",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": "응답 Header의 연속조회여부값이 Y일 경우 다음데이터 요청시 응답 Header의 next-key값 세팅"
+     }
+    ],
+    "body": [
+     {
+      "element": "stex_tp",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "거래소구분",
+      "type": "String",
+      "required": "N",
+      "length": "2",
+      "description": "ND:NASDAQ,NY:NYSE,NA:AMEX"
+     },
+     {
+      "element": "stk_cd",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "종목코드",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "미입력시 전체"
+     }
+    ]
+   },
+   "response": {
+    "header": [
+     {
+      "element": "api-id",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "TR명",
+      "type": "String",
+      "required": "Y",
+      "length": "10",
+      "description": "7자리 TR코드, ex) ka00001"
+     },
+     {
+      "element": "cont-yn",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회여부",
+      "type": "String",
+      "required": "N",
+      "length": "1",
+      "description": "다음 데이터가 있을시 Y값 전달"
+     },
+     {
+      "element": "next-key",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회키",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": "다음 데이터가 있을시 다음 키값 전달"
+     }
+    ],
+    "body": [
+     {
+      "element": "crnc_code",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "통화코드",
+      "type": "String",
+      "required": "N",
+      "length": "3",
+      "description": "USD"
+     },
+     {
+      "element": "tot_evlt_amt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "총평가금액",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "tot_prch_amt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "총매입금액",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "tot_pl_amt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "총손익금액",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "tot_pl_rt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "총수익율",
+      "type": "String",
+      "required": "N",
+      "length": "8",
+      "description": ""
+     },
+     {
+      "element": "tdy_book_amt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "당일실현손익매입금액",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "tdy_pl_amt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "당일실현손익",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "tdy_pl_rt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "당일실현손익율(%)",
+      "type": "String",
+      "required": "N",
+      "length": "8",
+      "description": ""
+     },
+     {
+      "element": "tot_evlt_amt_krw",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "총평가금액(원)",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "tot_prch_amt_krw",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "총매입금액(원)",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "tot_pl_amt_krw",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "총손익금액(원)",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "tdy_book_amt_krw",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "당일실현손익매입금액(원)",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "tdy_pl_amt_krw",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "당일실현손익(원)",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "result_list",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "결과리스트",
+      "type": "LIST",
+      "required": "N",
+      "length": "",
+      "description": ""
+     },
+     {
+      "element": "stex_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "거래소명",
+      "type": "String",
+      "required": "N",
+      "length": "30",
+      "description": ""
+     },
+     {
+      "element": "crnc_code",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "통화코드",
+      "type": "String",
+      "required": "N",
+      "length": "3",
+      "description": ""
+     },
+     {
+      "element": "stk_cd",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "종목코드",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "frgn_stk_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "종목명",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": ""
+     },
+     {
+      "element": "qty",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "결제기준수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "poss_qty",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "보유수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "sell_alowq",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "매도가능수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "pred_cntr_sellq",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "전일매도수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "pred_cntr_buyq",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "전일매수수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "tdy_cntr_sellq",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "금일매도수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "tdy_cntr_buyq",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "금일매수수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "frgn_stk_book_uv",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "매입단가",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "now_pric",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "현재가",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "evlt_amt",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "평가금액",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "pl_amt",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "손익금액",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "pl_rt",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "손익율(%)",
+      "type": "String",
+      "required": "N",
+      "length": "8",
+      "description": ""
+     },
+     {
+      "element": "evlt_amt_krw",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "평가금액(원)",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "pl_amt_krw",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "손익금액(원)",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "natn_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "국가명",
+      "type": "String",
+      "required": "N",
+      "length": "40",
+      "description": ""
+     },
+     {
+      "element": "exch_rate",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "환율",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "frgn_stk_book_uv_krw",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "매입단가(원)",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "now_pric_krw",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "현재가(원)",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "frgn_stk_book_amt",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "매입금액",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "frgn_stk_book_amt_krw",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "매입금액(원)",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     }
+    ]
+   }
+  },
+  "미국주식 일별 주문체결내역(ust21150)": {
+   "meta": {
+    "◀ API 리스트 이동": "",
+    "키움 REST API": "",
+    "API 정보": "",
+    "메뉴 위치": "미국주식 > 계좌 > 미국주식 일별 주문체결내역(ust21150)",
+    "API 명": "미국주식 일별 주문체결내역",
+    "API ID": "ust21150",
+    "기본정보": "",
+    "Method": "POST",
+    "운영 도메인": "https://api.kiwoom.com",
+    "모의투자 도메인": "https://mockapi.kiwoom.com",
+    "URL": "/api/us/acnt",
+    "Format": "JSON",
+    "Content-Type": "application/json;charset=UTF-8",
+    "개요": "",
+    "미국주식 일별 주문체결내역 정보를 조회합니다.": ""
+   },
+   "request": {
+    "header": [
+     {
+      "element": "api-id",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "TR명",
+      "type": "String",
+      "required": "Y",
+      "length": "10",
+      "description": "7자리 TR코드, ex) ka00001"
+     },
+     {
+      "element": "authorization",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "접근토큰",
+      "type": "String",
+      "required": "Y",
+      "length": "1000",
+      "description": "토큰 지정시 토큰타입(\"Bearer\") 붙혀서 호출 \n 예) Bearer Egicyx..."
+     },
+     {
+      "element": "cont-yn",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회여부",
+      "type": "String",
+      "required": "N",
+      "length": "1",
+      "description": "응답 Header의 연속조회여부값이 Y일 경우 다음데이터 요청시 응답 Header의 cont-yn값 세팅"
+     },
+     {
+      "element": "next-key",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회키",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": "응답 Header의 연속조회여부값이 Y일 경우 다음데이터 요청시 응답 Header의 next-key값 세팅"
+     }
+    ],
+    "body": [
+     {
+      "element": "ord_dt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "주문일자",
+      "type": "String",
+      "required": "N",
+      "length": "8",
+      "description": "미입력시 오늘 날짜로 조회"
+     },
+     {
+      "element": "query_tp",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "조회구분",
+      "type": "String",
+      "required": "Y",
+      "length": "1",
+      "description": "1:주문순,2:주문역순,3:미체결주문순,4:미체결역순,5:체결주문순,6:체결역순"
+     },
+     {
+      "element": "slby_tp",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "매도수구분",
+      "type": "String",
+      "required": "Y",
+      "length": "1",
+      "description": "0:전체,1:매도,2:매수"
+     },
+     {
+      "element": "stex_tp",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "거래소구분",
+      "type": "String",
+      "required": "N",
+      "length": "2",
+      "description": "ND:NASDAQ,NY:NYSE,NA:AMEX"
+     },
+     {
+      "element": "stk_cd",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "종목코드",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "미입력시 전체"
+     },
+     {
+      "element": "oppo_trde_tp",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "반대매매구분",
+      "type": "String",
+      "required": "N",
+      "length": "1",
+      "description": "%:전체,0:일반,1:반대매매"
+     },
+     {
+      "element": "fr_ord_no",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "시작주문번호",
+      "type": "String",
+      "required": "N",
+      "length": "9",
+      "description": ""
+     }
+    ]
+   },
+   "response": {
+    "header": [
+     {
+      "element": "api-id",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "TR명",
+      "type": "String",
+      "required": "Y",
+      "length": "10",
+      "description": "7자리 TR코드, ex) ka00001"
+     },
+     {
+      "element": "cont-yn",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회여부",
+      "type": "String",
+      "required": "N",
+      "length": "1",
+      "description": "다음 데이터가 있을시 Y값 전달"
+     },
+     {
+      "element": "next-key",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회키",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": "다음 데이터가 있을시 다음 키값 전달"
+     }
+    ],
+    "body": [
+     {
+      "element": "result_list",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "결과리스트",
+      "type": "LIST",
+      "required": "N",
+      "length": "",
+      "description": ""
+     },
+     {
+      "element": "ord_no",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "주문번호",
+      "type": "String",
+      "required": "N",
+      "length": "9",
+      "description": ""
+     },
+     {
+      "element": "crnc_code",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "통화코드",
+      "type": "String",
+      "required": "N",
+      "length": "3",
+      "description": ""
+     },
+     {
+      "element": "stk_cd",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "종목코드",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "isin_code",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "국제표준코드",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "frgn_trde_tp",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "매매구분",
+      "type": "String",
+      "required": "N",
+      "length": "40",
+      "description": ""
+     },
+     {
+      "element": "ord_qty",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "주문수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "단위: 1주, 좌측 0-padding 처리된 12자리 숫자"
+     },
+     {
+      "element": "cntr_qty",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "체결수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "단위: 1주, 좌측 0-padding 처리된 12자리 숫자"
+     },
+     {
+      "element": "mdfy_qty",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "정정수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "단위: 1주, 좌측 0-padding 처리된 12자리 숫자"
+     },
+     {
+      "element": "cncl_qty",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "취소수량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "단위: 1주, 좌측 0-padding 처리된 12자리 숫자"
+     },
+     {
+      "element": "frgn_msg_code",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "해외메세지코드",
+      "type": "String",
+      "required": "N",
+      "length": "8",
+      "description": ""
+     },
+     {
+      "element": "rsrv_tp",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "예약구분",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "oppo_trde_tp_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "반대매매구분명",
+      "type": "String",
+      "required": "N",
+      "length": "20",
+      "description": ""
+     },
+     {
+      "element": "comm_ord_tp_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "통신주문구분명",
+      "type": "String",
+      "required": "N",
+      "length": "20",
+      "description": ""
+     },
+     {
+      "element": "ord_time",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "주문시간",
+      "type": "String",
+      "required": "N",
+      "length": "8",
+      "description": "HH:mm:ss"
+     },
+     {
+      "element": "crnc_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "통화코드명",
+      "type": "String",
+      "required": "N",
+      "length": "20",
+      "description": ""
+     },
+     {
+      "element": "stex_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "거래소코드명",
+      "type": "String",
+      "required": "N",
+      "length": "20",
+      "description": ""
+     },
+     {
+      "element": "frgn_stk_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "종목명",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": ""
+     },
+     {
+      "element": "slby_tp_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "매도매수구분명",
+      "type": "String",
+      "required": "N",
+      "length": "4",
+      "description": ""
+     },
+     {
+      "element": "ord_uv",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "주문단가",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "단위: USD, 소수점 넷째 자리까지 포맷된 숫자"
+     },
+     {
+      "element": "stop_pric",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "STOP가격",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "단위: USD, 소수점 넷째 자리까지 포맷된 숫자"
+     },
+     {
+      "element": "cntr_uv",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "체결단가",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "단위: USD, 소수점 넷째 자리까지 포맷된 숫자"
+     },
+     {
+      "element": "mdfy_uv",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "정정단가",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "단위: USD, 소수점 넷째 자리까지 포맷된 숫자"
+     },
+     {
+      "element": "ord_remnq",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "주문잔량",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": "단위: 1주, 좌측 0-padding 처리된 12자리 숫자"
+     },
+     {
+      "element": "ord_stat_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "주문상태명",
+      "type": "String",
+      "required": "N",
+      "length": "25",
+      "description": ""
+     },
+     {
+      "element": "text1",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "거부사유",
+      "type": "String",
+      "required": "N",
+      "length": "80",
+      "description": ""
+     },
+     {
+      "element": "inpt_chnl_tp",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "입력매체구분명",
+      "type": "String",
+      "required": "N",
+      "length": "20",
+      "description": ""
+     },
+     {
+      "element": "ord_resp_time",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "주문응답수신시간",
+      "type": "String",
+      "required": "N",
+      "length": "8",
+      "description": "HH:mm:ss"
+     },
+     {
+      "element": "cntr_time",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "체결시간",
+      "type": "String",
+      "required": "N",
+      "length": "8",
+      "description": ""
+     }
+    ]
+   }
+  },
+  "미국주식 일별 종목별 실현손익(ust21640)": {
+   "meta": {
+    "◀ API 리스트 이동": "",
+    "키움 REST API": "",
+    "API 정보": "",
+    "메뉴 위치": "미국주식 > 계좌 > 미국주식 일별 종목별 실현손익(ust21640)",
+    "API 명": "미국주식 일별 종목별 실현손익",
+    "API ID": "ust21640",
+    "기본정보": "",
+    "Method": "POST",
+    "운영 도메인": "https://api.kiwoom.com",
+    "모의투자 도메인": "https://mockapi.kiwoom.com",
+    "URL": "/api/us/acnt",
+    "Format": "JSON",
+    "Content-Type": "application/json;charset=UTF-8",
+    "개요": "",
+    "미국주식 일별 종목별 실현손익 정보를 조회합니다.": ""
+   },
+   "request": {
+    "header": [
+     {
+      "element": "api-id",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "TR명",
+      "type": "String",
+      "required": "Y",
+      "length": "10",
+      "description": "7자리 TR코드, ex) ka00001"
+     },
+     {
+      "element": "authorization",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "접근토큰",
+      "type": "String",
+      "required": "Y",
+      "length": "1000",
+      "description": "토큰 지정시 토큰타입(\"Bearer\") 붙혀서 호출 \n 예) Bearer Egicyx..."
+     },
+     {
+      "element": "cont-yn",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회여부",
+      "type": "String",
+      "required": "N",
+      "length": "1",
+      "description": "응답 Header의 연속조회여부값이 Y일 경우 다음데이터 요청시 응답 Header의 cont-yn값 세팅"
+     },
+     {
+      "element": "next-key",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회키",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": "응답 Header의 연속조회여부값이 Y일 경우 다음데이터 요청시 응답 Header의 next-key값 세팅"
+     }
+    ],
+    "body": [
+     {
+      "element": "stex_tp",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "거래소구분",
+      "type": "String",
+      "required": "N",
+      "length": "",
+      "description": "ND:NASDAQ,NY:NYSE,NA:AMEX"
+     },
+     {
+      "element": "stk_cd",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "종목코드",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "cntr_dt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "체결일자",
+      "type": "String",
+      "required": "Y",
+      "length": "8",
+      "description": "YYYYMMDD"
+     },
+     {
+      "element": "fc_krw_tp",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "외화원화구분",
+      "type": "String",
+      "required": "Y",
+      "length": "1",
+      "description": "0:외화,1:원화"
+     }
+    ]
+   },
+   "response": {
+    "header": [
+     {
+      "element": "api-id",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "TR명",
+      "type": "String",
+      "required": "Y",
+      "length": "10",
+      "description": "7자리 TR코드, ex) ka00001"
+     },
+     {
+      "element": "cont-yn",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회여부",
+      "type": "String",
+      "required": "N",
+      "length": "1",
+      "description": "다음 데이터가 있을시 Y값 전달"
+     },
+     {
+      "element": "next-key",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "연속조회키",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": "다음 데이터가 있을시 다음 키값 전달"
+     }
+    ],
+    "body": [
+     {
+      "element": "tot_pl_amt",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "총실현손익",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "tot_pl_amt_krw",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "총실현손익(원)",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "result_list",
+      "depth": 0,
+      "is_section": false,
+      "한글명": "결과리스트",
+      "type": "LIST",
+      "required": "N",
+      "length": "",
+      "description": ""
+     },
+     {
+      "element": "stex_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "거래소코드명",
+      "type": "String",
+      "required": "N",
+      "length": "20",
+      "description": ""
+     },
+     {
+      "element": "stk_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "종목명",
+      "type": "String",
+      "required": "N",
+      "length": "50",
+      "description": ""
+     },
+     {
+      "element": "crnc_code",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "통화코드",
+      "type": "String",
+      "required": "N",
+      "length": "3",
+      "description": ""
+     },
+     {
+      "element": "cntr_sellq",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "체결매도수량",
+      "type": "String",
+      "required": "N",
+      "length": "20",
+      "description": ""
+     },
+     {
+      "element": "avg_buy_uv",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "매입평균가",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "cntr_sella",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "체결매도가",
+      "type": "String",
+      "required": "N",
+      "length": "20",
+      "description": ""
+     },
+     {
+      "element": "pl_amt",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "실현손익",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "pl_rt",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "실현수익률",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "stk_cd",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "종목코드",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "cmsn",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "수수료",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "altx",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "제세금",
+      "type": "String",
+      "required": "N",
+      "length": "15",
+      "description": ""
+     },
+     {
+      "element": "exch_rate",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "환율",
+      "type": "String",
+      "required": "N",
+      "length": "12",
+      "description": ""
+     },
+     {
+      "element": "natn_nm",
+      "depth": 1,
+      "is_section": false,
+      "한글명": "국가명",
+      "type": "String",
+      "required": "N",
+      "length": "40",
+      "description": ""
+     }
+    ]
+   }
+  }
+ }
+}
