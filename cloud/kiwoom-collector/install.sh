@@ -86,4 +86,5 @@ else
   systemctl --no-pager --lines=0 status "$SVC" | head -n 3 || true
   echo
   echo "업데이트 완료 · 로그 보기: sudo journalctl -u kiwoom-collector -n 30 --no-pager"
+  echo "과거 기록 채우기(백필): sudo systemctl stop kiwoom-collector && sudo -u kwcollector node --disable-warning=ExperimentalWarning --env-file=/opt/kiwoom-collector/.env /opt/kiwoom-collector/src/collector.ts --backfill 2026-01-01 ; sudo systemctl start kiwoom-collector"
 fi
