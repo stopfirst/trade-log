@@ -1,0 +1,32 @@
+[Unit]
+Description=Trade journal Telegram loss-limit alerts (trade-alert 1.0.0)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=tradealert
+Group=tradealert
+WorkingDirectory=/opt/trade-alert
+ExecStart=/usr/bin/node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs
+Restart=always
+RestartSec=60
+Environment=NODE_ENV=production
+StateDirectory=trade-alert
+StateDirectoryMode=0700
+# Hardening: only outbound HTTPS (Supabase, Telegram, Hyperliquid) and its own state directory.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=200M
+
+[Install]
+WantedBy=multi-user.target
