@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {Collector,readConfig,phase,intervalFor,kstDate,materialHash,fullHash,makeLogger,SupabaseRpc,normalizeCash,validateCashSpec,backfillDates,parseBackfillArgs,runBackfill,BACKFILL_MAX_DAYS} from '../src/collector.ts';
+import {Collector,readConfig,phase,intervalFor,kstDate,materialHash,fullHash,makeLogger,SupabaseRpc,normalizeCash,validateCashSpec,backfillDates,parseBackfillArgs,runBackfill,BACKFILL_MAX_DAYS,closeDue,closeBalance,VERSION} from '../src/collector.ts';
 
 const TOKEN='kwc_'+'A'.repeat(43);
 const ENV={SUPABASE_URL:'https://ktndayhrlhrlxtkirrvx.supabase.co',SUPABASE_KEY:'sb_publishable_testtesttesttest1234',KW_COLLECTOR_TOKEN:TOKEN,KIWOOM_APP_KEY:'app-key-secret-1',KIWOOM_SECRET:'kiwoom-secret-2',KIWOOM_ACCOUNT:'5512345678'};
@@ -12,7 +12,7 @@ const json=(d:any,status=200)=>new Response(JSON.stringify(d),{status,headers:{'
 const SESSION=Date.parse('2026-10-08T14:00:00Z');
 
 function world(){
- const st={price:'205.00',qty:'3',pnl:'-9.4902',cash:'1500.25',cashStatus:200,cashCode:0 as any,rateOnce:new Set<string>(),apiError:new Map<string,number>(),orderDates:[] as string[],kiwoomStatus:200,kiwoomCalls:[] as string[],pushes:[] as any[],heartbeats:[] as any[],supabaseStatus:200,supabaseBody:null as any,headers:[] as any[]};
+ const st={price:'205.00',qty:'3',pnl:'-9.4902',cash:'1500.25',cashStatus:200,cashCode:0 as any,rateOnce:new Set<string>(),apiError:new Map<string,number>(),orderDates:[] as string[],kiwoomStatus:200,kiwoomCalls:[] as string[],pushes:[] as any[],heartbeats:[] as any[],balances:[] as any[],balanceStatus:200,balanceBody:null as any,supabaseStatus:200,supabaseBody:null as any,headers:[] as any[]};
  const fetcher=(async(url:any,o:any)=>{const u=String(url);
   if(u.startsWith('https://api.kiwoom.com')){const api=o.headers['api-id']||'auth';st.kiwoomCalls.push(api);
    if(st.kiwoomStatus!==200)return new Response('x',{status:st.kiwoomStatus});
@@ -31,6 +31,7 @@ function world(){
    if(st.supabaseStatus!==200)return json(st.supabaseBody||{message:'err'},st.supabaseStatus);
    if(u.endsWith('kw_push')){st.pushes.push(body);return json(st.supabaseBody||{ok:true,stored:true,seq:st.pushes.length});}
    if(u.endsWith('kw_heartbeat')){st.heartbeats.push(body);return json({ok:true});}
+   if(u.endsWith('kw_push_balance')){if(st.balanceStatus!==200)return json({message:'x'},st.balanceStatus);st.balances.push(body);return json(st.balanceBody||{ok:true,stored:true});}
   }
   throw Error('unexpected '+u);}) as typeof fetch;
  return {st,fetcher};
@@ -190,4 +191,58 @@ test('backfill: Supabase rate_limited waits 65 s and retries; token rejection st
  st.supabaseStatus=403;st.supabaseBody={message:'invalid collector token'};
  r=await runBackfill(c,{start:'2026-10-01',end:'2026-10-03'},async ms=>{now.t+=ms;});
  assert.equal(r.stopped,'SUPABASE_TOKEN_REJECTED');assert.equal(r.pushed,0);assert.equal(st.orderDates.filter(d=>d==='20261002').length,0,'stopped after the first date');
+});
+
+// ---- v17 / 1.2.0: daily close balance -----------------------------------------------------------
+test('close: due from 16:10 ET on US weekdays; day = Korean date of that moment (EDT and EST)',()=>{
+ assert.equal(VERSION,'1.2.0');
+ assert.equal(closeDue(Date.parse('2026-10-09T05:09:00+09:00')),null,'Thu 16:09 EDT not yet');
+ assert.deepEqual(closeDue(Date.parse('2026-10-09T05:10:00+09:00')),{etDate:'2026-10-08',day:'2026-10-09'},'Thu 16:10 EDT -> Korean Fri');
+ assert.deepEqual(closeDue(Date.parse('2026-10-10T05:10:00+09:00')),{etDate:'2026-10-09',day:'2026-10-10'},'Fri close -> Korean Saturday (app shows it in the Friday cell)');
+ assert.deepEqual(closeDue(Date.parse('2026-10-09T12:59:00+09:00')),{etDate:'2026-10-08',day:'2026-10-09'},'still due until ET midnight (23:59 EDT)');
+ assert.equal(closeDue(Date.parse('2026-10-09T13:00:00+09:00')),null,'ET Friday 00:00 before 16:10');
+ assert.equal(closeDue(Date.parse('2026-10-11T05:10:00+09:00')),null,'Saturday ET: none');
+ assert.equal(closeDue(Date.parse('2026-12-09T06:09:00+09:00')),null,'Tue 16:09 EST not yet');
+ assert.deepEqual(closeDue(Date.parse('2026-12-09T06:10:00+09:00')),{etDate:'2026-12-08',day:'2026-12-09'},'Tue 16:10 EST -> Korean Wed');
+ const s={account:'a',asOf:1000,summary:{currency:'USD',reportedSecuritiesValue:'615.00'}},cash={apiId:'ust21160',currency:'USD',usd:'1500.255',krwIncluded:false,asOf:1000,usdBasis:'d2',settleDate:'2026-10-12'};
+ assert.equal((closeBalance(s,cash,1000) as any).value,'2115.26','securities + USD cash, cents like the app (Math.round(x*100)/100)');
+ assert.equal((closeBalance(s,{...cash,usd:'-20'},1000) as any).value,'595.00','negative cash allowed like the app');
+ assert.equal((closeBalance(s,null,1000) as any).error,'cash_missing');
+ assert.equal((closeBalance(s,{...cash,asOf:1000-6*60000},1000) as any).error,'cash_stale');
+ assert.equal((closeBalance({...s,asOf:1000-6*60000},cash,1000) as any).error,'holdings_stale');
+ assert.equal((closeBalance({...s,summary:{currency:'USD',reportedSecuritiesValue:'x'}},cash,1000) as any).error,'bad_values');
+ assert.equal((closeBalance(s,{...cash,usd:'-615'},1000) as any).error,'non_positive');
+});
+
+test('close: first round after 16:10 ET pushes kw_push_balance once per ET date; journal unaffected',async()=>{
+ const now={t:Date.parse('2026-10-09T05:09:00+09:00')},{c,st,lines}=make(now); // Thu 16:09 EDT
+ await c.tick();assert.equal(st.balances.length,0,'16:09: not yet');
+ now.t+=60000;await c.tick(); // 16:10 EDT
+ assert.equal(st.balances.length,1);const b=st.balances[0];
+ assert.equal(b.p_token,TOKEN);assert.equal(b.p_day,'2026-10-09');assert.equal(b.p_value,'2115.25','615.00 + 1500.25');
+ assert.equal(b.p_detail.etDate,'2026-10-08');assert.equal(b.p_detail.securities,'615');assert.equal(b.p_detail.cash,'1500.25');assert.equal(b.p_detail.capturedAt,now.t);
+ assert.match(b.p_detail.account,/^[0-9a-f]{16}$/);assert.equal(b.p_detail.krwIncluded,false);assert.equal(b.p_detail.collector,'1.2.0');
+ now.t+=60000;await c.tick();assert.equal(st.balances.length,1,'once per ET date');
+ assert.ok(lines.some(l=>/장 마감 잔액 2026-10-09\(미국 2026-10-08 마감\) · 2115.25 USD/.test(l)));
+ assert.ok(st.pushes.length>=2&&c.lastError===null,'journal pushes as before');
+ now.t=Date.parse('2026-10-10T05:10:00+09:00');await c.tick(); // Fri 16:10 EDT
+ assert.equal(st.balances.length,2);assert.equal(st.balances[1].p_day,'2026-10-10');assert.equal(st.balances[1].p_detail.etDate,'2026-10-09');
+ now.t=Date.parse('2026-10-11T05:10:00+09:00');await c.tick();assert.equal(st.balances.length,2,'weekend: nothing');
+ const hb=st.heartbeats.at(-1).p_info;assert.equal(hb.version,'1.2.0');assert.equal(hb.closeLast,'2026-10-10');
+ const all=lines.join('\n')+JSON.stringify(st.balances);for(const x of [ENV.KIWOOM_APP_KEY,ENV.KIWOOM_SECRET,ENV.KIWOOM_ACCOUNT,'oauth-token-xyz'])assert.ok(!all.includes(x),'leaked '+x);
+ assert.ok(!lines.join('\n').includes(TOKEN),'token not logged');
+});
+
+test('close: waits for cash, retries transient errors, stops on SQL-not-installed or rejection',async()=>{
+ const now={t:Date.parse('2026-10-09T05:10:00+09:00')},{c,st,lines}=make(now);
+ st.cashStatus=500;await c.tick();assert.equal(st.balances.length,0,'no cash -> wait');assert.ok(lines.some(l=>/장 마감 잔액 대기 2026-10-09 · USD 예수금 없음/.test(l)));
+ st.cashStatus=200;st.balanceStatus=503;now.t+=60000;await c.tick();assert.equal(st.balances.length,0);assert.equal(c.closeDoneEt,null,'transient -> retry');assert.equal(c.lastError,null,'journal round not failed');
+ st.balanceStatus=200;now.t+=60000;await c.tick();assert.equal(st.balances.length,1,'retried next round');
+ const n=make({t:Date.parse('2026-10-09T05:10:00+09:00')});n.st.balanceStatus=404;await n.c.tick();
+ assert.equal(n.c.closeDoneEt,'2026-10-08');assert.ok(n.lines.some(l=>/balance-snapshot.sql을 실행하세요/.test(l)));assert.equal(n.c.lastError,null);
+ const before=n.st.kiwoomCalls.length;n.st.balanceStatus=200;await n.c.tick();assert.equal(n.st.balances.length,0,'not retried the same ET date');
+ const k=make({t:Date.parse('2026-10-09T05:10:00+09:00')});k.st.balanceBody={ok:true,stored:false};await k.c.tick();
+ assert.ok(k.lines.some(l=>/이미 저장된 마감값 유지/.test(l)));
+ const off=make({t:Date.parse('2026-10-09T05:10:00+09:00')},{KW_CLOSE_DISABLED:'1'});await off.c.tick();assert.equal(off.st.balances.length,0);
+ assert.ok(before>0);
 });
