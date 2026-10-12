@@ -1,4 +1,4 @@
-// Kiwoom US-stock cloud collector (v11: + USD cash via ust21160, + --backfill).
+// Kiwoom US-stock cloud collector (v11: + USD cash via ust21160, + --backfill; v17/1.2.0: + daily close balance).
 // Reads the Kiwoom read-only APIs through KiwoomJournal (same code as the PC server)
 // and pushes changed day snapshots to Supabase via the kw_push RPC, using only the
 // publishable/anon key plus a per-user collector token. No service_role key.
@@ -11,7 +11,7 @@ import {readFile} from 'node:fs/promises';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {KiwoomJournal,checkDate} from './adapters/kiwoom-journal.ts';
 
-export const VERSION='1.1.0';
+export const VERSION='1.2.0';
 const MIN=60000;
 
 export type Config={supabaseUrl:string,supabaseKey:string,token:string};
@@ -85,6 +85,30 @@ export function normalizeCash(data:any,asOf:number){
  return {apiId:CASH_API,currency:'USD',usd:last.usd!,usdBasis:'d'+last.i,settleDate:last.date,usdD0:cols[0].usd,krw:cashDecimal(data.won_entr),krwIncluded:false,asOf};
 }
 
+// ---- daily close balance (1.2.0, balance-snapshot.sql kw_push_balance) ----------------------------
+// After the US regular session: the first round at or after 16:10 America/New_York on a US weekday (until ET
+// midnight). The row's day is the Korean date of that moment (Asia/Seoul) - the same Korean-date key Kiwoom and
+// the app's US calendar use (16:10 ET is always early morning of the next Korean day; a Friday close lands on
+// Korean Saturday, which the app shows in the Friday cell). Exchange holidays are not modelled (the value is
+// simply that evening's balance). Value = securities value (ust21070 tot_evlt_amt) + USD cash (ust21160), rounded
+// to cents exactly like the app's ACCOUNT BASIS (kwAccountTotal: Math.round((sec+cash)*100)/100).
+export const CLOSE_AFTER_MIN=16*60+10;
+export function closeDue(ms:number){
+ const et=parts(ms,'America/New_York');
+ if(et.weekday==='Sat'||et.weekday==='Sun'||et.minutes<CLOSE_AFTER_MIN)return null;
+ return {etDate:et.date,day:kstDate(ms)};
+}
+const dec2=(v:unknown)=>typeof v==='string'&&/^[-+]?\d+(\.\d{1,12})?$/.test(v)&&Number.isFinite(Number(v))&&Math.abs(Number(v))<1e12?Number(v):NaN;
+export function closeBalance(s:any,cash:any,t:number,maxAgeMs=5*MIN){
+ if(!s||s.summary?.currency!=='USD'||!Number.isSafeInteger(s.asOf)||t-s.asOf>maxAgeMs)return {error:'holdings_stale'};
+ if(!cash||cash.apiId!==CASH_API||cash.currency!=='USD'||cash.krwIncluded!==false||!Number.isSafeInteger(cash.asOf))return {error:'cash_missing'};
+ if(t-cash.asOf>maxAgeMs)return {error:'cash_stale'};
+ const sec=dec2(s.summary.reportedSecuritiesValue),usd=dec2(cash.usd);
+ if(!Number.isFinite(sec)||sec<0||!Number.isFinite(usd))return {error:'bad_values'};
+ const total=Math.round((sec+usd)*100)/100;if(!(total>0))return {error:'non_positive'};
+ return {value:total.toFixed(2),sec:s.summary.reportedSecuritiesValue,cash:cash.usd,detail:{account:s.account,basis:'ust21070+ust21160',securities:s.summary.reportedSecuritiesValue,cash:cash.usd,cashBasis:cash.usdBasis,settleDate:cash.settleDate,krwIncluded:false,holdingsAsOf:s.asOf,cashAsOf:cash.asOf,capturedAt:t,collector:VERSION}};
+}
+
 // ---- logging (never prints secrets) -------------------------------------------------
 export function makeLogger(env:NodeJS.ProcessEnv,out:(line:string)=>void=l=>console.log(l)){
  const secrets=()=>[env.KIWOOM_APP_KEY,env.KIWOOM_SECRET,env.KIWOOM_ACCOUNT,env.KW_COLLECTOR_TOKEN,env.SUPABASE_KEY].filter((x):x is string=>!!x&&x.length>=4);
@@ -95,7 +119,7 @@ export function makeLogger(env:NodeJS.ProcessEnv,out:(line:string)=>void=l=>cons
 export class SupabaseRpc{
  cfg:Config;fetcher:typeof fetch;sleep:(ms:number)=>Promise<void>;
  constructor(cfg:Config,fetcher:typeof fetch=fetch,sleep=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms))){this.cfg=cfg;this.fetcher=fetcher;this.sleep=sleep;}
- async call(name:'kw_push'|'kw_heartbeat',body:Record<string,unknown>){
+ async call(name:'kw_push'|'kw_heartbeat'|'kw_push_balance',body:Record<string,unknown>){
   const headers:Record<string,string>={'Content-Type':'application/json',apikey:this.cfg.supabaseKey};
   if(this.cfg.supabaseKey.startsWith('eyJ'))headers.Authorization='Bearer '+this.cfg.supabaseKey;
   const payload=JSON.stringify(body);if(payload.length>1_400_000)throw Error('SUPABASE_PAYLOAD_TOO_LARGE');
@@ -125,6 +149,7 @@ export class Collector{
  env:NodeJS.ProcessEnv;cfg:Config;journal:KiwoomJournal;rpc:SupabaseRpc;now:()=>number;log:ReturnType<typeof makeLogger>;
  memo=new Map<string,Memo>();failures=0;blockedUntil=0;lastError:string|null=null;lastHeartbeat=0;lastQueryAt=0;round=0;lastYesterdayAt=0;
  fetcher:typeof fetch;cash:any=null;cashAt=0;cashTried=0;cashError:string|null=null;cashSpec:boolean|null=null;
+ closeDoneEt:string|null=null;closeNote:string|null=null;closeLast:string|null=null;
  constructor(env:NodeJS.ProcessEnv,{fetcher=fetch,now=Date.now,log,sleep}:{fetcher?:typeof fetch,now?:()=>number,log?:ReturnType<typeof makeLogger>,sleep?:(ms:number)=>Promise<void>}={}){
   this.env={...env,DATA_PATH:':memory:'};this.cfg=readConfig(this.env);this.now=now;
   this.fetcher=fetcher;this.journal=new KiwoomJournal(this.env,fetcher,now);this.rpc=new SupabaseRpc(this.cfg,fetcher,sleep);this.log=log||makeLogger(this.env);
@@ -176,14 +201,14 @@ export class Collector{
  async tick(){
   const t=this.now();this.round++;
   if(t<this.blockedUntil)return {skipped:true};
-  const results:any[]=[];let error:string|null=null,cash:any=undefined;
+  const results:any[]=[];let error:string|null=null,cash:any=undefined,latest:any=null;
   for(const date of this.dates(t)){
    let s:any;
    try{s=await this.journal.query(date);if(cash===undefined)cash=await this.fetchCash(t);this.withCash(s,cash);}
    catch(e:any){const code=/^KIWOOM_[A-Z_]+$/.test(e.message)?e.message:'KIWOOM_REVIEW_STORAGE_ERROR',d=e.diagnostic;
     error=code;this.log(code==='KIWOOM_REVIEW_RATE_LIMIT'?'WARN':'ERROR',`키움 조회 실패 ${date} ${code}`+(d?` [${[d.apiId,d.httpStatus?('HTTP '+d.httpStatus):null,d.returnCode!==null&&d.returnCode!==undefined?('코드 '+d.returnCode):null,d.brokerMessage].filter(Boolean).join(' · ')}]`:''));
     if(BACKOFF[code])break;continue;}
-   this.lastQueryAt=t;const decision=this.shouldPush(s,t);
+   this.lastQueryAt=t;if(!latest)latest=s;const decision=this.shouldPush(s,t);
    if(!decision.push){results.push({date,pushed:false});continue;}
    try{const out=await this.rpc.call('kw_push',{p_token:this.cfg.token,p_snapshot:s});
     this.memo.set(date,{material:decision.material,full:decision.full,pushedAt:t});
@@ -191,14 +216,38 @@ export class Collector{
     this.log('INFO',`전송 ${date} · ${decision.reason} · 주문 ${s.orders.length} · 실현손익 ${s.realized.rows.length}종목 ${s.realized.reportedTotal} USD · 보유 ${s.positions.length}종목${s.summary?.cash?` · USD 예수금 ${s.summary.cash.usd}`:''}${out.stored?'':' · 서버에 더 새 값 있음'}`);}
    catch(e:any){error=/^SUPABASE_[A-Z_0-9a-z]+$/.test(e.message)?e.message:'SUPABASE_ERROR';this.log('ERROR',`Supabase 전송 실패 ${date} ${error}`);if(BACKOFF[error])break;}
   }
+  await this.closeRound(t,latest,cash);
   if(error){const wait=this.fail(error);this.log('WARN',`다음 시도까지 ${Math.round(wait/1000)}초 대기 (연속 실패 ${this.failures})`);}
   else{if(this.failures)this.log('INFO','복구됨');this.failures=0;this.lastError=null;this.blockedUntil=0;}
   await this.heartbeat(t);
   return {results,error};
  }
+ // Daily close balance. Never changes the journal round's error/backoff. Retries next round on a missing value or
+ // a transient Supabase error; a permanent answer (stored, kept, rejected, SQL not installed) ends that ET date.
+ async closeRound(t:number,s:any,cash:any){
+  if(this.env.KW_CLOSE_DISABLED==='1')return null;
+  const due=closeDue(t);if(!due||this.closeDoneEt===due.etDate)return null;
+  const note=(level:'INFO'|'WARN',key:string,msg:string)=>{if(this.closeNote!==due.etDate+':'+key){this.log(level,msg);this.closeNote=due.etDate+':'+key;}};
+  if(!s){note('WARN','noquery',`장 마감 잔액 대기 ${due.day} · 이번 회차 키움 조회 실패 → 다음 회차에 다시`);return null;}
+  const b:any=closeBalance(s,cash===undefined?null:cash,t);
+  if(b.error){note('WARN',b.error,`장 마감 잔액 대기 ${due.day} · ${({cash_missing:'USD 예수금 없음',cash_stale:'예수금 오래됨',holdings_stale:'잔고 오래됨',bad_values:'값 형식 오류',non_positive:'합계 0 이하'} as any)[b.error]} → 다음 회차에 다시`);return null;}
+  try{
+   const out=await this.rpc.call('kw_push_balance',{p_token:this.cfg.token,p_day:due.day,p_value:b.value,p_detail:{...b.detail,etDate:due.etDate}});
+   this.closeDoneEt=due.etDate;this.closeLast=due.day;
+   this.log('INFO',`장 마감 잔액 ${due.day}(미국 ${due.etDate} 마감) · ${b.value} USD = 주식 ${b.sec} + USD 예수금 ${b.cash}${out.stored?'':' · 이미 저장된 마감값 유지'}`);
+   return {day:due.day,value:b.value,stored:!!out.stored};
+  }catch(e:any){
+   const err=/^SUPABASE_[A-Za-z0-9_]+$/.test(e.message)?e.message:'SUPABASE_ERROR';
+   if(err==='SUPABASE_SQL_NOT_INSTALLED'||/^SUPABASE_REJECTED_/.test(err)||err==='SUPABASE_TOKEN_REJECTED'){
+    this.closeDoneEt=due.etDate;
+    this.log('WARN',`장 마감 잔액 전송 안 됨 ${due.day} ${err}`+(err==='SUPABASE_SQL_NOT_INSTALLED'?' · Supabase SQL Editor에서 balance-snapshot.sql을 실행하세요(주문·손익 수집은 계속).':''));
+   }else note('WARN','net',`장 마감 잔액 전송 실패 ${due.day} ${err} · 다음 회차에 다시`);
+   return null;
+  }
+ }
  async heartbeat(t:number,force=false){
   if(!force&&t-this.lastHeartbeat<5*MIN)return;
-  try{await this.rpc.call('kw_heartbeat',{p_token:this.cfg.token,p_info:{version:VERSION,phase:phase(t),cashError:this.cashError,intervalSec:Math.round(intervalFor(phase(t),this.env)/1000),lastError:this.lastError,failures:this.failures,lastQueryAt:this.lastQueryAt||null,nextAt:new Date(t+this.delay()).toISOString()}});this.lastHeartbeat=t;}
+  try{await this.rpc.call('kw_heartbeat',{p_token:this.cfg.token,p_info:{version:VERSION,phase:phase(t),cashError:this.cashError,closeLast:this.closeLast,intervalSec:Math.round(intervalFor(phase(t),this.env)/1000),lastError:this.lastError,failures:this.failures,lastQueryAt:this.lastQueryAt||null,nextAt:new Date(t+this.delay()).toISOString()}});this.lastHeartbeat=t;}
   catch(e:any){this.log('WARN','heartbeat 실패 '+(/^SUPABASE_[A-Za-z0-9_]+$/.test(e.message)?e.message:'SUPABASE_ERROR'));}
  }
 }
