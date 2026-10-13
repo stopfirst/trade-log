@@ -1,75 +1,52 @@
-# 매매일지 텔레그램 손실 한도 알림 (trade-alert 1.0.0 · alert1)
+# 매매일지 손실한도 판정 v1.2 (trade-alert 2.0.0 · alert2)
 
-키움 수집기가 있는 같은 Lightsail 서버에서 **별도 서비스**(`trade-alert`)로 동작합니다.
-수집기가 멈춰도 알림 서비스는 따로 돌고, 알림 서비스가 멈춰도 수집기는 영향을 받지 않습니다.
-Node 22 이상(서버는 Node 24), 외부 패키지 없음.
+키움 수집기가 있는 같은 Lightsail 서버의 **별도 서비스**(`trade-alert`)입니다. alert1(1.0.0)을 같은 자리에서 업데이트합니다.
+미국주식(키움)과 하이퍼리퀴드를 **각자 계좌 순자산 기준으로 따로** 판정하고, 텔레그램 알림 + Supabase 상태(앱 상단 '거래 중단 중' 배너) + 규칙 위반 기록을 남깁니다.
+**주문을 내거나 취소하지 않습니다**(증권사·거래소를 막을 수 없음).
 
-## 무엇을 보나
-Supabase `alert_status(토큰)` 한 번 호출로 내 데이터만 읽습니다(쓰기 없음, 수집기와 같은 분당 60회 한도 공유).
-- **미국주식**: 키움 수집 스냅샷의 일별 순실현손익(ust21640) + 앱에 저장된 수동 기록.
-  앱과 같은 규칙: 키움 일별 보고가 있는 날짜는 키움 합계만, 없는 날짜는 수동 기록 손익(평균단가, 수수료 포함).
-  날짜 기준도 앱과 같습니다: 키움 자동기록이 있으면 **한국 날짜**, 수동 기록만 있으면 **미국 동부 날짜**.
-- **하이퍼리퀴드**: 클라우드 수집(hl_fills/hl_funding)의 `closedPnl − fee` + 펀딩(앱과 같이 포함), **UTC 날짜**.
-  HL 수집을 쓰지 않으면 앱에 저장된 일지(거래·미배정 펀딩)로 계산합니다.
-- **한도**: 앱 설정 → 계좌·위험의 손실 한도(하루·주·달 %) × 계좌 기준액. 주는 월요일 시작, 달은 달력 월.
-  계좌 기준액: 미국주식 = 키움 총 계좌금액(주식 평가 + USD 예수금) → 없으면 앱 계좌 기준액.
-  하이퍼리퀴드 = 하이퍼리퀴드 BALANCE(공개 /info 조회, 앱과 같은 계산) → 실패 시 앱 계좌 기준액.
-
-## 규칙(기본값, .env로 변경)
-| 규칙 | 기본 | 설정 |
+## 판정 기준
+| | 미국주식(키움) | 하이퍼리퀴드 |
 |---|---|---|
-| 한도 도달 알림 | 50%·80%·100%, 기간(하루/주/달)마다 각 1회. 한 번에 여러 단계를 넘으면 가장 높은 단계 1건만 | `ALERT_THRESHOLDS=50,80,100` |
-| 연속 손실 | 최근 종료 거래 3연속 손실부터, 이후 손실마다 1회 | `LOSS_STREAK_N=3`, `LOSS_STREAK_REPEAT=1` (0: 연속 구간당 1회) |
-| 한도 미설정 | 해당 한도 규칙 건너뜀, 서비스 시작 때 1회 안내 | — |
-| 미실현 손익 | 제외(실현만) | `INCLUDE_UNREALIZED=1` (키움 보고 평가손익 / HL unrealizedPnl을 모든 기간에 더함) |
-| 확인 주기 | 미국 동부 04:00–20:00 평일 60초, 그 외 600초 | `CHECK_ACTIVE_SEC`, `CHECK_IDLE_SEC`, `HL_ALWAYS_ACTIVE=1` |
-| 일일 요약 | 평일 미국 동부 16:15 이후 1회 | `DAILY_SUMMARY=0`, `DAILY_SUMMARY_TIME_ET=16:15` |
-| 앱 값 대신 | 비움(앱 설정 사용) | `US_LIMITS_PCT=2,5,10`, `HL_LIMITS_PCT`, `US_ACCOUNT_BASIS`, `HL_ACCOUNT_BASIS` |
+| 하루 경계 | 미국 장 마감 **16:00 ET**(서머타임 자동 · 한국 05:00/06:00). 거래일 = ET 날짜, **NYSE 휴장일 제외**. 16:00 이후 애프터·주말 체결은 다음 거래일 몫 | **한국시간 24:00**(KST 자정). 매일 |
+| 계좌 순자산 | 주식 평가금액(ust21070) + USD 예수금(ust21160) = 앱 ACCOUNT BASIS | BALANCE(앱과 같은 계산: USDC Spot + 전체 USDC Perps) |
+| 자산 갱신 | 키움 수집기 스냅샷: 체결·수량 변화는 즉시, **시세만 바뀌면 최대 10분마다**(`KW_PRICE_PUSH_MIN`) | 매 확인(1분)마다 직접 조회 |
+| 입출금 제외 | 키움 API에 입출금 내역이 없어 **추정**: 스냅샷 사이 `예수금 변화 + 체결 매수대금 − 매도대금`이 ±$50 이상이면 입출금(환전·배당 포함)으로 보고 제외. 수동 등록도 가능 | `userNonFundingLedgerUpdates`(입금·출금·이체·볼트) 그대로 제외. spot↔perp 이동은 0 |
+| 진입 감지 | 매수 체결(키움 주문, 한국 날짜+시각) | 포지션이 커지거나 새로 생기거나 방향이 바뀌는 체결(무기한만) |
 
-중복 방지 기록: `/var/lib/trade-alert/state.json` (재시작해도 같은 기간·같은 단계는 다시 보내지 않음, 45일 지난 기록 정리).
-텔레그램 전송이 실패하면 기록하지 않고 다음 확인 때 다시 보냅니다.
+- 손익 = 현재 자산 − 기간 시작 자산 − 기간 중 입출금, % = 손익 ÷ **기간 시작 자산(고정 분모)**. 수수료·펀딩·미실현 포함.
+- **하루 −3%**: 1분마다 확인 → 도달 즉시 그날 끝까지 신규 진입 중단.
+- **주 −6% / 달 −10%**: 매일 마감에 공식 판정 → 다음 거래일부터 그 주/달 마지막 거래일 끝까지 중단. 장중에 닿으면 그날 끝까지 즉시 중단(마감에 회복하면 다음 날부터 해제). 기간 마지막 거래일의 마감 판정은 남은 날이 없어 추가 중단 없음.
+- **연속 손실**: 하루 자산 변화 ≤ −0.5%(입출금 제외)인 날만 손실일, 거래 없는 날은 건너뜀. 3일 연속 → 다음 1거래일 중단. 발동 후 카운트는 새로 시작.
+- **재시작**: 어떤 중단이든 끝난 뒤 첫 거래일 = 1회 위험 % 절반(앱 포지션 계산기가 자동으로 절반을 쓰고 이유를 표시).
+- **기간 고점 대비 하락폭**: 앱·요약에 참고로만 표시(중단 아님).
+- 중단 중 새 진입이 수집되면 🚫 위반 알림 + `risk_events`(violation) 기록 → 앱 거래 목록에 '규칙 위반' 표시.
+- 기간 시작 자산: 경계 직전 서버 관측값 → (없으면) 미국=키움 장 마감 잔액(acct_snapshots), HL=portfolio 기록 근사 → (없으면) 그 기간의 가장 이른 기록(‘근사’ 표시). 설치한 주·달은 근사일 수 있습니다.
 
-메시지 예:
+## 설치/업데이트 (Lightsail 브라우저 SSH)
+1. Supabase → SQL Editor → `alert2.sql` 전체 붙여넣고 Run (다시 실행해도 안전, alert.sql은 그대로 둬도 됨).
+2. `curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash`
+   (.env·기존 기록 유지. 기존 .env 끝에 v1.2 설정 안내 주석을 덧붙임.)
+3. 확인: `sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs --test`
+   → 텔레그램에 "✅ 손실한도 판정 v1.2 테스트" + 시장별 오늘/주/달 % 가 오면 정상.
+4. 로그: `sudo journalctl -u trade-alert -n 30 --no-pager` (`trade-alert 2.0.0 시작 · 손실한도 판정 v1.2 …`)
+
+새로 설치하는 경우 텔레그램 봇 만들기·`--find-chat`은 alert1과 같습니다(`.env`의 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID).
+
+## 관리 명령
 ```
-🔔 미국주식 오늘 손실 -$260.00 · 하루 한도 $500.00의 52%
-⚠️ 미국주식 오늘 손실 -$412.30 · 하루 한도 $500.00의 82%
-⛔ 미국주식 오늘 손실 -$510.00 · 하루 한도 $500.00 도달(102%)
-🔻 하이퍼리퀴드 연속 손실 3회 · 최근 ETH -$41.64, BTC -$12.10, SOL -$3.00
-📊 일일 요약 · 미국 10/12 장 마감 후
+A="sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs"
+$A --once --dry-run                 # 지금 판정만 출력(보내지·저장하지 않음)
+$A --flow US 500 "원화 환전 입금"     # 입출금 수동 등록(+입금 / −출금, 지금 시각) — 추정이 놓친 경우
+$A --flow-remove manual:US:…        # 수동 등록 취소
+$A --clear-stops US                 # 잘못 걸린 중단 해제(기록 남김)
 ```
+설정 바꾸기: `sudo nano /opt/trade-alert/.env` → `sudo systemctl restart trade-alert` (키 목록은 env.template).
+alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_SEC` 등은 2.0.0에서 쓰지 않습니다(무시).
+앱 설정의 손실 한도(하루·주·달 %)는 앱 자체 표시용이고, 서버 판정은 `.env`(기본 3/6/10)를 씁니다. 앱 설정 → 계좌·위험에 서버 값이 그대로 보입니다.
 
-## 설치 순서 (Lightsail 브라우저 SSH)
-1. 텔레그램에서 `@BotFather` → `/newbot` → 이름·아이디 입력 → 받은 토큰(`123456789:AA…`) 보관.
-2. 만든 봇 대화방을 열고 **시작(Start)** 또는 아무 메시지(예: `안녕`) 보내기.
-3. Supabase → SQL Editor → `alert.sql` 전체 붙여넣고 Run (다시 실행해도 안전).
-4. 서버 설치:
-   ```
-   curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash
-   ```
-   키움 수집기 `.env`가 있으면 Supabase 3줄(SUPABASE_URL / SUPABASE_KEY / KW_COLLECTOR_TOKEN)을 자동 복사합니다(화면 출력 없음).
-5. `.env` 입력: `sudo nano /opt/trade-alert/.env` → `TELEGRAM_BOT_TOKEN=` 에 1번 토큰.
-6. 대화방 번호와 테스트:
-   ```
-   sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs --find-chat
-   ```
-   나온 `TELEGRAM_CHAT_ID=…` 줄을 `.env`에 넣고
-   ```
-   sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs --test
-   ```
-   텔레그램에 "✅ 매매일지 알림 테스트" + 현재 오늘/주/달 손익과 한도 비율이 오면 정상.
-7. 시작·로그:
-   ```
-   sudo systemctl restart trade-alert
-   sudo journalctl -u trade-alert -n 30 --no-pager
-   ```
-
-## 관리
-- 1회 점검(보내지 않고 출력만): `sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs --once --dry-run`
-- 업데이트: 4번 명령 다시 실행(.env·알림 기록 유지).
-- 멈춤: `sudo systemctl disable --now trade-alert`
-- 테스트(개발): `node --test tests/*.test.mjs`, SQL: `node tests/alert-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql alert.sql fixtures` (@electric-sql/pglite 필요)
+## 테스트(개발)
+`node --test tests/*.test.mjs` · SQL: `node tests/alert2-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql fixtures` (@electric-sql/pglite)
 
 ## 보안
-- 비밀값은 `/opt/trade-alert/.env`(root:tradealert 0640)에만. 로그에는 봇 토큰·수집기 토큰·Supabase 키를 `[비공개]`로 가립니다.
-- Supabase secret/service_role 키는 거부합니다(publishable 키만).
-- `alert_status`는 토큰 주인의 데이터만, 사진·메모·복기 문장 없이 숫자만 돌려줍니다.
+- 비밀값은 `/opt/trade-alert/.env`(root:tradealert 0640)에만. 로그에 토큰·키를 `[비공개]`로 가림. secret/service_role 키 거부.
+- Supabase 쓰기는 `risk_push`(수집기 토큰 주인 행만), 앱은 RLS로 본인 행만 읽기. 하이퍼리퀴드는 공개 /info 읽기만.
