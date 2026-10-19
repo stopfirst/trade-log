@@ -1,4 +1,9 @@
-// alert2 손실한도 판정 v1.2 — 판정 엔진 (순수 함수, I/O 없음). 시장(US/HL)마다 따로 호출합니다.
+// alert3 손실한도 판정 v1.3 — 판정 엔진 (순수 함수, I/O 없음). 시장(US/HL)마다 따로 호출합니다.
+//
+// v1.3: 하루 한도(input.dayMode==='realized', 기본)는 앱 v28과 같은 기준 — 오늘 실현손익 ÷ 직전 마감(acct_snapshots, 없으면 현재 기준액).
+//   HL 하루 = UTC 00:00(KST 09:00) 경계, US = 미국 장 마감 16:00 ET. 분자·분모는 day.mjs가 만들어 input.dayRealized로 넘김.
+//   미실현 포함 자산 변화는 메시지·상태에 참고로만(periods.dayEquity, periods.day.ref). 주·월·연속 손실·재시작 규칙은 v1.2 그대로.
+//   dayMode가 'equity'(또는 alert3.sql 미설치)이면 아래 v1.2 하루 판정(자산 변화) 그대로.
 //
 // 손익 기준 = 계좌 순자산(평가금액, 실현+미실현, 수수료·펀딩 포함) 변화 − 입출금·이체(cash flow).
 //   pnl(기간) = 현재 자산 − 기간 시작 자산 − 기간 중 입출금 합,  % = pnl / 기간 시작 자산(고정 분모).
@@ -23,8 +28,12 @@ export const pctText=x=>(x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(2)+'%';
 
 export function ruleLabel(rule,cfg){
  const L=cfg.limits;
- return {day:`하루 −${L.day}%`,week:`주간 −${L.week}% (마감 판정)`,'week-intraday':`주간 −${L.week}% 장중 도달`,month:`월간 −${L.month}% (마감 판정)`,'month-intraday':`월간 −${L.month}% 장중 도달`,streak:`${cfg.streakDays}일 연속 손실일`,manual:'수동 중단'}[rule]||rule;
+ return {day:cfg.dayMode==='realized'?`하루 실현 −${L.day}%`:`하루 −${L.day}%`,week:`주간 −${L.week}% (마감 판정)`,'week-intraday':`주간 −${L.week}% 장중 도달`,month:`월간 −${L.month}% (마감 판정)`,'month-intraday':`월간 −${L.month}% 장중 도달`,streak:`${cfg.streakDays}일 연속 손실일`,manual:'수동 중단'}[rule]||rule;
 }
+const md=d=>d?d.slice(5).replace('-','/'):'';
+export function dayLabel(key,market){return market==='HL'?md(key)+' UTC':md(key)+'('+'일월화수목금토'[new Date(key+'T00:00:00Z').getUTCDay()]+')';}
+/** '전일 마감 $X' / 'MM/DD 마감 $X' / '현재 기준액 $X' (앱 v28BasisText) */
+export function basisText(d,market){if(!d)return '';if(d.mode==='close')return (d.expected?'전일 마감 ':md(d.key)+' 마감 ')+usd(d.value,market);return '현재 기준액 '+usd(d.value,market);}
 export function emptyState(market){return {v:1,market,days:{},stops:[],sent:{},lastObs:null,peaks:{},streakResetAfter:null};}
 export function flowSum(flows,a,b){let s=0;for(const f of flows||[])if(f.at>a&&f.at<=b)s+=Number(f.amount)||0;return round(s);}
 const activeAt=(stops,t)=>stops.filter(s=>!s.cleared&&s.from<=t&&t<s.until);
@@ -133,16 +142,18 @@ export function step(prev,input){
  }
 
  // 3) 장중 판정 -------------------------------------------------------------------------------------
- const periods={};
+ const periods={};const realized=input.dayMode==='realized';
  if(eq&&rec){
   for(const mode of ['day','week','month']){
    const lim=cfg.limits[mode];const m=measure(st,cal,today,mode,eq,flows,input.fallbackStart,lim);periods[mode]=m;
+   if(mode==='day'&&realized){periods.dayEquity=m;delete periods.day;}
    if(m.pct===null)continue;
    // 정보: 기간 고점 대비 하락폭(입출금 보정 자산 기준)
    const pk=st.peaks[mode];const base=m.startEquity;
    const peak=pk&&pk.key===m.key?Math.max(pk.peak,m.adj):Math.max(base,m.adj);
    st.peaks[mode]={key:m.key,peak};m.peak=peak;m.ddPct=round((m.adj-peak)/peak*100,4);
    if(!(lim>0))continue;
+   if(mode==='day'&&realized)continue; // v1.3: 하루 판정은 아래 실현손익 기준
    if(m.pct<=-lim+1e-9){
     if(mode==='day'){const s={id:`${market}:day:${today}`,rule:'day',from:now,until:cal.dayEnd(today),pct:m.pct,reason:`하루 ${pctText(m.pct)} (${cal.label(today)})`,createdAt:now};
      addStop(s,stopText(s,`오늘 손실 ${pctText(m.pct)} (${signedUsd(m.pnl,market)}, 시작 ${usd(m.startEquity,market)}) · 하루 한도 −${lim}% 도달`));}
@@ -156,6 +167,30 @@ export function step(prev,input){
    }
   }
   st.lastObs={t:eq.t,equity:eq.value,source:eq.source};
+ }
+ // 3b) v1.3 하루 한도 = 오늘 실현손익 ÷ 직전 마감(→ 현재 기준액) ------------------------------------------
+ if(realized){
+  const lim=cfg.limits.day,D=input.dayRealized,den=D?.denom;
+  if(D&&den&&den.value>0&&Number.isFinite(D.pnl)){
+   const base=den.value,pnl=round(D.pnl),pct=round(pnl/base*100,4),budget=lim>0?round(base*lim/100):null,ratio=budget>0?Math.max(0,-pnl)/budget:null;
+   let ref=null;const qe=periods.dayEquity;
+   if(eq&&den.mode==='close'&&Number.isFinite(den.closeAt)){const fl=flowSum(flows,den.closeAt,eq.t),ch=round(eq.value-base-fl);ref={pnl:ch,pct:round(ch/base*100,4),flows:fl,from:'close'};}
+   else if(qe&&qe.pct!==null)ref={pnl:qe.pnl,pct:qe.pct,flows:qe.flows,from:'server',startEquity:qe.startEquity};
+   const bt=basisText(den,market);
+   periods.day={mode:'day',basis:'realized',key:D.key,startEquity:base,startSource:bt,startDay:den.key??null,denomMode:den.mode,denomSource:den.source??null,
+    pnl,pct,flows:0,limit:lim,budget,ratio,parts:D.parts||null,source:D.source||null,ref,until:D.until??null};
+   const refTxt=ref?`\n참고: 미실현 포함 자산 변화 ${pctText(ref.pct)} (${signedUsd(ref.pnl,market)}${ref.flows?' · 입출금 '+signedUsd(ref.flows,market)+' 제외':''}) — 판정에는 쓰지 않음`:'';
+   const partTxt=market==='HL'&&D.parts?` · 체결 ${signedUsd(D.parts.trades,market)} + 펀딩 ${signedUsd(D.parts.funding,market)}`:'';
+   const dl=dayLabel(D.key,market);
+   if(lim>0&&pnl<0&&pnl<=-budget+1e-9){
+    const s={id:`${market}:dayr:${D.key}`,rule:'day',from:now,until:D.until,pct,reason:`하루 실현 ${pctText(pct)} (${dl} · 기준 ${bt})`,createdAt:now};
+    addStop(s,stopText(s,`오늘 실현손익 ${pctText(pct)} (${signedUsd(pnl,market)}) · 하루 한도 −${lim}% (${usd(-budget,market)}) 도달\n기준: ${bt}${partTxt}${refTxt}`));
+   }else if(ratio!==null){
+    const crossed=cfg.warn.filter(th=>ratio*100>=th-1e-9&&th<100);
+    if(crossed.length){const top=Math.max(...crossed);const keys=crossed.map(th=>`${market}:warn:dayr:${D.key}:${th}`);
+     if(keys.some(k=>!st.sent[k])){for(const k of keys)st.sent[k]=now;messages.push({key:keys.at(-1),text:`${top>=80?'⚠️':'🔔'} ${M} 하루 실현손익 ${pctText(pct)} (${signedUsd(pnl,market)}) · 한도 −${lim}% (${usd(-budget,market)})의 ${Math.floor(ratio*100)}%\n기준: ${bt}${partTxt}${refTxt}`});}}
+   }
+  }else periods.day={mode:'day',basis:'realized',key:D?.key??null,startEquity:null,startSource:null,pnl:D&&Number.isFinite(D.pnl)?round(D.pnl):null,pct:null,flows:0,limit:cfg.limits.day,ratio:null,ref:null,missing:D?'denominator':'data'};
  }
 
  // 4) 중단 중 신규 진입 = 규칙 위반 -------------------------------------------------------------------
@@ -185,14 +220,17 @@ export function step(prev,input){
  for(const [k,v] of Object.entries(st.sent))if(v<now-KEEP_DAYS*86400000)delete st.sent[k];
  const shown=live.filter(s=>s.until>now).sort((a,b)=>a.from-b.from).map(s=>({id:s.id,rule:s.rule,label:ruleLabel(s.rule,cfg),from:s.from,until:s.until,untilText:untilText(s.until,market),fromText:untilText(s.from,market),active:s.from<=now,reason:s.reason}));
  const streakNow=(()=>{const days=Object.values(st.days).filter(r=>r.final&&!r.unknown&&r.trades>0&&(!st.streakResetAfter||r.day>st.streakResetAfter)).sort((a,b)=>b.day.localeCompare(a.day));let n=0;for(const r of days){if(r.loss)n++;else break;}return n;})();
- const pub=m=>m?{key:m.key,startEquity:m.startEquity,startSource:m.startSource??null,startDay:m.startDay??null,pnl:m.pnl,pct:m.pct,flows:m.flows??0,limit:m.limit??null,ratio:m.ratio??null,ddPct:m.ddPct??null}:null;
+ const pub=m=>m?{key:m.key,startEquity:m.startEquity,startSource:m.startSource??null,startDay:m.startDay??null,pnl:m.pnl,pct:m.pct,flows:m.flows??0,limit:m.limit??null,ratio:m.ratio??null,ddPct:m.ddPct??null,
+  ...(m.basis==='realized'?{basis:'realized',budget:m.budget??null,denomMode:m.denomMode??null,denomSource:m.denomSource??null,parts:m.parts??null,source:m.source??null,ref:m.ref??null,missing:m.missing??null}:{})}:null;
  const status={v:1,market,updatedAt:now,today,todayLabel:cal.label(today),
   equity:eq?{value:eq.value,t:eq.t,source:eq.source,stale:!!eq.stale}:null,
-  limits:cfg.limits,periods:{day:pub(periods.day),week:pub(periods.week),month:pub(periods.month)},
+  limits:cfg.limits,periods:{day:pub(periods.day),week:pub(periods.week),month:pub(periods.month),...(realized?{dayEquity:pub(periods.dayEquity)}:{})},
+  dayBasis:realized?'realized':'equity',
   stops:shown,stopped:active.length>0,halfRisk:half,
   streak:{count:streakNow,need:cfg.streakDays,lossPct:cfg.streakLossPct,stopDays:cfg.streakStopDays},
-  config:{limits:cfg.limits,streakDays:cfg.streakDays,streakLossPct:cfg.streakLossPct,streakStopDays:cfg.streakStopDays,restartFactor:cfg.restartFactor,checkSec:cfg.checkSec,warn:cfg.warn,boundary:market==='US'?'미국 장 마감 16:00 ET(서머타임 자동, NYSE 휴장일 제외)':'한국시간 24:00(KST 자정)'},
-  note:eq?null:'자산 값을 아직 읽지 못했습니다'};
+  config:{limits:cfg.limits,streakDays:cfg.streakDays,streakLossPct:cfg.streakLossPct,streakStopDays:cfg.streakStopDays,restartFactor:cfg.restartFactor,checkSec:cfg.checkSec,warn:cfg.warn,boundary:market==='US'?'미국 장 마감 16:00 ET(서머타임 자동, NYSE 휴장일 제외)':realized?'하루 한도 UTC 00:00(KST 09:00) · 주·월·연속 손실 한국시간 24:00':'한국시간 24:00(KST 자정)',
+   dayRule:realized?'하루 = 오늘 실현손익(수수료·펀딩 포함) ÷ 직전 마감 잔액(없으면 현재 기준액) — 앱과 같은 기준, 미실현은 참고만':'하루 = 계좌 순자산 변화(실현+미실현) − 입출금'},
+  note:realized&&periods.day?.missing?(periods.day.missing==='data'?'오늘 실현손익 데이터를 읽지 못해 하루 한도 판정을 건너뜀':'하루 한도 분모(직전 마감·현재 기준액)가 없어 하루 판정을 건너뜀'):eq?null:'자산 값을 아직 읽지 못했습니다'};
  const changedDays=[...finalized,...(rec?[rec]:[])].map(r=>({...r}));
  return {state:st,messages,events,status,days:changedDays,violations};
 }
