@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 매매일지 손실한도 판정 v1.2 알림(trade-alert 2.0.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
+# 매매일지 손실한도 판정 v1.3 알림(trade-alert 2.1.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
 #   curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash
 # 다시 실행하면 코드만 업데이트합니다(.env와 알림 기록은 절대 덮어쓰지 않음).
 # 키움 수집기(kiwoom-collector)와 별개의 서비스입니다. 수집기는 건드리지 않습니다.
@@ -12,7 +12,7 @@ SVC=trade-alert
 USR=tradealert
 STATE=/var/lib/trade-alert
 KWC_ENV=/opt/kiwoom-collector/.env
-FILES="package.json src/alert.mjs src/risk.mjs src/calendar.mjs src/sources.mjs src/hl-balance.cjs env.template trade-alert.service"
+FILES="package.json src/alert.mjs src/risk.mjs src/calendar.mjs src/sources.mjs src/day.mjs src/hl-balance.cjs env.template trade-alert.service"
 
 say(){ printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 die(){ printf '\n\033[1;31m[중단] %s\033[0m\n' "$*" >&2; exit 1; }
@@ -100,6 +100,11 @@ else
     # 2.0.0 새 설정(주석 = 기본값)을 기존 .env 끝에 덧붙입니다. 기존 값은 그대로.
     sed -n '/^# \[손실한도 판정 v1.2\]/,$p' "$DIR/env.template" >> "$DIR/.env"
     echo "기존 .env에 손실한도 판정 v1.2 설정 안내(주석)를 덧붙였습니다."
+  fi
+  if ! grep -q '^# \[손실한도 판정 v1.3\]' "$DIR/.env"; then
+    # 2.1.0 안내(주석)만 덧붙입니다. 값을 바꾸지 않으면 기본 = 하루 한도 실현손익·전일 마감 기준.
+    sed -n '/^# \[손실한도 판정 v1.3\]/,/^# \[손실한도 판정 v1.2\]/p' "$DIR/env.template" | sed '$d' >> "$DIR/.env"
+    echo "기존 .env에 손실한도 판정 v1.3 안내(주석)를 덧붙였습니다."
   fi
   systemctl restart "$SVC"
   sleep 3
