@@ -113,5 +113,5 @@ export function usPeriodDays(kwDays,cal,fromKey,toKey,fills=[]){
  const days=[];for(let k=cal.isTradingDay(fromKey)?fromKey:cal.next(fromKey);k<=toKey;k=cal.next(k)){const a=agg.get(k);const n=(a?.count||0)+(fk.get(k)||0);days.push({key:k,pnl:a?a.pnl:0,trades:n,reported:!!a});}
  return {rows,days};
 }
-/** 연속 손실용 날짜별 분모: 그 키 직전 마감(acct, 7일 이내) → 현재 기준액 */
+/** 연속 손실용 날짜별 분모: 그 키 직전 마감(acct, 7일 이내) → 현재 기준액. v1.6: 주·월 분모(기간 시작 키)에도 같은 함수(periodRealized.denomAt) */
 export function dayDenomFor(acct,market,basis){const rows=closeRows(acct,market);return k=>{const p=prevClose(rows,k,market);if(p)return {value:p.value,mode:'close',key:p.key,expected:p.expected,source:p.source,closeAt:p.closeAt};return basis?{...basis}:null;};}
