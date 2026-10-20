@@ -1,6 +1,16 @@
-# 매매일지 손실한도 판정 v1.5 (trade-alert 2.3.0 · alert5)
+# 매매일지 손실한도 판정 v1.6 (trade-alert 2.4.0 · alert6)
 
 키움 수집기가 있는 같은 Lightsail 서버의 **별도 서비스**(`trade-alert`)입니다. alert2(2.0.0)·alert3(2.1.0)·alert4(2.2.0)를 같은 자리에서 업데이트합니다.
+
+## v1.6에서 바뀐 것 — 주·월 한도 분모 = 기간 시작 직전 마감 잔액(앱 v31 `limitStatus`와 같음)
+- 이유: v1.5는 주·월 % = 실현손익 ÷ **현재** 기준액이라, 출금하면 분모가 작아져 같은 손실이 더 큰 %가 됐습니다(예: US 출금 뒤 주 한도 6% = $974.16, 출금 전 기준 $3,815.57).
+- **주·월 % = 기간 실현손익 ÷ 기간 시작 직전 마감 잔액**(acct_snapshots — 하루 한도와 같은 탐색: 시작 키 이전 7일 안의 가장 최근 값 > 0; HL = UTC 날짜 키, US = 미국 마감일 etDate). **없으면 현재 기준액**(v1.5와 같음).
+  - 기간 시작 = max(이번 주 월요일·이번 달 1일(HL UTC / US 거래일), 한도 기준일 RISK_START_DATE). 예: 기준일 10/20 → HL 10/19 UTC 마감, US 10/19 ET 마감.
+  - 한도 금액 = 분모 × RISK_WEEK_PCT/RISK_MONTH_PCT%. 알림·요약·`--test`에 `기준: MM/DD 마감 $X` 또는 `현재 기준액 $X`(주·월 각각).
+  - 기간 중 입출금은 분모를 조정하지 않음(단순 규칙). 마감 판정(다음 키로 넘어갈 때)도 그 기간의 분모.
+- `risk_state.status.periods.week|month`에 `startEquity`(분모)·`startSource`(표기)·`denomMode`(close|basis)·`denomKey`(마감 날짜)·`denomStart`(기간 시작), `status.periodDenom='start-close'`, `basis.label`·`config.periodRule` 갱신(앱 서버 판정 카드에 표시).
+- **업데이트 후 첫 판정**: 새 분모로 성립하지 않는 실현 주·월 중단(v1.5)은 해제(`risk_events` clear, rule `denom-period-start`) + 시장별 텔레그램 🔄 1회('손실 한도 판정 v1.6 — 주·월 한도 분모 = …', 이번 주·달 기준·한도). 성립하면 그대로.
+- **새 SQL 없음**: alert5.sql의 risk_day_data(version 5)가 마감 잔액 40일을 줌(달 시작 직전 마감은 최대 37일 전). alert5.sql을 아직 안 돌렸으면 v1.4(자산 변화)로 동작 + 로그 안내(기존과 같음).
 
 ## v1.5에서 바뀐 것 — 주·월 한도와 연속 손실일도 실현손익 기준(앱 v29 `limitStatus`와 같음)
 - 이유: v1.4까지 주·월은 '계좌 자산 변화 − 입출금'이었는데, 미국주식 입출금은 키움 API에 내역이 없어 추정(`US_FLOW_MIN_USD`, us-implied)이라 놓치면 **출금이 손실로 잡혀** 중단이 걸릴 수 있었습니다.
