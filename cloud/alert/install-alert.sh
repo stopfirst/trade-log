@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 매매일지 손실한도 판정 v1.4 알림(trade-alert 2.2.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
+# 매매일지 손실한도 판정 v1.5 알림(trade-alert 2.3.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
 #   curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash
 # 다시 실행하면 코드만 업데이트합니다(.env와 알림 기록은 절대 덮어쓰지 않음).
 # 키움 수집기(kiwoom-collector)와 별개의 서비스입니다. 수집기는 건드리지 않습니다.
@@ -100,6 +100,11 @@ else
     # 2.0.0 새 설정(주석 = 기본값)을 기존 .env 끝에 덧붙입니다. 기존 값은 그대로.
     sed -n '/^# \[손실한도 판정 v1.2\]/,$p' "$DIR/env.template" >> "$DIR/.env"
     echo "기존 .env에 손실한도 판정 v1.2 설정 안내(주석)를 덧붙였습니다."
+  fi
+  if ! grep -q '^# \[손실한도 판정 v1.5\]' "$DIR/.env"; then
+    # 2.3.0 안내(주석)만 덧붙입니다. 설정할 값 없음(주·월·연속 손실 = 실현손익, Supabase alert5.sql 필요).
+    sed -n '/^# \[손실한도 판정 v1.5\]/,/^# \[손실한도 판정 v1.4\]/p' "$DIR/env.template" | sed '$d' >> "$DIR/.env"
+    echo "기존 .env에 손실한도 판정 v1.5(주·월 실현손익 기준) 안내(주석)를 덧붙였습니다."
   fi
   if ! grep -q '^# \[손실한도 판정 v1.4\]' "$DIR/.env"; then
     # 2.2.0 안내(주석)만 덧붙입니다. RISK_START_DATE 값이 없으면 기준일 없음(기존 동작).
