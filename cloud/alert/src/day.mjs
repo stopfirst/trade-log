@@ -69,3 +69,49 @@ export function dayDenom({acct,k0,market,current=null,manual=null}){
  const m=num(manual);if(m>0)return {value:m,mode:'basis',key:null,source:'앱 설정 계좌 기준액'};
  return null;
 }
+
+// ---- v1.5 주·월·연속 손실 = 실현손익 (앱 v29 limitStatus와 같은 기준) -------------------------------------
+//  분자 = 기간(주 = 월요일 시작, 달 = 달력 월) 실현손익 합. 기간 경계 = 하루 실현 키의 경계(HL UTC 날짜, US 거래일 키).
+//    US 합계는 앱처럼 키움 일별 실현손익 행의 날짜 라벨(한국 날짜)로 기간을 나눔(주말 라벨도 그 주에 포함).
+//  분모 = 앱 acctBasis()와 같은 현재 기준액(HL BALANCE / US 키움 주식 평가 + USD 예수금 → 앱 설정 계좌 기준액).
+//  연속 손실일 = 그날 실현손익 ÷ 그날 직전 마감(→ 현재 기준액) ≤ −STREAK_LOSS_PCT (거래 없는 날 제외).
+const PERIOD_LOOKBACK=14;
+/** HL 실현 키(UTC 날짜) 달력: 하루 = [D 00:00 UTC, D+1 00:00 UTC) = KST 09:00 경계 */
+export function utcCalendar(){
+ const next=d=>addDays(d,1),prev=d=>addDays(d,-1),dayStart=d=>utcStart(d),dayEnd=d=>utcStart(d)+DAY;
+ const monday=d=>addDays(d,-((new Date(d+'T00:00:00Z').getUTCDay()+6)%7));
+ const periodKey=(d,mode)=>mode==='day'?d:mode==='week'?monday(d):d.slice(0,7);
+ const firstOf=(d,mode)=>mode==='day'?d:mode==='week'?monday(d):d.slice(0,7)+'-01';
+ const lastOf=(d,mode)=>{if(mode==='day')return d;if(mode==='week')return addDays(monday(d),6);const [y,m]=d.split('-').map(Number);return new Date(Date.UTC(y,m,0)).toISOString().slice(0,10);};
+ return {market:'HL',utc:true,isTradingDay:()=>true,next,prev,dayStart,dayEnd,dayOf:ms=>utcDate(ms),periodKey,firstOf,lastOf,periodEnd:(d,mode)=>dayEnd(lastOf(d,mode)),label:d=>d.slice(5).replace('-','/')+' UTC'};
+}
+/** 판정에 필요한 첫 키: min(이번 달 첫날, 이번 주 첫날, 오늘 − 14일) */
+export function periodFrom(rcal,key){return [rcal.firstOf(key,'month'),rcal.firstOf(key,'week'),addDays(key,-PERIOD_LOOKBACK)].sort()[0];}
+/** 현재 기준액(앱 acctBasis): current > 0 → 앱 설정 기준액 → null */
+export function basisDenom(current,manual,market){const c=num(current);if(c>0)return {value:c,mode:'basis',key:null,source:market==='HL'?'HL BALANCE':'키움 주식 평가 + USD 예수금'};const m=num(manual);if(m>0)return {value:m,mode:'basis',key:null,source:'앱 설정 계좌 기준액'};return null;}
+/** HL 날짜별 실현손익: API·Supabase 체결/펀딩(합친 목록) vs Supabase 날짜별 합계(alert5 hl_days) — 건수가 많은 쪽 */
+export function hlPeriodDays(fills,funding,dbDays,fromKey,toKey){
+ const db=new Map();for(const r of dbDays||[])if(r&&dateOK(r.day))db.set(r.day,r);
+ const out=[];
+ for(let k=fromKey;k<=toKey;k=addDays(k,1)){
+  const a=hlDayRealized(fills,funding,k),d=db.get(k);let trades=a.parts.trades,nf=a.parts.fills,fund=a.parts.funding,nfu=a.parts.fundingCount,src='api';
+  if(d){const dn=num(d.fills)||0,dt=num(d.trades),du=num(d.funding),dfn=num(d.funding_count)||0;
+   if(dn>nf&&dt!==null){trades=dt;nf=dn;src='db';}
+   if(dfn>nfu&&du!==null){fund=du;nfu=dfn;src=src==='db'?'db':'mixed';}}
+  out.push({key:k,label:k,pnl:r6(trades+fund),trades:nf,parts:{trades:r6(trades),funding:r6(fund),fills:nf,fundingCount:nfu},src});
+ }
+ return out;
+}
+/** US 키움 일별 실현손익 행(라벨 = 한국 날짜) → rows(합계용, 라벨 그대로) + days(연속 손실용, 주말·휴장 라벨은 직전 거래일로) */
+export function usPeriodDays(kwDays,cal,fromKey,toKey,fills=[]){
+ const by=new Map();for(const x of kwDays||[]){if(!x||!dateOK(x.date))continue;const o=by.get(x.date);if(!o||(num(x.as_of)||0)>(num(o.as_of)||0))by.set(x.date,x);}
+ const rows=[],agg=new Map();
+ for(const [label,x] of [...by.entries()].sort()){const v=num(x.total);if(v===null||label<fromKey)continue;rows.push({label,pnl:r6(v),count:num(x.count)||0});
+  let k=label;for(let i=0;i<10&&!cal.isTradingDay(k);i++)k=cal.prev(k);if(k>toKey)k=toKey;
+  const a=agg.get(k)||{pnl:0,count:0};a.pnl=r6(a.pnl+v);a.count+=num(x.count)||0;agg.set(k,a);}
+ const fk=new Map();for(const f of fills||[]){if(!Number.isFinite(f.t))continue;const k=cal.dayOf(f.t);fk.set(k,(fk.get(k)||0)+1);}
+ const days=[];for(let k=cal.isTradingDay(fromKey)?fromKey:cal.next(fromKey);k<=toKey;k=cal.next(k)){const a=agg.get(k);const n=(a?.count||0)+(fk.get(k)||0);days.push({key:k,pnl:a?a.pnl:0,trades:n,reported:!!a});}
+ return {rows,days};
+}
+/** 연속 손실용 날짜별 분모: 그 키 직전 마감(acct, 7일 이내) → 현재 기준액 */
+export function dayDenomFor(acct,market,basis){const rows=closeRows(acct,market);return k=>{const p=prevClose(rows,k,market);if(p)return {value:p.value,mode:'close',key:p.key,expected:p.expected,source:p.source,closeAt:p.closeAt};return basis?{...basis}:null;};}
