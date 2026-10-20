@@ -1,8 +1,24 @@
-# 매매일지 손실한도 판정 v1.3 (trade-alert 2.1.0 · alert3)
+# 매매일지 손실한도 판정 v1.4 (trade-alert 2.2.0 · alert4)
 
-키움 수집기가 있는 같은 Lightsail 서버의 **별도 서비스**(`trade-alert`)입니다. alert2(2.0.0)를 같은 자리에서 업데이트합니다.
+키움 수집기가 있는 같은 Lightsail 서버의 **별도 서비스**(`trade-alert`)입니다. alert2(2.0.0)·alert3(2.1.0)를 같은 자리에서 업데이트합니다.
 
-## v1.3에서 바뀐 것 — 하루 손실 한도 = 앱(v28)과 같은 기준
+## v1.4에서 바뀐 것 — 한도 기준일(선택, `.env` `RISK_START_DATE=YYYY-MM-DD`)
+- 기준 시각: **HL = 그날 UTC 00:00(KST 09:00)**, **미국주식 = 그 날짜(ET) 거래일 시작**(= 직전 거래일 16:00 ET; 주말·휴장이면 다음 거래일).
+- 그 이전 손익은 **하루·주·월 합계와 연속 손실일에서 제외**. 기준일이 든 주·달은 기준 시각의 자산에서 시작(경계 근처 서버 관측 → HL 마감 잔액(acct_snapshots, UTC 전날) / 키움 마감 잔액 → HL portfolio 근사 → 첫 관측 '근사', 나중에 더 정확한 값이 오면 교체). 다음 주·달부터는 평소대로.
+- HL 기준일 당일(KST 하루)의 연속 손실 판정 = 기준 시각부터의 변화. 하루 실현 한도는 기준일 키(HL UTC 날짜 / US 거래일)부터.
+- 기준일 전 손실로 **이미 걸린 중단은 처음 적용할 때 해제**(`risk_events` kind `clear`, rule `risk-start`) + 텔레그램 🔄 안내 1회. 그 날 끝난 중단의 '재시작 첫날 절반'도 없앰. 새 중단 id = `…@YYYY-MM-DD`.
+- 미래 날짜면 그날 전까지 판정·중단 없음. 비우면 v1.3과 같은 결과(테스트로 확인). `risk_state.status.riskStart`에 기준일·기준 자산 표시.
+- 앱 설정의 '한도 기준일'(앱 v29)은 앱 화면 계산용 **별개 설정**입니다. 같게 맞춰 두세요.
+- SQL 변경 없음.
+
+### 기준일 넣기(예: 2026-10-20)
+```
+sudo sed -i '/^RISK_START_DATE=/d' /opt/trade-alert/.env; echo RISK_START_DATE=2026-10-20 | sudo tee -a /opt/trade-alert/.env >/dev/null; sudo systemctl restart trade-alert
+```
+없애기: `sudo sed -i '/^RISK_START_DATE=/d' /opt/trade-alert/.env; sudo systemctl restart trade-alert`
+
+## v1.3 — 하루 손실 한도 = 앱(v28)과 같은 기준
+
 - **분자 = 오늘 실현손익**(수수료·펀딩 포함). HL = 무기한 체결 Σ(closedPnl − fee) + 펀딩, **UTC 00:00(KST 09:00) 경계**. US = 키움 일별 실현손익(ust21640, 서버 거래일 = 키움 조회일).
 - **분모 = 직전 마감 잔액**(acct_snapshots, 7일 이내·> 0; HL UTC 날짜 / US 미국 마감일 etDate) → 없으면 **현재 기준액**(HL BALANCE / US 주식 평가 + USD 예수금 → 앱 설정 기준액).
 - **한도 금액 = 분모 × RISK_DAY_PCT%**, 실현손익 ≤ −한도 금액이면 그날 끝까지 신규 진입 중단(HL은 다음 KST 09:00까지). 50/80% 사전 알림 그대로.
@@ -37,7 +53,7 @@
 2. `curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash`
    (.env·기존 기록 유지. 기존 .env 끝에 v1.2 설정 안내 주석을 덧붙임.)
 3. 확인: `sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs --test`
-   → 텔레그램에 "✅ 손실한도 판정 v1.3 테스트" + 시장별 '오늘(실현) … · 기준 전일 마감 $X'가 오면 정상.
+   → 텔레그램에 "✅ 손실한도 판정 v1.4 테스트" + 시장별 '오늘(실현) … · 기준 전일 마감 $X'가 오면 정상.
 4. 로그: `sudo journalctl -u trade-alert -n 30 --no-pager` (`trade-alert 2.1.0 시작 · 손실한도 판정 v1.3 · 하루 한도 실현손익÷전일 마감 …`)
 
 새로 설치하는 경우 텔레그램 봇 만들기·`--find-chat`은 alert1과 같습니다(`.env`의 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID).
