@@ -1,8 +1,22 @@
-# 매매일지 손실한도 판정 v1.4 (trade-alert 2.2.0 · alert4)
+# 매매일지 손실한도 판정 v1.5 (trade-alert 2.3.0 · alert5)
 
-키움 수집기가 있는 같은 Lightsail 서버의 **별도 서비스**(`trade-alert`)입니다. alert2(2.0.0)·alert3(2.1.0)를 같은 자리에서 업데이트합니다.
+키움 수집기가 있는 같은 Lightsail 서버의 **별도 서비스**(`trade-alert`)입니다. alert2(2.0.0)·alert3(2.1.0)·alert4(2.2.0)를 같은 자리에서 업데이트합니다.
 
-## v1.4에서 바뀐 것 — 한도 기준일(선택, `.env` `RISK_START_DATE=YYYY-MM-DD`)
+## v1.5에서 바뀐 것 — 주·월 한도와 연속 손실일도 실현손익 기준(앱 v29 `limitStatus`와 같음)
+- 이유: v1.4까지 주·월은 '계좌 자산 변화 − 입출금'이었는데, 미국주식 입출금은 키움 API에 내역이 없어 추정(`US_FLOW_MIN_USD`, us-implied)이라 놓치면 **출금이 손실로 잡혀** 중단이 걸릴 수 있었습니다.
+- **주·월 % = 이번 주(월요일 시작)·이번 달 실현손익 합(수수료·펀딩 포함) ÷ 현재 기준액**(앱 `acctBasis()`와 같음: HL BALANCE / 키움 주식 평가 + USD 예수금 → 앱 설정 계좌 기준액). 한도 금액 = 기준액 × RISK_WEEK_PCT/RISK_MONTH_PCT%.
+  - 경계 = 하루 실현 키와 같음: **HL = UTC 날짜**(주 = 월요일 KST 09:00, 달 = 1일 KST 09:00 시작 — v1.4의 KST 자정 경계에서 바뀜, 앱과 같음), **US = 서버 거래일**(16:00 ET) 주·달. US 합계는 앱처럼 키움 일별 실현손익 행의 날짜 라벨(한국 날짜)로 나눔.
+  - 장중 도달 → 그날(실현 키) 끝까지 즉시 중단, 마감 판정 → 다음 날부터 기간 끝까지(규칙은 v1.2와 같음). 50/80% 사전 알림. 새 중단 id `…:weekr…`·`…:monthr…`, 표시 '주간 실현 −6% …'.
+- **연속 손실일 = 그날 실현손익 ÷ 그날 직전 마감 잔액(→ 현재 기준액) ≤ −STREAK_LOSS_PCT**(거래 없는 날 건너뜀). 하루 한도(v1.3)와 같은 기준. id `…:streakr:날짜`.
+- 미실현 포함 자산 변화(v1.4 방식)는 알림·상태에 **'참고' 줄로만**(`periods.weekEquity`·`monthEquity`).
+- **업데이트 후 첫 판정**: 새 기준으로 성립하지 않는 기존 주·월·연속 중단은 해제(`risk_events` kind `clear`, rule `basis-realized`) + 시장별 텔레그램 🔄 1회. 그 중단에서 오는 오늘 '재시작 첫날 절반'도 없어짐. 새 기준으로도 성립하면 그대로 둠.
+- `risk_state.status`에 `version`·`rules`·`basis`(앱 v30이 배너·설정 카드에 표시), `periodBasis`, `config.periodRule`.
+- 한도 기준일(RISK_START_DATE)은 그대로 적용: 기준일 키 이전 실현손익은 주·월 합계·연속 손실일에서 제외.
+- 데이터: Supabase **`alert5.sql`**(risk_day_data version 5 — 키움 일별 실현 45일, 마감 잔액 40일, HL 날짜별 체결·펀딩 합계) + HL 공개 API. **alert5.sql이 없으면 주·월·연속은 v1.4(자산 변화)로 동작**하고 로그에 안내. 한 번 확인한 뒤 일시 장애면 판정을 건너뜀(자산 변화로 되돌아가지 않음).
+- `DAY_LIMIT_BASIS=equity`면 하루·주·월 모두 자산 변화(v1.2/v1.4) 그대로.
+- 미국주식 입출금 추정은 감지한 회차에 보관(그 회차가 중간에 실패해도 다음 회차에 저장). 판정에는 더 이상 쓰지 않고 참고 줄에만 반영.
+
+## v1.4 — 한도 기준일 — 한도 기준일(선택, `.env` `RISK_START_DATE=YYYY-MM-DD`)
 - 기준 시각: **HL = 그날 UTC 00:00(KST 09:00)**, **미국주식 = 그 날짜(ET) 거래일 시작**(= 직전 거래일 16:00 ET; 주말·휴장이면 다음 거래일).
 - 그 이전 손익은 **하루·주·월 합계와 연속 손실일에서 제외**. 기준일이 든 주·달은 기준 시각의 자산에서 시작(경계 근처 서버 관측 → HL 마감 잔액(acct_snapshots, UTC 전날) / 키움 마감 잔액 → HL portfolio 근사 → 첫 관측 '근사', 나중에 더 정확한 값이 오면 교체). 다음 주·달부터는 평소대로.
 - HL 기준일 당일(KST 하루)의 연속 손실 판정 = 기준 시각부터의 변화. 하루 실현 한도는 기준일 키(HL UTC 날짜 / US 거래일)부터.
@@ -30,7 +44,7 @@ sudo sed -i '/^RISK_START_DATE=/d' /opt/trade-alert/.env; echo RISK_START_DATE=2
 미국주식(키움)과 하이퍼리퀴드를 **각자 계좌 순자산 기준으로 따로** 판정하고, 텔레그램 알림 + Supabase 상태(앱 상단 '거래 중단 중' 배너) + 규칙 위반 기록을 남깁니다.
 **주문을 내거나 취소하지 않습니다**(증권사·거래소를 막을 수 없음).
 
-## 판정 기준
+## 판정 기준 (아래 표의 '자산 변화' 설명은 v1.2 — v1.5에서는 하루·주·월·연속 손실이 실현손익 기준이고 자산 변화는 참고)
 | | 미국주식(키움) | 하이퍼리퀴드 |
 |---|---|---|
 | 하루 경계 | 미국 장 마감 **16:00 ET**(서머타임 자동 · 한국 05:00/06:00). 거래일 = ET 날짜, **NYSE 휴장일 제외**. 16:00 이후 애프터·주말 체결은 다음 거래일 몫 | **한국시간 24:00**(KST 자정). 매일 |
@@ -49,12 +63,12 @@ sudo sed -i '/^RISK_START_DATE=/d' /opt/trade-alert/.env; echo RISK_START_DATE=2
 - 기간 시작 자산: 경계 직전 서버 관측값 → (없으면) 미국=키움 장 마감 잔액(acct_snapshots), HL=portfolio 기록 근사 → (없으면) 그 기간의 가장 이른 기록(‘근사’ 표시). 설치한 주·달은 근사일 수 있습니다.
 
 ## 설치/업데이트 (Lightsail 브라우저 SSH)
-1. Supabase → SQL Editor → `alert2.sql`(처음이면) → `alert3.sql` 전체 붙여넣고 Run (둘 다 다시 실행해도 안전).
+1. Supabase → SQL Editor → `alert2.sql`(처음이면) → `alert3.sql`(처음이면) → `alert5.sql` 전체 붙여넣고 Run (모두 다시 실행해도 안전).
 2. `curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash`
    (.env·기존 기록 유지. 기존 .env 끝에 v1.2 설정 안내 주석을 덧붙임.)
 3. 확인: `sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs --test`
-   → 텔레그램에 "✅ 손실한도 판정 v1.4 테스트" + 시장별 '오늘(실현) … · 기준 전일 마감 $X'가 오면 정상.
-4. 로그: `sudo journalctl -u trade-alert -n 30 --no-pager` (`trade-alert 2.1.0 시작 · 손실한도 판정 v1.3 · 하루 한도 실현손익÷전일 마감 …`)
+   → 텔레그램에 "✅ 매매일지 손실한도 판정 v1.5 테스트 · trade-alert 2.3.0" + 시장별 '오늘(실현) … · 기준 전일 마감 $X'가 오면 정상.
+4. 로그: `sudo journalctl -u trade-alert -n 30 --no-pager` (`trade-alert 2.3.0 시작 · 손실한도 판정 v1.5 …`, `alert5.sql 확인 → 주·월 한도·연속 손실일을 실현손익 기준…`)
 
 새로 설치하는 경우 텔레그램 봇 만들기·`--find-chat`은 alert1과 같습니다(`.env`의 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID).
 
@@ -71,7 +85,7 @@ alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_
 앱 설정의 손실 한도(하루·주·달 %)는 앱 자체 표시용이고, 서버 판정은 `.env`(기본 3/6/10)를 씁니다. 앱 설정 → 계좌·위험에 서버 값이 그대로 보입니다.
 
 ## 테스트(개발)
-`node --test tests/*.test.mjs` · SQL: `node tests/alert2-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql fixtures`, `node tests/alert3-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql fixtures` (@electric-sql/pglite)
+`node --test tests/*.test.mjs` · SQL: `node tests/alert2-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql fixtures`, `node tests/alert3-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql fixtures`, `node tests/alert5-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql alert5.sql fixtures` (@electric-sql/pglite)
 
 ## 보안
 - 비밀값은 `/opt/trade-alert/.env`(root:tradealert 0640)에만. 로그에 토큰·키를 `[비공개]`로 가림. secret/service_role 키 거부.
