@@ -142,7 +142,7 @@ test('미래 기준일: 그 전에는 판정·중단 없음',()=>{
 });
 
 test('미설정이면 v1.3 엔진과 결과 동일(상태·메시지·이벤트, riskStart 필드만 추가)',()=>{
- const strip=r=>{const s=structuredClone(r);delete s.status.riskStart;delete s.status.config.riskStart;delete s.state.riskStart;return s;};
+ const strip=r=>{const s=structuredClone(r);delete s.status.riskStart;delete s.status.config.riskStart;delete s.state.riskStart;delete s.status.periodBasis;delete s.status.config.periodRule;delete s.status.streak.basis;return s;}; // v1.5 필드(periodBasis·periodRule·streak.basis)는 비교에서 뺌
  for(const [cal,dm] of [[HL,undefined],[HL,'realized'],[US,undefined]]){
   const A=runner(cal,{cfg:{...CFG,dayMode:dm}}),B=runner(cal,{cfg:{...CFG,dayMode:dm},engine:old});
   const fill=(t,e)=>({key:'k'+t,t,symbol:'X',entry:e,side:e?'buy':'sell',qty:1,price:1});
