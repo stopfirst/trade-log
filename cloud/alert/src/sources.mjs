@@ -92,3 +92,10 @@ export function hlPortfolioFallback(portfolio,cal,eqNow){
 }
 export function chainFallback(...fns){return (day,mode)=>{for(const f of fns){const r=f&&f(day,mode);if(r)return r;}return null;};}
 export {addDays};
+// v1.4 한도 기준 시각(ms)의 HL 자산 근사: portfolio accountValueHistory에서 가장 가까운 점(≤ maxGap), BALANCE와의 차이는 최신점 기준 상수 보정.
+export function hlPortfolioAt(portfolio,ms,eqNow,maxGapMs=2*3600000){
+ const pts=[];for(const w of Array.isArray(portfolio)?portfolio:[]){if(!Array.isArray(w)||!['day','week','month','allTime'].includes(w[0]))continue;for(const p of w[1]?.accountValueHistory||[]){const t=num(p?.[0]),v=num(p?.[1]);if(t&&v!==null)pts.push([t,v]);}}
+ if(!pts.length)return null;pts.sort((a,b)=>a[0]-b[0]);const latest=pts.at(-1),offset=eqNow&&eqNow.value>0?eqNow.value-latest[1]:0;
+ let best=null;for(const p of pts){const g=Math.abs(p[0]-ms);if(!best||g<best.g)best={p,g};}
+ if(!best||best.g>maxGapMs)return null;const v=best.p[1]+offset;return v>0?{equity:Math.round(v*100)/100,at:best.p[0],source:'HL portfolio 근사'}:null;
+}
