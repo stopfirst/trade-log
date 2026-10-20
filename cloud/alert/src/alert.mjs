@@ -1,4 +1,5 @@
-// trade-alert 2.3.0 (alert5): 손실한도 판정 v1.5 — 텔레그램 알림 + Supabase 거래 중단 상태(앱 배너) + 규칙 위반 기록.
+// trade-alert 2.4.0 (alert6): 손실한도 판정 v1.6 — 주·월 한도 분모 = 기간 시작 직전 마감 잔액(없으면 현재 기준액, 앱 v31과 같음).
+// (이전) 2.3.0 (alert5): 손실한도 판정 v1.5 — 텔레그램 알림 + Supabase 거래 중단 상태(앱 배너) + 규칙 위반 기록.
 // v1.5: 주·월 한도와 연속 손실일도 실현손익 기준(앱 v29 limitStatus와 같음) — 주·월 % = 기간 실현손익 합 ÷ 현재 기준액,
 //       연속 손실일 = 그날 실현손익 ÷ 직전 마감. 입출금이 손실로 잡히지 않음. 미실현 포함 변동은 '참고' 줄로만.
 //       데이터 = risk_day_data v5(alert5.sql: 키움 일별 실현 45일·HL 날짜별 합계) + HL 공개 API. alert5.sql이 없으면 주·월·연속은 v1.4(자산 변화).
@@ -26,8 +27,8 @@ import {usCalendar,hlCalendar,untilText,addDays} from './calendar.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.3.0';
-export const RULES='손실한도 판정 v1.5';
+export const VERSION='2.4.0';
+export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
 
@@ -83,9 +84,10 @@ export function riskStartFor(date,market,cal){
  const d=cal.isTradingDay(date)?date:cal.next(date);return {date,day:d,realKey:d,at:cal.dayStart(d)};
 }
 /** risk_state.status에 붙이는 서버 버전·판정 기준(앱 v30이 배너·설정 카드에 표시) */
-export function statusMeta(st){const pr=st.periodBasis==='realized',dr=st.dayBasis==='realized';
+export function statusMeta(st){const pr=st.periodBasis==='realized',dr=st.dayBasis==='realized',ps=pr&&st.periodDenom==='start-close';
  return {version:VERSION,rules:RULES,basis:{day:st.dayBasis||'equity',period:st.periodBasis||'equity',
-  label:pr?'손익 = 실현손익(수수료·펀딩 포함) — 하루 ÷ 직전 마감, 주·월 ÷ 현재 기준액, 연속 손실일 ÷ 그날 직전 마감 · 입출금은 손실 아님 · 미실현 포함 변동은 참고만'
+  label:ps?'손익 = 실현손익(수수료·펀딩 포함) — 하루 ÷ 직전 마감, 주·월 ÷ 기간 시작 직전 마감(없으면 현재 기준액), 연속 손실일 ÷ 그날 직전 마감 · 입출금은 손실 아님 · 미실현 포함 변동은 참고만'
+   :pr?'손익 = 실현손익(수수료·펀딩 포함) — 하루 ÷ 직전 마감, 주·월 ÷ 현재 기준액, 연속 손실일 ÷ 그날 직전 마감 · 입출금은 손실 아님 · 미실현 포함 변동은 참고만'
    :dr?'하루 = 실현손익 ÷ 직전 마감 · 주·월·연속 손실 = 계좌 순자산 변화(실현+미실현) − 입출금, 분모 = 기간 시작 자산 (alert5.sql 미설치)'
    :'손익 = 계좌 순자산 변화(실현+미실현, 수수료·펀딩 포함) − 입출금, 분모 = 기간 시작 자산'}};}
 export function engineCfg(cfg,market,defaultRisk,dayMode='equity',cal=null){return {dayMode,riskStart:cfg.riskStartDate&&cal?riskStartFor(cfg.riskStartDate,market,cal):null,limits:cfg.limits[market],warn:cfg.warn,streakLossPct:cfg.streakLossPct,streakDays:cfg.streakDays,streakStopDays:cfg.streakStopDays,restartFactor:cfg.restartFactor,checkSec:cfg.checkSec,defaultRisk:Number(defaultRisk)>0?Number(defaultRisk):null,anchorMaxGapMs:cfg.anchorMaxGapMin*MIN};}
@@ -222,7 +224,7 @@ export class Alerter{
    if(dayMode==='realized'&&dd){const k=cal.dayOf(t),cur=src.usEquity(latest,t,1e9);const D=day.usDayRealized(dd.kw_days,k,{from:cal.dayStart(k),until:cal.dayEnd(k)});D.denom=day.dayDenom({acct:dd.acct,k0:k,market:'US',current:cur?.value,manual:S.journal.US?.account});dayRealized=D;}
    let periodRealized=null;
    if(pdd){const k=cal.dayOf(t),cur=src.usEquity(latest,t,1e9),basis=day.basisDenom(cur?.value,S.journal.US?.account,'US'),{rows,days}=day.usPeriodDays(pdd.kw_days,cal,day.periodFrom(cal,k),k,src.usFills(data.kw?.orders));
-    const dn=day.dayDenomFor(pdd.acct,'US',basis);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal,rows,days,basis};}
+    const dn=day.dayDenomFor(pdd.acct,'US',basis);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal,rows,days,basis,denomAt:dn};} // v1.6: 주·월 분모 = 기간 시작 직전 마감
    const ecU=engineCfg(this.cfg,'US',S.journal.US?.defaultRisk,dayMode,cal),usFb=src.usFallback(data.acct_us,cal);
    const anchorU=ecU.riskStart?()=>{const rs=ecU.riskStart,pk=cal.prev(rs.day),r=dd?day.closeRows(dd.acct,'US')[pk]:null;if(r&&r.value>0)return {equity:r.value,at:r.capturedAt||rs.at,source:'키움 마감 잔액 '+pk};return usFb(rs.day,'day');}:null;
    const res=risk.step(S.engine.US,{now:t,cal,cfg:ecU,equity:eq,flows,fills:src.usFills(data.kw?.orders),fallbackStart:usFb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorU,periodMode,periodRealized});
@@ -243,7 +245,7 @@ export class Alerter{
    let periodRealized=null;
    if(pdd){const k=day.utcDate(t),rc=this.rcal,db=pdd.hl&&String(pdd.hl.address||'').toLowerCase()===String(addr).toLowerCase()?pdd.hl:null,basis=day.basisDenom(h.equity?.value,S.journal.HL?.account,'HL');
     const days=day.hlPeriodDays(day.mergeHlFills(h.rawFills,db?.fills),day.mergeHlFunding(h.rawFunding,db?.funding),db?.days||null,day.periodFrom(rc,k),k);
-    const dn=day.dayDenomFor(pdd.acct,'HL',basis);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal:rc,rows:days.map(d=>({label:d.key,pnl:d.pnl})),days,basis};}
+    const dn=day.dayDenomFor(pdd.acct,'HL',basis);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal:rc,rows:days.map(d=>({label:d.key,pnl:d.pnl})),days,basis,denomAt:dn};} // v1.6
    const ecH=engineCfg(this.cfg,'HL',S.journal.HL?.defaultRisk,dayMode,cal);
    const anchorH=ecH.riskStart?ms=>{const pk=addDays(ecH.riskStart.date,-1),r=dd?day.closeRows(dd.acct,'HL')[pk]:null;if(r&&r.value>0)return {equity:r.value,at:ecH.riskStart.at,source:'HL 마감 '+pk.slice(5).replace('-','/')+' UTC'};return src.hlPortfolioAt(h.portfolio,ms,h.equity);}:null;
    const res=risk.step(S.engine.HL,{now:t,cal,cfg:ecH,equity:h.equity,flows,fills:h.fills,fallbackStart:fb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorH,periodMode,periodRealized});
@@ -291,7 +293,7 @@ export class Alerter{
    const rd=P.day?.basis==='realized';
    const rp=s.periodBasis==='realized';
    lines.push(`${risk.MARKET_LABEL[s.market]} (${s.todayLabel}) ${part('day',rd?'오늘 실현':'오늘')} · ${part('week',rp?'주 실현':'주')} · ${part('month',rp?'달 실현':'달')}`);
-   if(rp&&P.week?.startSource)lines.push(`  주·월 기준: ${P.week.startSource}${P.weekEquity&&Number.isFinite(P.weekEquity.pct)?' · 참고 미실현 포함 주 '+risk.pctText(P.weekEquity.pct):''}`);
+   if(rp&&P.week?.startSource)lines.push(`  ${P.month?.startSource&&P.month.startSource!==P.week.startSource?'주 기준: '+P.week.startSource+' · 월 기준: '+P.month.startSource:'주·월 기준: '+P.week.startSource}${P.weekEquity&&Number.isFinite(P.weekEquity.pct)?' · 참고 미실현 포함 주 '+risk.pctText(P.weekEquity.pct):''}`);
    if(s.riskStart)lines.push(`  한도 기준일 ${s.riskStart.date.slice(5).replace('-','/')}부터 (${s.riskStart.atText})`);
    if(rd&&P.day.startSource)lines.push(`  하루 기준: ${P.day.startSource}${P.day.budget?' · 한도 '+risk.usd(P.day.budget,s.market):''}${P.day.ref&&Number.isFinite(P.day.ref.pct)?' · 참고 미실현 포함 '+risk.pctText(P.day.ref.pct):''}`);
    const dd=(rp?P.weekEquity:P.week)?.ddPct;if(Number.isFinite(dd)&&dd<0)lines.push(`  주 고점 대비 ${risk.pctText(dd)} (참고)`);
@@ -313,7 +315,7 @@ export class Alerter{
   return `${risk.MARKET_LABEL[s.market]} · 거래일 ${s.todayLabel} · 자산 ${s.equity?risk.usd(s.equity.value,s.market)+' ('+s.equity.source+')':'없음'}${rsT}\n ${L('day')}\n ${L('week')}\n ${L('month')}\n 연속 손실일 ${s.streak.count}/${s.streak.need}`+(s.basis?.label?'\n 기준: '+s.basis.label:'')+(s.stops.length?'\n ⛔ '+s.stops.map(x=>`${x.label} ~ ${x.untilText}`).join(' / '):'\n 거래 중단 없음')+(s.halfRisk?.active?`\n ✅ 재시작 첫날(위험 ${Math.round(s.halfRisk.factor*100)}%)`:'')+(s.note?'\n ※ '+s.note:'');}).join('\n');}
  async run(){
   await this.init();const c=this.cfg;
-  this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:''));
+  this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월(÷ 기간 시작 직전 마감)·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:''));
   for(;;){
    try{await this.check();if(this.failures)this.log('INFO','정상 복구');this.failures=0;}
    catch(e){this.failures++;const code=String(e.message||e);this.log('ERROR',`확인 실패(${this.failures}): ${code}`+(code==='SUPABASE_SQL_NOT_INSTALLED'?' → Supabase SQL Editor에서 alert2.sql을 실행하세요.':code==='SUPABASE_TOKEN_REJECTED'?' → KW_COLLECTOR_TOKEN이 앱의 현재 토큰과 같은지 확인하세요.':''));}
