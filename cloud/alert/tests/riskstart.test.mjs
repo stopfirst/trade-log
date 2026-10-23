@@ -44,11 +44,11 @@ test('주 중간 기준일(HL 화 10/20): 월요일 손실 제외, 주 = 기준 
  assert.equal(a.status.periods.day.startEquity,9500,'v1.2 하루(KST 10/20)도 KST 09:00 이전 몫 제외');
  assert.equal(a.status.periods.month.startEquity,9500);
  assert.equal(a.status.riskStart.date,'2026-10-20');assert.equal(a.status.riskStart.base.equity,9500);assert.equal(a.status.config.riskStart,'2026-10-20');
- assert.ok(A.all.messages.some(m=>/^🔄 하이퍼리퀴드 손실 한도 기준일 10\/20 — 10\/20\(화\) 09:00 KST부터 다시 셉니다/.test(m.text)));
+ assert.ok(A.all.messages.some(m=>/^🔄 하이퍼리퀴드 · 손실 한도 10\/20부터 새로 셈\n\n한도 적용: 10\/20\(화\) 09:00 KST부터/.test(m.text)));
  // 기준 시각 이후 손실은 그대로 셈: 9500 → 8900 = −6.3% → 주 장중 중단(새 id)
  const r=A.step(H('2026-10-20',11),8900);const s=r.status.stops.find(x=>x.rule==='week-intraday');
  assert.ok(s,'기준일 이후 −6.3%');assert.equal(s.id,'HL:week-intraday:2026-10-20@2026-10-20');
- assert.ok(r.messages.some(m=>/시작 9,500\.00 USDC · 기준일 10\/20부터\) · 주간 한도 −6% 장중 도달/.test(m.text)));
+ assert.ok(r.messages.some(m=>/주간 −6% 장중 도달\n\n이번 주: [^\n]+\n시작 자산: 9,500\.00 USDC · 기준일 10\/20부터/.test(m.text)));
  // 다음 주는 평소대로(월요일 시작)
  const n=A.step(H('2026-10-26',0,5),8900);assert.equal(n.status.periods.week.cut,undefined);assert.equal(n.status.periods.month.cut,'2026-10-20','10월은 아직 기준일부터');
  assert.equal(A.step(H('2026-11-02',0,5),8900).status.periods.month.cut,undefined,'11월 = 평소');
@@ -111,7 +111,7 @@ test('이전 중단 해제: 기준일 설정 전 걸린 중단(주 장중·전�
  const clears=r.events.filter(e=>e.kind==='clear');assert.deepEqual(clears.map(e=>e.detail.stopId).sort(),['HL:day:2026-10-19','HL:week-intraday:2026-10-20']);
  assert.ok(clears.every(e=>e.rule==='risk-start'&&/^clear:HL:.+:start:2026-10-20$/.test(e.ref)));
  assert.deepEqual(r.status.riskStart.cleared.sort(),['HL:day:2026-10-19','HL:week-intraday:2026-10-20']);
- const msg=r.messages.find(m=>m.text.startsWith('🔄'));assert.match(msg.text,/기준일 이전 손실로 걸린 중단 해제: 주간 −6% 장중 도달 \(~ 10\/21\(수\) 00:00 KST\)/);
+ const msg=r.messages.find(m=>m.text.startsWith('🔄'));assert.match(msg.text,/\n중단 해제: (\d건\n· )?주간 −6% 장중 도달 \(~ 10\/21\(수\) 00:00 KST\)/);
  assert.equal(R.state.riskStart.base.equity,9300,'08:50 관측(10분 전)');
  // 다시 실행해도 해제·안내 반복 없음
  r=R.step(H('2026-10-20',10,1),9300);assert.ok(!r.events.length&&!r.messages.length);
@@ -142,14 +142,14 @@ test('미래 기준일: 그 전에는 판정·중단 없음',()=>{
 });
 
 test('미설정이면 v1.3 엔진과 결과 동일(상태·메시지·이벤트, riskStart 필드만 추가)',()=>{
- const strip=r=>{const s=structuredClone(r);delete s.status.riskStart;delete s.status.config.riskStart;delete s.state.riskStart;delete s.status.periodBasis;delete s.status.config.periodRule;delete s.status.streak.basis;return s;}; // v1.5 필드(periodBasis·periodRule·streak.basis)는 비교에서 뺌
+ const strip=r=>{const s=structuredClone(r);delete s.status.riskStart;delete s.status.config.riskStart;delete s.state.riskStart;delete s.status.periodBasis;delete s.status.config.periodRule;delete s.status.streak.basis;s.messages=s.messages.map(m=>m.key);return s;}; // 2.5.1: 메시지는 key만 비교(문구는 카드 형식) · v1.5 필드(periodBasis·periodRule·streak.basis)는 비교에서 뺌
  for(const [cal,dm] of [[HL,undefined],[HL,'realized'],[US,undefined]]){
   const A=runner(cal,{cfg:{...CFG,dayMode:dm}}),B=runner(cal,{cfg:{...CFG,dayMode:dm},engine:old});
   const fill=(t,e)=>({key:'k'+t,t,symbol:'X',entry:e,side:e?'buy':'sell',qty:1,price:1});
   const t0=cal===HL?H('2026-10-19',0,5):US.dayStart('2026-10-19')+60000;let eq=10000;
   for(let i=0;i<60;i++){const t=t0+i*3*3600000;eq=Math.round(eq*(1+(((i*7919)%13)-7)/400));
    const o={fills:[fill(t,i%3===0)],dayRealized:dm?{key:new Date(t).toISOString().slice(0,10),pnl:-(i%9)*15,until:t+3600000,denom:{value:2000,mode:'basis',source:'x'}}:null};
-   const a=A.step(t,eq,o),b=B.step(t,eq,o);assert.deepEqual(strip(a),b,`step ${i}`);}
+   const a=A.step(t,eq,o),b=B.step(t,eq,o);assert.deepEqual(strip(a),{...b,messages:b.messages.map(m=>m.key)},`step ${i}`);}
   assert.ok(B.all.events.length>0,'시나리오에 중단 포함');
  }
 });
