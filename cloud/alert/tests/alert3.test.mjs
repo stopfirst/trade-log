@@ -1,5 +1,6 @@
 // alert3(trade-alert 2.1.0) 서비스 통합 테스트 — risk_day_data(alert3.sql)·HL userFunding 가짜 응답, 네트워크 없음.
 import test from 'node:test';
+import {fromHtml} from '../src/format.mjs'; // 2.5.1: 텔레그램 HTML(제목 <b>) → plain으로 비교
 import assert from 'node:assert/strict';
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -22,7 +23,7 @@ function world(){
   if(url.endsWith('/rpc/risk_day_data')){w.dayCalls++;if(w.dayMode==='missing')return J({code:'PGRST202',message:'Could not find the function public.risk_day_data(p_token) in the schema cache'},404);
    if(w.dayMode==='down')return J({message:'x'},503);return J({ok:true,version:3,...w.day});}
   if(url.endsWith('/rpc/risk_push')){const p=body.p_payload;w.pushes.push(p);for(const e of p.events||[])w.dbEvents.push({market:e.market,ref:e.ref,kind:e.kind});return J({ok:true});}
-  if(url.includes('api.telegram.org')){w.tg.push(body.text);return J({ok:true,result:{}});}
+  if(url.includes('api.telegram.org')){w.tg.push(fromHtml(body.text));return J({ok:true,result:{}});}
   if(url==='https://api.hyperliquid.xyz/info'){
    switch(body.type){case 'userAbstraction':return J('default');case 'spotClearinghouseState':return J({balances:[{token:0,coin:'USDC',total:'0',hold:'0'}]});
     case 'clearinghouseState':return J({assetPositions:[],marginSummary:{accountValue:w.hlEq},time:Date.now()});case 'perpDexs':return J([null]);
@@ -36,7 +37,7 @@ const F=(tid,time,closedPnl,fee,o={})=>({coin:'BTC',dir:'Close Long',side:'A',sz
 const mk=async(w,x={})=>{const dir=await mkdtemp(path.join(tmpdir(),'ta3-'));const a=new Alerter(env(dir,x),{fetcher:w.fetcher,now:()=>w.now,log:()=>{},sleep:async()=>{}});await a.init();return a;};
 
 test('버전 2.4.0 · DAY_LIMIT_BASIS 기본 realized, equity 허용, 그 밖은 오류',()=>{
- assert.equal(VERSION,'2.5.0');assert.equal(readConfig(env('/tmp')).dayBasis,'realized');assert.equal(readConfig(env('/tmp',{DAY_LIMIT_BASIS:'equity'})).dayBasis,'equity');
+ assert.equal(VERSION,'2.5.1');assert.equal(readConfig(env('/tmp')).dayBasis,'realized');assert.equal(readConfig(env('/tmp',{DAY_LIMIT_BASIS:'equity'})).dayBasis,'equity');
  assert.throws(()=>readConfig(env('/tmp',{DAY_LIMIT_BASIS:'x'})),/CONFIG_INCOMPLETE/);
 });
 
@@ -52,7 +53,7 @@ test('check(): HL 실현(API 체결 + Supabase 수집 체결·펀딩, 중복 제
  let r=await a.check();
  const hl=r.statuses.find(s=>s.market==='HL');const d=hl.periods.day;
  assert.equal(d.basis,'realized');assert.equal(d.pnl,-58.5,'(−41) + (−15.5) + 펀딩 −2');assert.equal(d.startEquity,2000);assert.equal(d.startSource,'전일 마감 2,000.00 USDC');assert.equal(d.budget,60);
- assert.equal(hl.stopped,false);assert.ok(w.tg.some(x=>/⚠️ 하이퍼리퀴드 하루 실현손익 −2\.92%/.test(x)),w.tg.join('\n'));
+ assert.equal(hl.stopped,false);assert.ok(w.tg.some(x=>/^⚠️ 하이퍼리퀴드 · 하루 한도 \d+% 사용\n\n오늘 실현: −2\.92%/.test(x)),w.tg.join('\n'));
  assert.equal(hl.config.boundary,'하루 한도 UTC 00:00(KST 09:00) · 주·월·연속 손실 한국시간 24:00');assert.equal(hl.dayBasis,'realized');
  // 펀딩 −2 추가 → −60.5 → 중단
  w.now+=60000;w.funding.push({time:Date.parse('2026-10-20T01:00:00Z'),hash:'0xg',delta:{type:'funding',coin:'BTC',usdc:'-2',szi:'0.01'}});
@@ -60,14 +61,14 @@ test('check(): HL 실현(API 체결 + Supabase 수집 체결·펀딩, 중복 제
  assert.equal(hl2.stopped,true);assert.equal(hl2.stops[0].until,kstWall('2026-10-21',9));
  const p=w.pushes.at(-1);assert.ok(p.events.some(e=>e.ref==='HL:dayr:2026-10-20'&&e.kind==='stop'));
  const st=p.states.find(s=>s.market==='hl').status;assert.equal(st.periods.day.basis,'realized');assert.ok(st.periods.dayEquity,'자산 변화(참고) 함께 저장');
- assert.ok(w.tg.some(x=>/^⛔ 하이퍼리퀴드 오늘 실현손익 −3\.02% \(−60\.50 USDC\)/.test(x)&&/기준: 전일 마감 2,000\.00 USDC · 체결 −56\.50 USDC \+ 펀딩 −4\.00 USDC/.test(x)&&/참고: 미실현 포함/.test(x)));
- assert.match(a.describe(r.statuses),/오늘\(실현\) −3\.02% .*기준 전일 마감 2,000\.00 USDC · 한도 −3% = −60\.00 USDC/);
+ assert.ok(w.tg.some(x=>/^⛔ 하이퍼리퀴드 거래 중단 · 하루 실현 −3% 도달\n\n오늘 실현: −3\.02% \(−60\.50 USDC\)/.test(x)&&/\n기준: 전일 마감 2,000\.00 USDC\n내역: 체결 −56\.50 USDC \+ 펀딩 −4\.00 USDC/.test(x)&&/\n참고: 미실현 포함/.test(x)));
+ assert.match(a.describe(r.statuses),/오늘   −3\.02% \/ 3%  \(100%\)\n  · 손익 −60\.50 USDC = 체결 −56\.50 USDC \+ 펀딩 −4\.00 USDC\n  · 기준 전일 마감 2,000\.00 USDC · 한도 −60\.00 USDC/);
 });
 
 test('check(): US 키움 일별 실현손익 ÷ 전일 마감 → 중단, 마감 없으면 현재 기준액(키움 총액) 표기',async()=>{
  const w=world();w.day.kw_days=[{date:'2026-10-20',as_of:NOW0-5000,total:'-45.00',count:1}];const a=await mk(w,{ALERT_MARKETS:'US'});
  let r=await a.check();let us=r.statuses[0];
- assert.equal(us.periods.day.pnl,-45);assert.equal(us.periods.day.startSource,'전일 마감 $2,000.00');assert.equal(us.stopped,false);assert.ok(w.tg.some(x=>/🔔 미국주식 하루 실현손익 −2\.25%/.test(x))||w.tg.some(x=>/⚠️ 미국주식 하루 실현손익 −2\.25%/.test(x)));
+ assert.equal(us.periods.day.pnl,-45);assert.equal(us.periods.day.startSource,'전일 마감 $2,000.00');assert.equal(us.stopped,false);assert.ok(w.tg.some(x=>/^(🔔|⚠️) 미국주식 · 하루 한도 \d+% 사용\n\n오늘 실현: −2\.25%/.test(x)));
  w.now+=60000;w.day.kw_days=[{date:'2026-10-20',as_of:w.now-1000,total:'-61',count:2}];r=await a.check();us=r.statuses[0];
  assert.equal(us.stopped,true);assert.equal(us.stops[0].until,etWall('2026-10-20',16));assert.ok(w.pushes.at(-1).events.some(e=>e.ref==='US:dayr:2026-10-20'));
  // 다른 서버: 마감 기록 없음 → 키움 총액 2000(1234.56 + 765.44)
