@@ -35,9 +35,14 @@
 //   기간 고점 대비 하락폭 : 정보 표시만(중단 아님).
 // 주문을 내거나 취소하지 않습니다. 알림 + Supabase 상태(앱 배너) + 위반 기록만.
 import {untilText} from './calendar.mjs';
+import {card,applyText} from './format.mjs';
+// 2.5.1(alert8): 텔레그램 메시지 문구만 카드 형식(제목 · 빈 줄 · '라벨: 값')으로 바꿈. 판정·상태(status)·이벤트·reason은 그대로.
 
 export const MARKET_LABEL={US:'미국주식',HL:'하이퍼리퀴드'};
 const MODE_LABEL={day:'하루',week:'주간',month:'월간'};
+const PERIOD_NAME={day:'오늘',week:'이번 주',month:'이번 달'};
+/** 여러 항목: 1개면 한 줄, 여러 개면 '라벨: n건' + '· 항목' 줄 */
+const listRows=(label,items)=>!items.length?[]:items.length===1?[[label,items[0]]]:[[label,items.length+'건'],...items.map(x=>'· '+x)];
 const KEEP_DAYS=75;
 const round=(x,d=6)=>Math.round(x*10**d)/10**d;
 export const usd=(x,market='US')=>{const s=Math.abs(x).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});return market==='HL'?(x<0?'−':'')+s+' USDC':(x<0?'−':'')+'$'+s;};
@@ -117,11 +122,15 @@ export function step(prev,input){
    events.push({ref:`clear:${s.id}:start:${rs.date}`,kind:'clear',rule:'risk-start',at:now,detail:{stopId:s.id,riskStart:rs.date,label:ruleLabel(s.rule,cfg,s.basis),until:s.until,ended:s.until<=now}});}
   const key=`${market}:riskstart:${rs.date}`;
   if(!st.sent[key]&&!refs.has(key)){st.sent[key]=now;const act=clearedNow.filter(s=>s.until>now);
-   messages.push({key,text:`🔄 ${M} 손실 한도 기준일 ${md(rs.date)} — ${untilText(rs.at,market)}부터 다시 셉니다\n하루·주·월 합계와 연속 손실일에서 그 이전 손익은 빼고 판정합니다.`+(before?`\n${md(rs.date)}부터 적용 · 그 전엔 판정·알림 안 함(기록만)`:'')+(act.length?`\n기준일 이전 손실로 걸린 중단 해제: ${act.map(s=>ruleLabel(s.rule,cfg,s.basis)+' (~ '+untilText(s.until,market)+')').join(', ')}`:'')});}
+   messages.push({key,text:card(`🔄 ${M} · 손실 한도 ${md(rs.date)}부터 새로 셈`,[['한도 적용',applyText(market,rs.day,rs.at)],before?['그 전','판정·알림 안 함 (기록만)']:null,['제외','기준일 이전 손익 (하루·주·월·연속)'],
+    ...listRows('중단 해제',act.map(s=>ruleLabel(s.rule,cfg,s.basis)+' (~ '+untilText(s.until,market)+')'))])});}
  }
  const addStop=(s,text)=>{s.id=sid(s.id);if(rs)s.since=rs.date;if(st.stops.some(x=>x.id===s.id)||refs.has(s.id))return false;if(!(s.until>now))return false;st.stops.push(s);
   events.push({ref:s.id,kind:'stop',rule:s.rule,at:now,detail:{from:s.from,until:s.until,reason:s.reason,pct:s.pct??null,label:ruleLabel(s.rule,cfg,s.basis)}});messages.push({key:s.id,text});return true;};
- const stopText=(s,extra)=>`⛔ ${M} ${extra}\n→ 신규 진입 중단${s.from>now?' ('+untilText(s.from,market)+'부터)':''} ~ ${untilText(s.until,market)}까지\n주문 차단은 하지 않습니다. 앱 상단에 '거래 중단 중'이 표시됩니다.`;
+ const stopText=(s,head,rows=[])=>card(`⛔ ${M} 거래 중단 · ${head}`,[...rows,s.from>now?['시작',untilText(s.from,market)+'부터']:null,['신규 진입 중단',`~ ${untilText(s.until,market)}까지`]],["주문은 막지 않습니다 · 앱 상단에 '거래 중단 중' 표시"]);
+ const amt=(pct,pnl)=>`${pctText(pct)} (${signedUsd(pnl,market)})`;
+ const refRow=ref=>ref?['참고',`미실현 포함 ${amt(ref.pct,ref.pnl)}${ref.flows?' · 입출금 '+signedUsd(ref.flows,market)+' 제외':''} · 판정 제외`]:null;
+ const warnTitle=(ratio,mode,top)=>`${top>=80?'⚠️':'🔔'} ${M} · ${MODE_LABEL[mode]} 한도 ${Math.floor(ratio*100)}% 사용`;
 
  // 1) 하루 레코드(시작 자산) 만들기 + 직전 거래일 마감 처리 ------------------------------------------
  const finalized=[];
@@ -184,7 +193,7 @@ export function step(prev,input){
    fr['close_'+mode]=m.pct;
    if(!sameP)continue; // 기간 마지막 거래일 마감 판정 → 남은 거래일 없음
    const s={id:`${market}:${mode}:${m.key}`,rule:mode,from:cal.dayStart(cal.next(D)),until:cal.periodEnd(D,mode),pct:m.pct,reason:`${MODE_LABEL[mode]} ${pctText(m.pct)} (마감 ${cal.label(D)})`,createdAt:now};
-   addStop(s,stopText(s,`${MODE_LABEL[mode]} 손실 ${pctText(m.pct)} (${signedUsd(m.pnl,market)}, 시작 ${usd(m.startEquity,market)}${m.cut?' · 기준일 '+md(m.cut)+'부터':''}) · ${MODE_LABEL[mode]} 한도 −${lim}% 마감 판정`));
+   addStop(s,stopText(s,`${MODE_LABEL[mode]} −${lim}% (마감 판정)`,[[PERIOD_NAME[mode],amt(m.pct,m.pnl)],['시작 자산',usd(m.startEquity,market)+(m.cut?' · 기준일 '+md(m.cut)+'부터':'')]]));
   }
   // 연속 손실
   if(cfg.streakDays>0){
@@ -195,7 +204,7 @@ export function step(prev,input){
     let last=cal.next(D);for(let i=1;i<cfg.streakStopDays;i++)last=cal.next(last);
     const s={id:`${market}:streak:${D}`,rule:'streak',from:cal.dayStart(cal.next(D)),until:cal.dayEnd(last),reason:`${n}일 연속 손실일(각 ≤ −${cfg.streakLossPct}%) · 마지막 ${cal.label(D)}`,createdAt:now};
     if(cfg.streakStopDays>0){const recent=days.slice(0,n).map(r=>`${cal.label(r.day)} ${pctText(r.pct)}`).reverse().join(', ');
-     addStop(s,stopText(s,`${n}일 연속 손실일 (${recent})\n다음 ${cfg.streakStopDays}거래일(${cal.label(cal.next(D))}${cfg.streakStopDays>1?'~'+cal.label(last):''}) 쉬기`));}
+     addStop(s,stopText(s,`${n}일 연속 손실일`,[['손실일',recent],['쉬는 날',`다음 ${cfg.streakStopDays}거래일 (${cal.label(cal.next(D))}${cfg.streakStopDays>1?'~'+cal.label(last):''})`]]));}
     st.streakResetAfter=D;
    }
   }
@@ -218,14 +227,14 @@ export function step(prev,input){
    if(mode!=='day'&&prMode)continue; // v1.5: 주·월은 아래 실현손익 기준 // v1.3: 하루 판정은 아래 실현손익 기준
    if(m.pct<=-lim+1e-9){
     if(mode==='day'){const s={id:`${market}:day:${today}`,rule:'day',from:now,until:cal.dayEnd(today),pct:m.pct,reason:`하루 ${pctText(m.pct)} (${cal.label(today)})`,createdAt:now};
-     addStop(s,stopText(s,`오늘 손실 ${pctText(m.pct)} (${signedUsd(m.pnl,market)}, 시작 ${usd(m.startEquity,market)}) · 하루 한도 −${lim}% 도달`));}
+     addStop(s,stopText(s,`하루 −${lim}% 도달`,[['오늘',amt(m.pct,m.pnl)],['시작 자산',usd(m.startEquity,market)]]));}
     else{const s={id:`${market}:${mode}-intraday:${today}`,rule:mode+'-intraday',from:now,until:cal.dayEnd(today),pct:m.pct,reason:`${MODE_LABEL[mode]} ${pctText(m.pct)} 장중 도달 (${cal.label(today)})`,createdAt:now};
      const covered=activeAt(st.stops,now).some(x=>x.rule===mode&&x.until>=s.until);
-     if(!covered)addStop(s,stopText(s,`${MODE_LABEL[mode]} 손실 ${pctText(m.pct)} (${signedUsd(m.pnl,market)}, 시작 ${usd(m.startEquity,market)}${m.cut?' · 기준일 '+md(m.cut)+'부터':''}) · ${MODE_LABEL[mode]} 한도 −${lim}% 장중 도달\n오늘 마감 때도 −${lim}% 이하이면 다음 거래일부터 ${mode==='week'?'이번 주':'이번 달'} 끝까지 중단`));}
+     if(!covered)addStop(s,stopText(s,`${MODE_LABEL[mode]} −${lim}% 장중 도달`,[[PERIOD_NAME[mode],amt(m.pct,m.pnl)],['시작 자산',usd(m.startEquity,market)+(m.cut?' · 기준일 '+md(m.cut)+'부터':'')],['마감 판정',`−${lim}% 이하면 다음 거래일부터 ${PERIOD_NAME[mode]} 끝까지`]]));}
    }else if(m.ratio!==null){
     const crossed=cfg.warn.filter(th=>m.ratio*100>=th-1e-9&&th<100);
     if(crossed.length){const top=Math.max(...crossed);const keys=crossed.map(th=>`${market}:warn:${mode}:${m.key}${m.cut?'@'+m.cut:''}:${th}`);
-     if(keys.some(k=>!st.sent[k])){for(const k of keys)st.sent[k]=now;messages.push({key:keys.at(-1),text:`${top>=80?'⚠️':'🔔'} ${M} ${MODE_LABEL[mode]} ${pctText(m.pct)} (${signedUsd(m.pnl,market)}) · 한도 −${lim}%의 ${Math.floor(m.ratio*100)}%`});}}
+     if(keys.some(k=>!st.sent[k])){for(const k of keys)st.sent[k]=now;messages.push({key:keys.at(-1),text:card(warnTitle(m.ratio,mode,top),[[PERIOD_NAME[mode],amt(m.pct,m.pnl)],['한도',`−${lim}%`]])});}}
    }
   }
   st.lastObs={t:eq.t,equity:eq.value,source:eq.source};
@@ -243,16 +252,15 @@ export function step(prev,input){
    const bt=basisText(den,market);
    periods.day={mode:'day',basis:'realized',key:D.key,startEquity:base,startSource:bt,startDay:den.key??null,denomMode:den.mode,denomSource:den.source??null,
     pnl,pct,flows:0,limit:lim,budget,ratio,parts:D.parts||null,source:D.source||null,ref,until:D.until??null};
-   const refTxt=ref?`\n참고: 미실현 포함 자산 변화 ${pctText(ref.pct)} (${signedUsd(ref.pnl,market)}${ref.flows?' · 입출금 '+signedUsd(ref.flows,market)+' 제외':''}) — 판정에는 쓰지 않음`:'';
-   const partTxt=market==='HL'&&D.parts?` · 체결 ${signedUsd(D.parts.trades,market)} + 펀딩 ${signedUsd(D.parts.funding,market)}`:'';
+   const dayRows=[['오늘 실현',amt(pct,pnl)],['한도',`−${lim}% (${usd(-budget,market)})`],['기준',bt],market==='HL'&&D.parts?['내역',`체결 ${signedUsd(D.parts.trades,market)} + 펀딩 ${signedUsd(D.parts.funding,market)}`]:null,refRow(ref)];
    const dl=dayLabel(D.key,market);
    if(lim>0&&pnl<0&&pnl<=-budget+1e-9){
     const s={id:`${market}:dayr:${D.key}`,rule:'day',from:now,until:D.until,pct,reason:`하루 실현 ${pctText(pct)} (${dl} · 기준 ${bt})`,createdAt:now};
-    addStop(s,stopText(s,`오늘 실현손익 ${pctText(pct)} (${signedUsd(pnl,market)}) · 하루 한도 −${lim}% (${usd(-budget,market)}) 도달\n기준: ${bt}${partTxt}${refTxt}`));
+    addStop(s,stopText(s,`하루 실현 −${lim}% 도달`,dayRows));
    }else if(ratio!==null){
     const crossed=cfg.warn.filter(th=>ratio*100>=th-1e-9&&th<100);
     if(crossed.length){const top=Math.max(...crossed);const keys=crossed.map(th=>ck(`${market}:warn:dayr:${D.key}`)+`:${th}`);
-     if(keys.some(k=>!st.sent[k])){for(const k of keys)st.sent[k]=now;messages.push({key:keys.at(-1),text:`${top>=80?'⚠️':'🔔'} ${M} 하루 실현손익 ${pctText(pct)} (${signedUsd(pnl,market)}) · 한도 −${lim}% (${usd(-budget,market)})의 ${Math.floor(ratio*100)}%\n기준: ${bt}${partTxt}${refTxt}`});}}
+     if(keys.some(k=>!st.sent[k])){for(const k of keys)st.sent[k]=now;messages.push({key:keys.at(-1),text:card(warnTitle(ratio,'day',top),dayRows)});}}
    }
   }else periods.day={mode:'day',basis:'realized',key:D?.key??null,startEquity:null,startSource:null,pnl:D&&Number.isFinite(D.pnl)?round(D.pnl):null,pct:null,flows:0,limit:cfg.limits.day,ratio:null,ref:null,missing:D?'denominator':'data'};
  }
@@ -275,20 +283,20 @@ export function step(prev,input){
    const sumOf=(mode,key)=>{let p=0,n=0;for(const r of R.rows||[]){if(rc.periodKey(r.label,mode)!==rc.periodKey(key,mode)||(startKey&&r.label<startKey))continue;p+=Number(r.pnl)||0;n++;}return {pnl:round(p),n};};
    const rcount=(upto,ignoreReset=false)=>{const ks=Object.values(st.rp.days).filter(r=>r.final&&r.key<=upto&&r.trades>0&&r.pct!==null&&!r.preStart&&(ignoreReset||!st.rp.streakResetAfter||r.key>st.rp.streakResetAfter)).sort((a,b)=>b.key.localeCompare(a.key));let n=0;const list=[];for(const r of ks){if(r.loss){n++;list.push(r);}else break;}return {n,list};};
    const cutOf=mode=>startKey&&rc.periodKey(startKey,mode)===rc.periodKey(K0,mode)&&startKey>rc.firstOf(K0,mode)?rs.date:null;
-   const refTxt=ref=>ref&&(ref.pnl||ref.flows)?`\n참고: 미실현 포함 자산 변화 ${pctText(ref.pct)} (${signedUsd(ref.pnl,market)}${ref.flows?' · 입출금 '+signedUsd(ref.flows,market)+' 제외':''}) — 판정에는 쓰지 않음`:'';
+   const refP=ref=>ref&&(ref.pnl||ref.flows)?refRow(ref):null;
    const refOf=mode=>{const q=periods[mode+'Equity'];return q&&q.pct!==null&&Number.isFinite(q.pct)?{pnl:q.pnl,pct:q.pct,flows:q.flows,startEquity:q.startEquity,from:'server'}:null;};
    // a) 실현 키가 바뀐 직후: 직전 키(마감) 주·월 판정 + 연속 손실
    const K=rc.prev(K0);
-   const denomLines=P=>['week','month'].map(m=>{const x=P[m];if(!x||!x.startSource)return '';return `\n${m==='week'?'이번 주':'이번 달'} 기준: ${x.startSource}${x.limit>0&&x.budget?' · 한도 −'+x.limit+'% = '+usd(-x.budget,market):''}${x.pct!==null&&Number.isFinite(x.pct)?' · 지금 실현 '+pctText(x.pct):''}`;}).join('');
+   const denomRows=P=>['week','month'].map(m=>{const x=P[m];if(!x||!x.startSource)return null;return [`${PERIOD_NAME[m]} 기준`,`${x.startSource}${x.limit>0&&x.budget?' · 한도 −'+x.limit+'% = '+usd(-x.budget,market):''}${x.pct!==null&&Number.isFinite(x.pct)?' · 지금 실현 '+pctText(x.pct):''}`];});
    if(!before&&st.rp.lastKey&&st.rp.lastKey<K0&&(!startKey||K>=startKey)){
     for(const mode of ['week','month']){const lim=cfg.limits[mode];if(!(lim>0))continue;const dm=pden(mode,K);if(!dm)continue;const S=sumOf(mode,K),pct=round(S.pnl/dm.value*100,4),budget=round(dm.value*lim/100);
      if(!(S.pnl<0&&S.pnl<=-budget+1e-9)||rc.periodKey(rc.next(K),mode)!==rc.periodKey(K,mode))continue;
      const s={id:`${market}:${mode}r:${rc.periodKey(K,mode)}`,rule:mode,basis:'realized',from:rc.dayStart(rc.next(K)),until:rc.periodEnd(K,mode),pct,reason:`${MODE_LABEL[mode]} 실현 ${pctText(pct)} (마감 ${dl(K)} · 기준 ${pbt(dm)})`,createdAt:now};
-     addStop(s,stopText(s,`${MODE_LABEL[mode]} 실현손익 ${pctText(pct)} (${signedUsd(S.pnl,market)}) · ${MODE_LABEL[mode]} 한도 −${lim}% (${usd(-budget,market)}) 마감 판정\n기준: ${pbt(dm)}${cutOf(mode)?' · 기준일 '+md(cutOf(mode))+'부터':''}`));}
+     addStop(s,stopText(s,`${MODE_LABEL[mode]} 실현 −${lim}% (마감 판정)`,[[PERIOD_NAME[mode]+' 실현',amt(pct,S.pnl)],['한도',`−${lim}% (${usd(-budget,market)})`],['기준',pbt(dm)+(cutOf(mode)?' · 기준일 '+md(cutOf(mode))+'부터':'')]]));}
     if(cfg.streakDays>0){const c=rcount(K);if(c.n>=cfg.streakDays){let last=rc.next(K);for(let i=1;i<cfg.streakStopDays;i++)last=rc.next(last);
      const s={id:`${market}:streakr:${K}`,rule:'streak',basis:'realized',from:rc.dayStart(rc.next(K)),until:rc.dayEnd(last),reason:`${c.n}일 연속 실현 손실일(각 ≤ −${cfg.streakLossPct}%) · 마지막 ${dl(K)}`,createdAt:now};
      if(cfg.streakStopDays>0){const recent=c.list.map(r=>`${dl(r.key)} ${pctText(r.pct)}`).reverse().join(', ');
-      addStop(s,stopText(s,`${c.n}일 연속 실현 손실일 (${recent})\n다음 ${cfg.streakStopDays}거래일(${dl(rc.next(K))}${cfg.streakStopDays>1?'~'+dl(last):''}) 쉬기`));}
+      addStop(s,stopText(s,`${c.n}일 연속 실현 손실일`,[['손실일',recent],['쉬는 날',`다음 ${cfg.streakStopDays}거래일 (${dl(rc.next(K))}${cfg.streakStopDays>1?'~'+dl(last):''})`]]));}
      st.rp.streakResetAfter=K;}}
    }
    st.rp.lastKey=K0;
@@ -308,10 +316,10 @@ export function step(prev,input){
      events.push({ref:`clear:${s.id}:realized`,kind:'clear',rule:'basis-realized',at:now,detail:{stopId:s.id,label:ruleLabel(s.rule,cfg),until:s.until,ended:s.until<=now,basis:'realized'}});}
     const key=`${market}:basis:realized`;
     if(!st.sent[key]&&!refs.has(key)){st.sent[key]=now;const act=clearedBasis.filter(s=>s.until>now),ended=clearedBasis.filter(s=>s.until<=now);const W=P.week,Mo=P.month;
-     messages.push({key,text:`🔄 ${M} 손실 한도 판정 ${v16?'v1.6':'v1.5'} — 주·월 한도와 연속 손실일을 실현손익 기준으로 판정합니다(앱과 같은 기준)\n주·월 % = 기간 실현손익 ÷ ${v16?'기간 시작 직전 마감 잔액(없으면 현재 기준액)':(bt||'현재 기준액')} · 입출금은 손실로 잡지 않습니다(미실현 포함 변동은 참고만).`+(v16?denomLines(P):'')
-      +(W&&W.pct!==null?`\n지금: 이번 주 실현 ${pctText(W.pct)} (${signedUsd(W.pnl,market)})`+(Mo&&Mo.pct!==null?` · 이번 달 ${pctText(Mo.pct)} (${signedUsd(Mo.pnl,market)})`:''):'')
-      +(act.length?`\n새 기준으로 성립하지 않는 중단 해제: ${act.map(s=>ruleLabel(s.rule,cfg)+' (~ '+untilText(s.until,market)+')').join(', ')}`:'')
-      +(ended.length?`\n오늘 재시작 첫날(위험 절반)도 없앱니다: ${ended.map(s=>ruleLabel(s.rule,cfg)).join(', ')}`:'')});}
+     messages.push({key,text:card(`🔄 ${M} · 손실 한도 판정 ${v16?'v1.6':'v1.5'} — 주·월·연속 손실 실현손익 기준`,[['주·월 %',`기간 실현손익 ÷ ${v16?'기간 시작 직전 마감 잔액(없으면 현재 기준액)':(bt||'현재 기준액')}`],['입출금','손실 아님 (미실현 포함 변동은 참고만)'],...(v16?denomRows(P):[]),
+      W&&W.pct!==null?['지금',`이번 주 실현 ${amt(W.pct,W.pnl)}`+(Mo&&Mo.pct!==null?` · 이번 달 ${amt(Mo.pct,Mo.pnl)}`:'')]:null,
+      ...listRows('중단 해제',act.map(s=>ruleLabel(s.rule,cfg)+' (~ '+untilText(s.until,market)+')')),
+      ended.length?['재시작 절반 없앰',ended.map(s=>ruleLabel(s.rule,cfg)).join(', ')]:null])});}
    }
    const firstReal=st.periodBasis!=='realized'&&!before;
    st.periodBasis='realized';
@@ -325,9 +333,9 @@ export function step(prev,input){
     const key=`${market}:denom:period-start`;
     if(!st.sent[key]&&!refs.has(key)){st.sent[key]=now;
      if(!firstReal){const act=cl.filter(s=>s.until>now),ended=cl.filter(s=>s.until<=now);
-      messages.push({key,text:`🔄 ${M} 손실 한도 판정 v1.6 — 주·월 한도 분모 = 기간 시작 직전 마감 잔액(없으면 현재 기준액) · 하루 한도(전일 마감)와 같은 방식, 기간 중 입출금은 분모를 바꾸지 않습니다`+denomLines(P)
-       +(act.length?`\n새 분모로 성립하지 않는 중단 해제: ${act.map(s=>ruleLabel(s.rule,cfg,'realized')+' (~ '+untilText(s.until,market)+')').join(', ')}`:'')
-       +(ended.length?`\n오늘 재시작 첫날(위험 절반)도 없앱니다: ${ended.map(s=>ruleLabel(s.rule,cfg,'realized')).join(', ')}`:'')});}}
+      messages.push({key,text:card(`🔄 ${M} · 손실 한도 판정 v1.6 — 주·월 분모 변경`,[['주·월 분모','기간 시작 직전 마감 잔액 (없으면 현재 기준액)'],['입출금','분모를 바꾸지 않음'],...denomRows(P),
+       ...listRows('중단 해제',act.map(s=>ruleLabel(s.rule,cfg,'realized')+' (~ '+untilText(s.until,market)+')')),
+       ended.length?['재시작 절반 없앰',ended.map(s=>ruleLabel(s.rule,cfg,'realized')).join(', ')]:null])});}}
    }
    if(v16)st.periodDenom='start-close';else if(st.periodDenom)delete st.periodDenom;
    // d) 장중 판정(실현)
@@ -335,11 +343,11 @@ export function step(prev,input){
     if(x.pnl<0&&x.pnl<=-x.budget+1e-9){
      const s={id:`${market}:${mode}r-intraday:${K0}`,rule:mode+'-intraday',basis:'realized',from:now,until:rc.dayEnd(K0),pct:x.pct,reason:`${MODE_LABEL[mode]} 실현 ${pctText(x.pct)} 장중 도달 (${dl(K0)} · 기준 ${x.startSource})`,createdAt:now};
      const covered=activeAt(st.stops,now).some(y=>(y.rule===mode||y.rule===mode+'-intraday')&&y.until>=s.until);
-     if(!covered)addStop(s,stopText(s,`${MODE_LABEL[mode]} 실현손익 ${pctText(x.pct)} (${signedUsd(x.pnl,market)}) · ${MODE_LABEL[mode]} 한도 −${lim}% (${usd(-x.budget,market)}) 장중 도달\n기준: ${x.startSource}${x.cut?' · 기준일 '+md(x.cut)+'부터':''}\n오늘 마감 때도 −${lim}% 이하이면 다음 거래일부터 ${mode==='week'?'이번 주':'이번 달'} 끝까지 중단${refTxt(x.ref)}`));
+     if(!covered)addStop(s,stopText(s,`${MODE_LABEL[mode]} 실현 −${lim}% 장중 도달`,[[PERIOD_NAME[mode]+' 실현',amt(x.pct,x.pnl)],['한도',`−${lim}% (${usd(-x.budget,market)})`],['기준',x.startSource+(x.cut?' · 기준일 '+md(x.cut)+'부터':'')],['마감 판정',`−${lim}% 이하면 다음 거래일부터 ${PERIOD_NAME[mode]} 끝까지`],refP(x.ref)]));
     }else if(x.ratio!==null){
      const crossed=cfg.warn.filter(th=>x.ratio*100>=th-1e-9&&th<100);
      if(crossed.length){const top=Math.max(...crossed);const keys=crossed.map(th=>`${market}:warn:${mode}r:${x.key}${x.cut?'@'+x.cut:''}:${th}`);
-      if(keys.some(k=>!st.sent[k])){for(const k of keys)st.sent[k]=now;messages.push({key:keys.at(-1),text:`${top>=80?'⚠️':'🔔'} ${M} ${MODE_LABEL[mode]} 실현손익 ${pctText(x.pct)} (${signedUsd(x.pnl,market)}) · 한도 −${lim}% (${usd(-x.budget,market)})의 ${Math.floor(x.ratio*100)}%\n기준: ${x.startSource}${refTxt(x.ref)}`});}}
+      if(keys.some(k=>!st.sent[k])){for(const k of keys)st.sent[k]=now;messages.push({key:keys.at(-1),text:card(warnTitle(x.ratio,mode,top),[[PERIOD_NAME[mode]+' 실현',amt(x.pct,x.pnl)],['한도',`−${lim}% (${usd(-x.budget,market)})`],['기준',x.startSource],refP(x.ref)])});}}
     }}
    periods.week=P.week;periods.month=P.month;
   }else{for(const mode of ['week','month'])periods[mode]={mode,basis:'realized',key:null,startEquity:null,startSource:null,pnl:null,pct:null,flows:0,limit:cfg.limits[mode],ratio:null,ref:null,missing:'data'};
@@ -347,13 +355,15 @@ export function step(prev,input){
  }else if(st.periodBasis==='realized')st.periodBasis='equity';
 
  // 4) 중단 중 신규 진입 = 규칙 위반 -------------------------------------------------------------------
- const violations=[];
+ const violations=[],vGroups=[];
  for(const f of fills){if(!f.entry)continue;const ref=`${market}:viol:${f.key}`;if(refs.has(ref)||st.sent[ref])continue;
   const hit=activeAt(st.stops,f.t);if(!hit.length)continue;const s=hit.sort((a,b)=>b.until-a.until)[0];
   st.sent[ref]=now;violations.push(f);
   events.push({ref,kind:'violation',rule:s.rule,at:f.t,detail:{symbol:f.symbol,key:f.key,side:f.side,qty:f.qty,price:f.price,t:f.t,stopId:s.id,until:s.until,label:ruleLabel(s.rule,cfg,s.basis),tid:f.tid??null,orderDate:f.orderDate??null,etDate:f.etDate??null}});
-  messages.push({key:ref,text:`🚫 ${M} 거래 중단 중 신규 진입 감지 · ${f.symbol} ${f.desc||''} (${untilText(f.t,'HL').replace(/ KST$/,'')} KST)\n사유: ${ruleLabel(s.rule,cfg,s.basis)} · 중단 ~ ${untilText(s.until,market)}\n일지에 '규칙 위반'으로 표시합니다.`});
+  const dir=violDir(f),g=vGroups.find(x=>x.symbol===f.symbol&&x.dir===dir&&x.stop.id===s.id&&Math.abs(f.t-x.t0)<=60000);
+  if(g){g.fills.push(f);}else vGroups.push({ref,symbol:f.symbol,dir,stop:s,t0:f.t,fills:[f]});
  }
+ for(const g of vGroups)messages.push({key:g.ref,text:violationText(g,M,market,cfg)});
 
  // 5) 재시작 첫날(위험 절반) ---------------------------------------------------------------------------
  const live=st.stops.filter(s=>!s.cleared);
@@ -362,9 +372,9 @@ export function step(prev,input){
  if(!active.length&&!before){const ended=live.filter(s=>s.until<=now).sort((a,b)=>b.until-a.until)[0];
   if(ended){const hd=cal.dayOf(ended.until);if(hd===today&&cfg.restartFactor<1){half={active:true,day:today,factor:cfg.restartFactor,afterStop:ended.id,reason:`${ruleLabel(ended.rule,cfg,ended.basis)} 중단이 끝난 뒤 첫 거래일`};
    const key=`${market}:restart:${today}`;if(!st.sent[key]&&!refs.has(key)){st.sent[key]=now;
-    const dr=cfg.defaultRisk>0?` · 1회 위험 ${round(cfg.defaultRisk*cfg.restartFactor,4)}% (설정 ${cfg.defaultRisk}%의 ${Math.round(cfg.restartFactor*100)}%)`:` · 1회 위험 ${Math.round(cfg.restartFactor*100)}%로 축소`;
+    const dr=cfg.defaultRisk>0?`${round(cfg.defaultRisk*cfg.restartFactor,4)}% (설정 ${cfg.defaultRisk}%의 ${Math.round(cfg.restartFactor*100)}%)`:`${Math.round(cfg.restartFactor*100)}%로 축소`;
     events.push({ref:key,kind:'restart',rule:ended.rule,at:now,detail:{day:today,factor:cfg.restartFactor,afterStop:ended.id}});
-    messages.push({key,text:`✅ ${M} 거래 중단 해제 · 오늘 ${cal.label(today)}은 재시작 첫날${dr}\n앱 포지션 계산기에 절반 위험이 자동 적용됩니다.`});}}}}
+    messages.push({key,text:card(`✅ ${M} · 거래 중단 해제`,[['오늘',`${cal.label(today)} 재시작 첫날`],['1회 위험',dr],['해제된 중단',ruleLabel(ended.rule,cfg,ended.basis)]],['앱 포지션 계산기에 절반 위험이 자동 적용됩니다.'])});}}}}
 
  // 6) 정리 + 상태 요약(앱 배너) ----------------------------------------------------------------------
  const cutDay=new Date(now-KEEP_DAYS*86400000).toISOString().slice(0,10);
@@ -394,3 +404,18 @@ export function step(prev,input){
 
 // 수동 중단 해제(.env 잘못 등). 해제한 id 목록 반환.
 export function clearStops(prev,now){const st=structuredClone(prev);const ids=[];for(const s of st.stops)if(!s.cleared&&s.until>now){s.cleared=now;ids.push(s.id);}return {state:st,ids};}
+
+// ---- 2.5.1 위반 진입 알림 묶음(알림 문구만) ----------------------------------------------------------
+/** 방향 라벨: HL desc 'Open Long 156 @ 0.79269' → 'Open Long', US '매수 10주 @ 100' → '매수' */
+export function violDir(f){const t=String(f.desc||'').split(/\s+/).filter(Boolean),out=[];for(const w of t){if(/^[−+-]?\d/.test(w)||w==='@')break;out.push(w);}return out.join(' ')||(f.side==='buy'?'Buy':'Sell');}
+const numTxt=x=>{if(!Number.isFinite(x))return '';const r=Math.round(x*1e8)/1e8;return String(r);};
+export function violationText(g,M,market,cfg){
+ const F=g.fills,s=g.stop,unit=market==='US'?'주':'';
+ const qty=Math.round(F.reduce((a,f)=>a+(Number(f.qty)||0),0)*1e8)/1e8;
+ const px=[...new Set(F.map(f=>Number(f.price)).filter(Number.isFinite))];
+ let pxt='';if(px.length===1)pxt=' @ '+numTxt(px[0]);else if(px.length>1){const w=F.reduce((a,f)=>a+(Number(f.qty)||0)*(Number(f.price)||0),0)/(qty||1);pxt=' @ 평균 '+numTxt(Number(w.toPrecision(6)));}
+ const t0=Math.min(...F.map(f=>f.t)),t1=Math.max(...F.map(f=>f.t));
+ const tt=untilText(t0,'HL'),t1t=untilText(t1,'HL');const when=tt===t1t?tt:tt.replace(/ KST$/,'')+'~'+t1t.slice(t1t.indexOf(' ')+1);
+ const fillTxt=F.length>1?`총 수량 ${numTxt(qty)}${unit} · 체결 ${F.length}건${pxt}`:`${numTxt(qty)}${unit}${pxt}`;
+ return card(`🚫 ${M} · 거래 중단 중 신규 진입`,[['종목',`${g.symbol}${g.dir?' '+g.dir:''}`],['체결',fillTxt],['시각',when],['사유',ruleLabel(s.rule,cfg,s.basis)],['중단',`~ ${untilText(s.until,market)}`]],["일지에 '규칙 위반'으로 표시합니다."]);
+}
