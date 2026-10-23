@@ -65,11 +65,11 @@ test('하루 −3%: 장중 도달 즉시 그날 24:00 KST까지 중단, 중복 �
  r=R.step(H('2026-10-13',10,0),9820);assert.ok(r.messages.some(m=>/🔔|⚠️/.test(m.text)),'50% 사전 경고');assert.equal(r.status.stopped,false);
  r=R.step(H('2026-10-13',11,0),9699);
  assert.equal(r.status.stopped,true);assert.equal(r.status.stops[0].rule,'day');assert.equal(r.status.stops[0].until,H('2026-10-14',0));
- assert.match(r.messages.find(m=>m.text.startsWith('⛔')).text,/⛔ 하이퍼리퀴드 오늘 손실 −3\.01%[\s\S]*~ 10\/14\(수\) 00:00 KST까지/);
+ assert.match(r.messages.find(m=>m.text.startsWith('⛔')).text,/^⛔ 하이퍼리퀴드 거래 중단 · 하루 −3% 도달\n\n오늘: −3\.01%[\s\S]*\n신규 진입 중단: ~ 10\/14\(수\) 00:00 KST까지/);
  r=R.step(H('2026-10-13',11,1),9500);assert.equal(r.messages.filter(m=>m.text.startsWith('⛔')).length,0,'같은 날 중복 없음');
  r=R.step(H('2026-10-14',0,1),9500);
  assert.equal(r.status.stopped,false);assert.equal(r.status.halfRisk.active,true);assert.equal(r.status.halfRisk.factor,0.5);
- assert.match(r.messages.at(-1).text,/재시작 첫날 · 1회 위험 0\.5% \(설정 1%의 50%\)/);
+ assert.match(r.messages.at(-1).text,/^✅ 하이퍼리퀴드 · 거래 중단 해제\n\n오늘: 10\/14\(수\) 재시작 첫날\n1회 위험: 0\.5% \(설정 1%의 50%\)/);
  const d13=R.state.days['2026-10-13'];assert.equal(d13.final,true);assert.equal(d13.endEquity,9500);assert.equal(d13.pct,-5);
  r=R.step(H('2026-10-15',0,1),9500);assert.equal(r.status.halfRisk.active,false,'절반 위험은 첫 거래일만');
 });
@@ -90,7 +90,7 @@ test('주 −6%: 장중 도달 → 그날 끝까지, 마감에도 −6% 이하 �
  R.step(H('2026-10-13',0,1),9700);                                                // 화요일 시작 9700
  let r=R.step(H('2026-10-13',12),9390);                                           // 주 −6.1% 장중
  assert.deepEqual(r.status.stops.map(s=>s.rule),['week-intraday']);assert.equal(r.status.stops[0].until,H('2026-10-14',0));
- assert.match(r.messages.at(-1).text,/주간 손실 −6\.10%[\s\S]*장중 도달[\s\S]*다음 거래일부터 이번 주 끝까지/);
+ assert.match(r.messages.at(-1).text,/주간 −6% 장중 도달\n\n이번 주: −6\.10%[\s\S]*\n마감 판정: −6% 이하면 다음 거래일부터 이번 주 끝까지/);
  R.step(H('2026-10-13',23,59),9380);
  r=R.step(H('2026-10-14',0,1),9380);                                              // 마감 판정 −6.2%
  const wk=r.status.stops.find(s=>s.rule==='week');assert.ok(wk,'공식 주간 중단');assert.equal(wk.from,H('2026-10-14',0));assert.equal(wk.until,H('2026-10-19',0),'일요일 24:00 KST(=다음 월요일 00:00)까지');
@@ -137,7 +137,7 @@ test('연속 손실: ≤−0.5%만 손실일, 거래 없는 날은 건너뜀, 3�
  R.step(H('2026-10-11',23,59),9600,{fills:[fill('2026-10-11',3)]});
  r=R.step(H('2026-10-12',0,1),9600,{fills:[fill('2026-10-11',3)]});
  const s=r.status.stops.find(x=>x.rule==='streak');assert.ok(s,'연속 손실 중단');assert.equal(s.from,H('2026-10-12',0));assert.equal(s.until,H('2026-10-13',0));
- assert.match(r.messages.find(m=>m.text.includes('연속 손실일')).text,/3일 연속 손실일 \(10\/09\(금\) −0\.61%, 10\/10\(토\) −0\.52%, 10\/11\(일\) −0\.52%\)/);
+ assert.match(r.messages.find(m=>m.text.includes('연속 손실일')).text,/거래 중단 · 3일 연속 손실일\n\n손실일: 10\/09\(금\) −0\.61%, 10\/10\(토\) −0\.52%, 10\/11\(일\) −0\.52%/);
  assert.equal(r.status.streak.count,0,'발동 후 카운트 초기화');
  r=R.step(H('2026-10-13',0,1),9600);assert.equal(r.status.halfRisk.active,true);
 });
@@ -163,7 +163,7 @@ test('중단 중 신규 진입 → 위반 알림·기록, 청산은 위반 아�
  let r=R.step(H('2026-10-13',12,1),9600,{fills:fills.slice(0,2)});
  assert.equal(r.events.filter(e=>e.kind==='violation').length,1);const v=r.events.find(e=>e.kind==='violation');
  assert.equal(v.detail.symbol,'BTC');assert.equal(v.detail.tid,1);assert.equal(v.rule,'day');
- assert.match(r.messages.find(m=>m.text.startsWith('🚫')).text,/거래 중단 중 신규 진입 감지 · BTC Open Long[\s\S]*규칙 위반/);
+ assert.match(r.messages.find(m=>m.text.startsWith('🚫')).text,/^🚫 하이퍼리퀴드 · 거래 중단 중 신규 진입\n\n종목: BTC Open Long\n체결: 0\.01 @ 60000\n[\s\S]*규칙 위반/);
  r=R.step(H('2026-10-13',12,2),9600,{fills:fills.slice(0,2)});assert.equal(r.events.filter(e=>e.kind==='violation').length,0,'중복 없음');
  r=R.step(H('2026-10-14',1,1),9600,{fills});assert.equal(r.events.filter(e=>e.kind==='violation').length,0);
 });
