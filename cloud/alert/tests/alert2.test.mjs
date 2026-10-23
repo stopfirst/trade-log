@@ -1,5 +1,6 @@
 // alert2 서비스 통합 테스트(네트워크 없음: Supabase·텔레그램·Hyperliquid 모두 가짜 응답).
 import test from 'node:test';
+import {fromHtml} from '../src/format.mjs'; // 2.5.1: 텔레그램 HTML(제목 <b>) → plain으로 비교
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -30,7 +31,7 @@ function world(){
    acct_us:[],hl_address:ADDR,journal:{US:{revision:1,unchanged:body.p_us_revision===1,defaultRisk:1},HL:{revision:1,unchanged:body.p_hl_revision===1,defaultRisk:2}},
    risk:{state:w.dbState,events:w.dbEvents,flows:w.dbFlows}});
   if(url.endsWith('/rpc/risk_push')){const p=body.p_payload;w.pushes.push(p);for(const e of p.events||[])w.dbEvents.push({market:e.market,ref:e.ref,kind:e.kind});for(const f of p.flows||[])w.dbFlows.push(f);return J({ok:true});}
-  if(url.includes('api.telegram.org')){w.tg.push(body.text);return J({ok:true,result:{}});}
+  if(url.includes('api.telegram.org')){w.tg.push(fromHtml(body.text));return J({ok:true,result:{}});}
   if(url==='https://api.hyperliquid.xyz/info'){
    switch(body.type){case 'userAbstraction':return J('default');case 'spotClearinghouseState':return J({balances:[{token:0,coin:'USDC',total:'0',hold:'0'}]});
     case 'clearinghouseState':return J({assetPositions:[],marginSummary:{accountValue:w.hlEq},time:Date.now()});case 'perpDexs':return J([null]);
@@ -51,13 +52,13 @@ test('check(): HL 하루 −3% → 중단 상태 저장·알림, 중단 중 진�
  w.now+=60000;w.hlEq='9650';r=await a.check();
  const hl2=r.statuses.find(s=>s.market==='HL');assert.equal(hl2.stopped,true);assert.equal(hl2.stops[0].until,Date.parse('2026-10-13T15:00:00Z'),'10/14 00:00 KST');
  const push=w.pushes.at(-1);assert.ok(push.events.some(e=>e.kind==='stop'&&e.market==='hl'&&e.ref==='HL:day:2026-10-13'));assert.equal(push.states.find(s=>s.market==='hl').status.stopped,true);
- assert.ok(w.tg.some(t=>/⛔ 하이퍼리퀴드 오늘 손실 −3\.50%/.test(t)),w.tg.join('\n'));
+ assert.ok(w.tg.some(t=>/^⛔ 하이퍼리퀴드 거래 중단 · 하루 −3% 도달\n\n오늘: −3\.50%/.test(t)),w.tg.join('\n'));
  // +1분: 중단 중 BTC 신규 진입 + US 예수금 +500(매매 없음 = 입금 추정)
  w.now+=60000;w.fills.push({coin:'BTC',time:w.now-30000,sz:'0.01',startPosition:'0',side:'B',px:'60000',tid:777,dir:'Open Long',hash:'0x1'});
  w.usCash='1265.44';w.usAsOf=w.now-10000;r=await a.check();
  const p3=w.pushes.at(-1);
  const v=p3.events.find(e=>e.kind==='violation');assert.ok(v);assert.equal(v.detail.tid,777);assert.equal(v.market,'hl');
- assert.ok(w.tg.some(t=>/🚫 하이퍼리퀴드 거래 중단 중 신규 진입 감지 · BTC/.test(t)));
+ assert.ok(w.tg.some(t=>/^🚫 하이퍼리퀴드 · 거래 중단 중 신규 진입\n\n종목: BTC /.test(t)));
  const f=p3.flows.find(x=>x.source==='us-implied');assert.ok(f);assert.equal(f.amount,500);
  const us3=r.statuses.find(s=>s.market==='US');assert.equal(us3.periods.day.pnl,0,'입금 500은 손익 아님');assert.equal(us3.equity.value,2500);
  // 같은 상태로 한 번 더 → 중복 알림·이벤트 없음
@@ -67,7 +68,7 @@ test('check(): HL 하루 −3% → 중단 상태 저장·알림, 중단 중 진�
  const b=new Alerter(env(dir),{fetcher:w.fetcher,now:()=>w.now,log:()=>{},sleep:async()=>{}});await b.init();
  w.now=Date.parse('2026-10-13T15:01:00Z');r=await b.check();
  const hl4=r.statuses.find(s=>s.market==='HL');assert.equal(hl4.stopped,false);assert.equal(hl4.halfRisk.active,true);
- assert.ok(w.tg.some(t=>/재시작 첫날 · 1회 위험 1% \(설정 2%의 50%\)/.test(t)),w.tg.at(-1));
+ assert.ok(w.tg.some(t=>/^✅ 하이퍼리퀴드 · 거래 중단 해제\n\n오늘: [^\n]+ 재시작 첫날\n1회 위험: 1% \(설정 2%의 50%\)/.test(t)),w.tg.at(-1));
 });
 
 test('Supabase 저장 실패 → 이벤트 보관 후 다음 확인 때 다시 저장, 텔레그램 실패 → 2시간 재시도',async()=>{
