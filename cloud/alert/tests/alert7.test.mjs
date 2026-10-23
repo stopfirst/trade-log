@@ -1,6 +1,7 @@
-// alert7(trade-alert 2.5.0) — 미래 한도 기준일(RISK_START_DATE): 기존 중단 전부 해제, 그 전엔 판정·알림·재시작 절반 없음, 요약 'MM/DD부터 적용'.
+// alert7(trade-alert 2.5.0, 2.5.1에서 문구 기대값만 갱신) — 미래 한도 기준일(RISK_START_DATE): 기존 중단 전부 해제, 그 전엔 판정·알림·재시작 절반 없음, 요약 'MM/DD부터 적용'.
 // node --test tests/*.test.mjs
 import test from 'node:test';
+import {fromHtml} from '../src/format.mjs'; // 2.5.1: 텔레그램 HTML(제목 <b>) → plain으로 비교
 import assert from 'node:assert/strict';
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -26,7 +27,7 @@ function runner(cal){let state=null;const refs=new Set();const all={messages:[],
   step(now,equity,cfg,{pr=null,dr=null}={}){const r=risk.step(state,{now,cal,cfg,equity:{value:equity,t:now,source:'test'},flows:[],fills:[],eventRefs:refs,dayMode:'realized',dayRealized:dr,periodMode:pr?'realized':undefined,periodRealized:pr});
    state=r.state;for(const e of r.events)refs.add(e.ref);all.messages.push(...r.messages);all.events.push(...r.events);return r;}};}
 
-test('버전 2.5.0',()=>{assert.equal(VERSION,'2.5.0');});
+test('버전 2.5.1',()=>{assert.equal(VERSION,'2.5.1');});
 
 test('HL 실데이터 모양: 10/20 기준일로 걸린 월간 중단(~11/01 09:00 KST) + 하루 중단(~10/24 09:00) → 기준일 10/26으로 바꾸면 둘 다 해제 · 🔄 1회 · 그 전엔 기록만',()=>{
  const R=runner(HL),c20={...CFG,riskStart:RS20},c26={...CFG,riskStart:RS26};
@@ -42,7 +43,7 @@ test('HL 실데이터 모양: 10/20 기준일로 걸린 월간 중단(~11/01 09:
  const cl=r.events.filter(e=>e.kind==='clear'&&e.rule==='risk-start');assert.ok(cl.length>=2,'하루(10/24에 끝나는 것)와 월간 둘 다 clear 기록 '+cl.length);
  assert.ok(cl.some(e=>e.detail.until===H('2026-10-24',9)),'기준일 전에 끝나는 하루 중단도 해제(2.4.0은 유지)');
  const m=r.messages.filter(x=>x.text.startsWith('🔄'));assert.equal(m.length,1);
- assert.match(m[0].text,/기준일 10\/26 — 10\/26\(월\) 09:00 KST부터 다시 셉니다/);assert.match(m[0].text,/10\/26부터 적용 · 그 전엔 판정·알림 안 함\(기록만\)/);assert.match(m[0].text,/중단 해제: .*월간/);
+ assert.match(m[0].text,/^🔄 하이퍼리퀴드 · 손실 한도 10\/26부터 새로 셈\n\n한도 적용: 10\/26\(월\) 09:00 KST부터\n그 전: 판정·알림 안 함 \(기록만\)/);assert.match(m[0].text,/\n중단 해제: \d건\n(· [^\n]*\n)*· [^\n]*월간/);
  assert.equal(r.status.halfRisk.active,false,'해제 직후 재시작 절반 없음');
  assert.equal(r.status.riskStart.before,true);assert.match(r.status.note,/기준일 10\/26 전/);
  assert.equal(r.status.periods.day.missing,'before-start');assert.equal(r.status.periods.week.pct,null);assert.equal(r.status.periods.month.pct,null);
@@ -74,7 +75,7 @@ test('US: 기준일 10/26(월) = 10/23 16:00 ET(10/24 05:00 KST)부터 · 그 �
  const t1=etWall('2026-10-23',11);
  let r=R.step(t1,9000,c20,{dr:DR('2026-10-23',-400,etWall('2026-10-23',16),10000)});assert.equal(r.status.stopped,true);
  r=R.step(etWall('2026-10-23',11,5),9000,c26,{dr:DR('2026-10-23',-450,etWall('2026-10-23',16),10000)});
- assert.equal(r.status.stopped,false);assert.equal(r.status.periods.day.missing,'before-start');assert.match(r.messages[0].text,/10\/26부터 적용 · 그 전엔 판정·알림 안 함/);
+ assert.equal(r.status.stopped,false);assert.equal(r.status.periods.day.missing,'before-start');assert.match(r.messages[0].text,/^🔄 미국주식 · 손실 한도 10\/26부터 새로 셈\n\n한도 적용: 10\/26\(월\) 미국 장부터 \(KST 10\/26 22:30~\)\n그 전: 판정·알림 안 함 \(기록만\)/);
 });
 
 test('서비스: RISK_START_DATE를 미래(10/26)로 바꿔 재시작 → 기존 US 하루 중단 해제·🔄 1회·요약 "10/26부터 적용"',async()=>{
@@ -85,7 +86,7 @@ test('서비스: RISK_START_DATE를 미래(10/26)로 바꿔 재시작 → 기존
    acct_us:[],hl_address:null,journal:{US:{revision:1,unchanged:body.p_us_revision===1,defaultRisk:1,account:60000},HL:{revision:1,unchanged:true,defaultRisk:1,account:null}},risk:{state:[],events:[],flows:[]}});
   if(url.endsWith('/rpc/risk_day_data'))return J({ok:true,version:5,kw_days:[{date:'2026-10-23',as_of:2,total:String(w.today),count:1}],acct:[],hl:null});
   if(url.endsWith('/rpc/risk_push')){w.pushes.push(body.p_payload);return J({ok:true});}
-  if(url.includes('api.telegram.org')){w.tg.push(body.text);return J({ok:true,result:{}});}
+  if(url.includes('api.telegram.org')){w.tg.push(fromHtml(body.text));return J({ok:true,result:{}});}
   return J({message:'not found'},404);};
  const dir=await mkdtemp(path.join(tmpdir(),'ta7-'));
  const env=rs=>({SUPABASE_URL:'https://abcdefgh.supabase.co',SUPABASE_KEY:KEY,KW_COLLECTOR_TOKEN:TOKEN,TELEGRAM_BOT_TOKEN:BOT,TELEGRAM_CHAT_ID:'987654321',ALERT_STATE_DIR:dir,DAILY_SUMMARY:'0',ALERT_MARKETS:'US',RISK_START_DATE:rs});
@@ -94,10 +95,10 @@ test('서비스: RISK_START_DATE를 미래(10/26)로 바꿔 재시작 → 기존
  w.tg.length=0;w.now+=120000;
  const b=new Alerter(env('2026-10-26'),{fetcher:w.fetcher,now:()=>w.now,log:()=>{},sleep:async()=>{}});await b.init();
  r=await b.check();const s=r.statuses[0];
- assert.equal(s.stopped,false);assert.equal(s.version,'2.5.0');assert.equal(s.riskStart.date,'2026-10-26');assert.equal(s.riskStart.before,true);
+ assert.equal(s.stopped,false);assert.equal(s.version,'2.5.1');assert.equal(s.riskStart.date,'2026-10-26');assert.equal(s.riskStart.before,true);
  assert.equal(w.tg.filter(t=>t.startsWith('🔄')).length,1);assert.match(w.tg.find(t=>t.startsWith('🔄')),/중단 해제: 하루/);
  assert.ok(w.pushes.at(-1).events.some(e=>e.kind==='clear'&&e.rule==='risk-start'),'risk_events clear 기록');
- assert.match(b.summaryText(r.statuses,w.now),/한도 기준일 10\/26부터 적용 \(.*\) · 그 전엔 판정·알림 안 함\(기록만\)/);
- assert.match(b.describe(r.statuses),/오늘\(실현\) — 기준일 전/);
+ assert.match(b.summaryText(r.statuses,w.now),/\n오늘   — 10\/26부터\n주간   — 10\/26부터\n월간   — 10\/26부터\n연속 손실: 0\/3일\n중단: 없음\n한도 적용: 10\/26\(월\) 미국 장부터 \(KST 10\/26 22:30~\)$/);assert.doesNotMatch(b.summaryText(r.statuses,w.now),/※/,'요약엔 ※ 기준일 중복 줄 없음');
+ assert.match(b.describe(r.statuses),/오늘   — 10\/26부터/);
  w.tg.length=0;w.now+=120000;w.today=-5000;r=await b.check();assert.equal(r.statuses[0].stopped,false);assert.equal(w.tg.length,0,'기준일 전 손실 더 커져도 알림 없음');
 });
