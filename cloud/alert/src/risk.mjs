@@ -15,6 +15,8 @@
 // v1.4: 한도 기준일(cfg.riskStart = .env RISK_START_DATE). 기준 시각(HL = 그날 UTC 00:00, US = 그 날짜 ET 거래일 시작 = 직전 거래일 16:00 ET)
 //   이전 손익은 하루·주·월 합계와 연속 손실일에서 뺌. 기준일이 든 주·월은 기준 시각의 자산(riskStart.base)에서 시작.
 //   기준일 설정 전에 걸린 중단(since 표시 없음)은 처음 적용할 때 해제('clear' 기록). 새 중단 id = …@YYYY-MM-DD. 미설정이면 v1.3 그대로.
+// 2.5.0: 기준일이 미래(now < 기준 시각)면 아직 안 끝난 기존 중단을 전부 해제(기준일 전에 끝나는 것 포함 — 기준일 전 손실로 생긴 것),
+//   그 전까지 판정·사전 알림·재시작 첫날(위험 절반) 없음, 🔄·요약에 'MM/DD부터 적용 · 그 전엔 기록만'. 기준일이 지났으면 2.4.0과 같음.
 //
 // v1.3: 하루 한도(input.dayMode==='realized', 기본)는 앱 v28과 같은 기준 — 오늘 실현손익 ÷ 직전 마감(acct_snapshots, 없으면 현재 기준액).
 //   HL 하루 = UTC 00:00(KST 09:00) 경계, US = 미국 장 마감 16:00 ET. 분자·분모는 day.mjs가 만들어 input.dayRealized로 넘김.
@@ -111,11 +113,11 @@ export function step(prev,input){
  if(rs){
   if(!st.riskStart||st.riskStart.date!==rs.date)st.riskStart={date:rs.date,day:rs.day,at:rs.at,appliedAt:now,base:null};
   const from=cal.dayStart(rs.day);
-  for(const s of st.stops){if(s.cleared||s.since===rs.date||!(s.until>=from))continue;s.cleared=now;s.clearedBy='risk-start:'+rs.date;clearedNow.push(s);
+  for(const s of st.stops){if(s.cleared||s.since===rs.date||!(before?s.until>now:s.until>=from))continue;s.cleared=now;s.clearedBy='risk-start:'+rs.date;clearedNow.push(s);
    events.push({ref:`clear:${s.id}:start:${rs.date}`,kind:'clear',rule:'risk-start',at:now,detail:{stopId:s.id,riskStart:rs.date,label:ruleLabel(s.rule,cfg,s.basis),until:s.until,ended:s.until<=now}});}
   const key=`${market}:riskstart:${rs.date}`;
   if(!st.sent[key]&&!refs.has(key)){st.sent[key]=now;const act=clearedNow.filter(s=>s.until>now);
-   messages.push({key,text:`🔄 ${M} 손실 한도 기준일 ${md(rs.date)} — ${untilText(rs.at,market)}부터 다시 셉니다\n하루·주·월 합계와 연속 손실일에서 그 이전 손익은 빼고 판정합니다.`+(act.length?`\n기준일 이전 손실로 걸린 중단 해제: ${act.map(s=>ruleLabel(s.rule,cfg,s.basis)+' (~ '+untilText(s.until,market)+')').join(', ')}`:'')});}
+   messages.push({key,text:`🔄 ${M} 손실 한도 기준일 ${md(rs.date)} — ${untilText(rs.at,market)}부터 다시 셉니다\n하루·주·월 합계와 연속 손실일에서 그 이전 손익은 빼고 판정합니다.`+(before?`\n${md(rs.date)}부터 적용 · 그 전엔 판정·알림 안 함(기록만)`:'')+(act.length?`\n기준일 이전 손실로 걸린 중단 해제: ${act.map(s=>ruleLabel(s.rule,cfg,s.basis)+' (~ '+untilText(s.until,market)+')').join(', ')}`:'')});}
  }
  const addStop=(s,text)=>{s.id=sid(s.id);if(rs)s.since=rs.date;if(st.stops.some(x=>x.id===s.id)||refs.has(s.id))return false;if(!(s.until>now))return false;st.stops.push(s);
   events.push({ref:s.id,kind:'stop',rule:s.rule,at:now,detail:{from:s.from,until:s.until,reason:s.reason,pct:s.pct??null,label:ruleLabel(s.rule,cfg,s.basis)}});messages.push({key:s.id,text});return true;};
@@ -357,7 +359,7 @@ export function step(prev,input){
  const live=st.stops.filter(s=>!s.cleared);
  const active=activeAt(live,now);
  let half={active:false,factor:cfg.restartFactor};
- if(!active.length){const ended=live.filter(s=>s.until<=now).sort((a,b)=>b.until-a.until)[0];
+ if(!active.length&&!before){const ended=live.filter(s=>s.until<=now).sort((a,b)=>b.until-a.until)[0];
   if(ended){const hd=cal.dayOf(ended.until);if(hd===today&&cfg.restartFactor<1){half={active:true,day:today,factor:cfg.restartFactor,afterStop:ended.id,reason:`${ruleLabel(ended.rule,cfg,ended.basis)} 중단이 끝난 뒤 첫 거래일`};
    const key=`${market}:restart:${today}`;if(!st.sent[key]&&!refs.has(key)){st.sent[key]=now;
     const dr=cfg.defaultRisk>0?` · 1회 위험 ${round(cfg.defaultRisk*cfg.restartFactor,4)}% (설정 ${cfg.defaultRisk}%의 ${Math.round(cfg.restartFactor*100)}%)`:` · 1회 위험 ${Math.round(cfg.restartFactor*100)}%로 축소`;
