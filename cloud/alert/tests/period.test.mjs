@@ -27,7 +27,7 @@ function runner(cal,{cfg=CFG,engine=risk}={}){
 const dayR=(market,now,pnl,base=63592.79)=>{const k=market==='HL'?day.utcDate(now):US.dayOf(now);return {key:k,pnl,until:market==='HL'?day.utcStart(k)+86400000:US.dayEnd(k),denom:{value:base,mode:'close',key:'x',expected:true,closeAt:now-3600000},parts:{trades:pnl,funding:0}};};
 
 test('periodMode 없음(또는 equity) → v1.4 엔진과 결과 동일(v1.5 필드 periodBasis·periodRule·streak.basis만 추가)',()=>{
- const strip=r=>{const s=structuredClone(r);delete s.status.periodBasis;delete s.status.config.periodRule;delete s.status.streak.basis;return s;};
+ const strip=r=>{const s=structuredClone(r);delete s.status.periodBasis;delete s.status.config.periodRule;delete s.status.streak.basis;for(const m of s.messages)m.text=m.text.replace(/\n\d\d\/\d\d부터 적용 · 그 전엔 판정·알림 안 함\(기록만\)/,'');return s;}; // 2.5.0: 미래 기준일 🔄에 붙는 한 줄은 비교에서 뺌
  for(const [cal,dm,pm,rs] of [[HL,'equity',undefined,null],[HL,'realized','equity',null],[US,'realized',undefined,null],[US,'equity','equity',riskStartFor('2026-10-20','US',US)],[HL,'realized',undefined,riskStartFor('2026-10-20','HL',HL)]]){
   const cfg={...CFG,dayMode:dm,riskStart:rs};const A=runner(cal,{cfg}),B=runner(cal,{cfg,engine:v14});
   const fill=(t,e)=>({key:'k'+t,t,symbol:'X',entry:e,side:e?'buy':'sell',qty:1,price:1});
