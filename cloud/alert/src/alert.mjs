@@ -1,4 +1,5 @@
-// trade-alert 2.5.1 (alert8): 텔레그램 메시지 가독성 — 제목 · 빈 줄 · '라벨: 값', 시장 블록 구분 제목, 제목만 굵게(HTML), 위반 진입 알림 묶음, 4096자 분할. 판정 로직 변경 없음.
+// trade-alert 2.6.0 (alert9): 텔레그램 즉시 복기 — HL 청산 때 [규칙 준수][규칙 위반][나중에] 버튼, 답은 Supabase quick_reviews(alert9.sql) → 앱 v37 반영. .env QUICK_REVIEW=0이면 끔. 판정 로직 변경 없음.
+// (이전) 2.5.1 (alert8): 텔레그램 메시지 가독성 — 제목 · 빈 줄 · '라벨: 값', 시장 블록 구분 제목, 제목만 굵게(HTML), 위반 진입 알림 묶음, 4096자 분할. 판정 로직 변경 없음.
 // (이전) 2.5.0 (alert7): 미래 한도 기준일 — 기존 중단 전부 해제·그 전엔 판정/알림/재시작 절반 없음·요약 'MM/DD부터 적용'. 규칙 이름 v1.6 그대로.
 // (이전) 2.4.0 (alert6): 손실한도 판정 v1.6 — 주·월 한도 분모 = 기간 시작 직전 마감 잔액(없으면 현재 기준액, 앱 v31과 같음).
 // (이전) 2.3.0 (alert5): 손실한도 판정 v1.5 — 텔레그램 알림 + Supabase 거래 중단 상태(앱 배너) + 규칙 위반 기록.
@@ -27,10 +28,11 @@ import * as src from './sources.mjs';
 import * as day from './day.mjs';
 import {usCalendar,hlCalendar,untilText,addDays,etDate} from './calendar.mjs';
 import * as fmt from './format.mjs';
+import * as qr from './quick.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.5.1';
+export const VERSION='2.6.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -74,7 +76,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
    checkSec:numIn(env,'RISK_CHECK_SEC',60,60,300,{int:true}),idleSec:numIn(env,'RISK_IDLE_SEC',300,60,1800,{int:true}),pushMin:numIn(env,'RISK_PUSH_MIN',5,1,30,{int:true}),
    usFlowMin:numIn(env,'US_FLOW_MIN_USD',50,1,1e7),usStaleMin:numIn(env,'US_STALE_MIN',20,5,240,{int:true}),anchorMaxGapMin:numIn(env,'ANCHOR_MAX_GAP_MIN',20,2,120,{int:true}),
    usExtraHolidays:extra,dayBasis,riskStartDate:rsd||null,hlAddress:hlAddr?hlAddr.toLowerCase():null,
-   dailySummary:bool(env,'DAILY_SUMMARY',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
+   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,telegramHtml:bool(env,'TELEGRAM_HTML',true),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
    stateDir:String(env.STATE_DIRECTORY||env.ALERT_STATE_DIR||'/var/lib/trade-alert').split(':')[0]};
  }catch(e){if(e.fields)problems.push(...e.fields);else throw e;}
  if(problems.length){const e=Error('CONFIG_INCOMPLETE');e.fields=problems;throw e;}
@@ -104,9 +106,9 @@ export function makeLogger(env,out=l=>console.log(l)){
 // ---- Telegram ----------------------------------------------------------------------------
 export class Telegram{
  constructor(bot,chat,fetcher=fetch,sleep=ms=>new Promise(r=>setTimeout(r,ms)),{html=true}={}){this.bot=bot;this.chat=chat;this.fetcher=fetcher;this.sleep=sleep;this.html=html;}
- async api(method,body){
+ async api(method,body,timeoutMs=20000){
   for(let attempt=0;;attempt++){
-   let r;try{r=await this.fetcher(`https://api.telegram.org/bot${this.bot}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{}),redirect:'error',signal:AbortSignal.timeout(20000)});}
+   let r;try{r=await this.fetcher(`https://api.telegram.org/bot${this.bot}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{}),redirect:'error',signal:AbortSignal.timeout(timeoutMs)});}
    catch{if(attempt<2){await this.sleep(2000*2**attempt);continue;}throw Error('TELEGRAM_NETWORK_ERROR');}
    let data=null;try{data=await r.json();}catch{}
    if(r.status===429&&attempt<2){const wait=Math.min(60,Number(data?.parameters?.retry_after)||5);await this.sleep(wait*1000);continue;}
@@ -144,7 +146,7 @@ export class SupabaseRpc{
    if(r.status===429||r.status>=500){if(attempt<2){await this.sleep(2000*2**attempt);continue;}throw Error('SUPABASE_UNAVAILABLE_'+r.status);}
    const text=await r.text();let data=null;try{data=JSON.parse(text);}catch{}
    if(r.status===401||r.status===403||/invalid collector token/.test(String(data?.message||'')))throw Error('SUPABASE_TOKEN_REJECTED');
-   if(r.status===404||/risk_status|risk_push|risk_day_data|could not find the function/i.test(String(data?.message||'')))throw Error(name==='risk_day_data'?'SUPABASE_ALERT3_SQL_NOT_INSTALLED':'SUPABASE_SQL_NOT_INSTALLED');
+   if(r.status===404||/risk_status|risk_push|risk_day_data|quick_review_push|could not find the function/i.test(String(data?.message||'')))throw Error(name==='risk_day_data'?'SUPABASE_ALERT3_SQL_NOT_INSTALLED':name==='quick_review_push'?'SUPABASE_ALERT9_SQL_NOT_INSTALLED':'SUPABASE_SQL_NOT_INSTALLED');
    if(!r.ok)throw Error('SUPABASE_HTTP_'+r.status);
    if(!data||typeof data!=='object')throw Error('SUPABASE_BAD_RESPONSE');
    if(data.ok===false)throw Error('SUPABASE_REJECTED_'+String(data.error||'unknown').replace(/[^a-z_]/g,'').slice(0,40));
@@ -176,7 +178,10 @@ export class Alerter{
   this.rpc=new SupabaseRpc(this.cfg,fetcher,sleep);this.tg=new Telegram(this.cfg.bot,this.cfg.chat,fetcher,sleep,{html:this.cfg.telegramHtml});
   this.cal={US:usCalendar({extraHolidays:this.cfg.usExtraHolidays}),HL:hlCalendar()};this.rcal=day.utcCalendar();this.periodMissing=false;
   this.state=emptyLocal();this.hl={addr:null,fills:new Map(),fillsAt:0,funding:new Map(),fundingAt:0,ledger:[],ledgerAt:0,portfolio:null,portfolioAt:0};this.failures=0;this.lastStatus={};this.dayData=null;this.dayDataMissing=false;
+  // 2.6.0 즉시 복기(dry-run·--test에선 없음). 상태는 state2.json의 qr에, 저장은 persist()로 직렬화(버튼 루프와 확인 루프가 같은 파일을 씀)
+  this.qr=this.cfg.quickReview&&!dryRun?new qr.QuickReview({tg:this.tg,rpc:this.rpc,token:this.cfg.token,chat:this.cfg.chat,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist(),...(sleep?{sleep}:{})}):null;this.qrSeen=null;
  }
+ persist(){if(this.dryRun)return Promise.resolve();const p=(this._saving||Promise.resolve()).catch(()=>{}).then(()=>saveState(this.cfg.stateDir,this.state));this._saving=p;return p;}
  async init(){this.state=await loadState(this.cfg.stateDir);}
  want(m,auto){return this.cfg.markets?this.cfg.markets.includes(m):auto;}
  async hlData(addr,t){
@@ -196,7 +201,7 @@ export class Alerter{
   return {equity,fills:src.hlFills([...h.fills.values()]),rawFills:[...h.fills.values()],rawFunding:[...h.funding.values()],flows:src.hlFlows(h.ledger,addr),portfolio:h.portfolio};
  }
  async check(){
-  const t=this.now(),S=this.state;
+  const t=this.now(),S=this.state;this.qrSeen=null;
   const data=await this.rpc.call('risk_status',{p_token:this.cfg.token,p_us_revision:S.journal.US?.revision??null,p_hl_revision:S.journal.HL?.revision??null});
   for(const sc of ['US','HL']){const j=data.journal?.[sc];if(j&&!j.unchanged)S.journal[sc]={revision:j.revision,defaultRisk:Number(j.defaultRisk)||null,account:Number(j.account)>0?Number(j.account):null};}
   // v1.3 하루 한도 데이터(alert3.sql risk_day_data). 미설치 → v1.2 하루 판정, 일시 실패 → 10분 안의 직전 값, 그보다 오래되면 하루 판정 건너뜀
@@ -259,6 +264,7 @@ export class Alerter{
    const anchorH=ecH.riskStart?ms=>{const pk=addDays(ecH.riskStart.date,-1),r=dd?day.closeRows(dd.acct,'HL')[pk]:null;if(r&&r.value>0)return {equity:r.value,at:ecH.riskStart.at,source:'HL 마감 '+pk.slice(5).replace('-','/')+' UTC'};return src.hlPortfolioAt(h.portfolio,ms,h.equity);}:null;
    const res=risk.step(S.engine.HL,{now:t,cal,cfg:ecH,equity:h.equity,flows,fills:h.fills,fallbackStart:fb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorH,periodMode,periodRealized});
    results.push({m:'HL',res,newFlows});
+   this.qrSeen={rawFills:h.rawFills,rawFunding:h.rawFunding,equity:h.equity?.value,defaultRisk:S.journal.HL?.defaultRisk}; // 2.6.0 즉시 복기용(판정과 무관)
   }
   // --- 상태 반영 + 알림 + 저장
   const payload={states:[],days:[],events:[],flows:[]};
@@ -287,7 +293,8 @@ export class Alerter{
   for(const msg of S.outbox){if(t-msg.at>2*3600000)continue;try{await this.deliver(msg.text);sent++;}catch(e){keep.push(msg);this.log('ERROR','텔레그램 전송 실패: '+(e.message||e)+' (다음 확인 때 다시 시도)');}}
   S.outbox=this.dryRun?[]:keep;
   for(const [k,v] of Object.entries(S.sent))if(v<t-45*86400000)delete S.sent[k];
-  if(!this.dryRun)await saveState(this.cfg.stateDir,S);
+  if(this.qr){try{await this.qr.afterCheck(this.qrSeen,t);}catch(e){this.log('WARN','즉시 복기 처리 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
+  await this.persist();
   return {results,sent,messages:results.flatMap(r=>r.res.messages.map(x=>x.text)),statuses:results.map(r=>r.res.status)};
  }
  async deliver(text){if(this.dryRun){this.out('[보낼 메시지]\n'+text);return;}await this.tg.send(text);}
@@ -342,7 +349,8 @@ export class Alerter{
   const active=!['Sat','Sun'].includes(g('weekday'))&&mins>=4*60&&mins<20*60+5;return (active?this.cfg.checkSec:this.cfg.idleSec)*1000;}
  async run(){
   await this.init();const c=this.cfg;
-  this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월(÷ 기간 시작 직전 마감)·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:''));
+  this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월(÷ 기간 시작 직전 마감)·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:'')+` · 텔레그램 즉시 복기 ${c.quickReview?'켜짐(HL 청산, alert9.sql 필요)':'꺼짐(QUICK_REVIEW=0)'}`);
+  if(this.qr)this.qr.loop().catch(e=>this.log('ERROR','텔레그램 버튼 응답 루프 종료: '+String(e?.message||e)));
   for(;;){
    try{await this.check();if(this.failures)this.log('INFO','정상 복구');this.failures=0;}
    catch(e){this.failures++;const code=String(e.message||e);this.log('ERROR',`확인 실패(${this.failures}): ${code}`+(code==='SUPABASE_SQL_NOT_INSTALLED'?' → Supabase SQL Editor에서 alert2.sql을 실행하세요.':code==='SUPABASE_TOKEN_REJECTED'?' → KW_COLLECTOR_TOKEN이 앱의 현재 토큰과 같은지 확인하세요.':''));}
@@ -373,7 +381,7 @@ export async function main(argv=process.argv.slice(2),env=process.env){
    if(!chats.length){console.log('최근 메시지가 없습니다. 텔레그램에서 내 봇을 열고 아무 메시지(예: 안녕)를 보낸 뒤 다시 실행하세요.');return 1;}
    console.log('봇에게 메시지를 보낸 대화방:');for(const c of chats)console.log(`  TELEGRAM_CHAT_ID=${c.id}   (${c.type}${c.name?' · '+c.name:''}${c.username?' '+c.username:''})`);
    console.log('위 줄 하나를 /opt/trade-alert/.env 에 그대로 넣으세요.');return 0;}
-  catch(e){log('ERROR',String(e.message));return 1;}
+  catch(e){log('ERROR',String(e.message)+(e.message==='TELEGRAM_WEBHOOK_ACTIVE'?' → trade-alert 서비스가 텔레그램 버튼 응답(즉시 복기)을 받는 중일 수 있습니다: sudo systemctl stop trade-alert 후 다시 실행하고, 끝나면 sudo systemctl start trade-alert':''));return 1;}
  }
  const dryRun=argv.includes('--dry-run');
  if(argv.includes('--test')){
@@ -381,7 +389,10 @@ export async function main(argv=process.argv.slice(2),env=process.env){
   let text='';const T=`✅ trade-alert ${VERSION} 테스트 · ${RULES}`;
   try{const a=new Alerter(env,{dryRun:true,log,out:()=>{}});await a.init();const r=await a.check();text=r.statuses.length?a.testText(r.statuses):fmt.card(T,['판정할 시장 없음: 키움 수집 스냅샷·HL 주소가 없습니다']);}
   catch(e){text=fmt.card(T,['Supabase 확인 실패: '+(e.fields?'.env 미입력 '+e.fields.join(', '):String(e.message||e))]);}
-  try{await new Telegram(cfg.bot,cfg.chat,fetch,undefined,{html:cfg.telegramHtml}).send(text);console.log('테스트 메시지를 보냈습니다.\n'+text);return 0;}
+  try{await new Telegram(cfg.bot,cfg.chat,fetch,undefined,{html:cfg.telegramHtml}).send(text);console.log('테스트 메시지를 보냈습니다.\n'+text);
+   if(cfg.quickReview){let q='꺼짐';try{const p=new qr.QuickReview({tg:null,rpc:new SupabaseRpc(cfg),token:cfg.token,chat:cfg.chat,log:()=>{},now:Date.now,state:()=>({}),save:async()=>{}});q=(await p.probe())?'켜짐 · alert9.sql 확인됨':'켜짐 · alert9.sql 없음(실행하면 다음 청산부터 질문)';}catch{q='켜짐 · 확인 실패';}console.log('텔레그램 즉시 복기: '+q);}
+   else console.log('텔레그램 즉시 복기: 꺼짐 (QUICK_REVIEW=0)');
+   return 0;}
   catch(e){log('ERROR','테스트 전송 실패: '+String(e.message));return 1;}
  }
  let a;try{a=new Alerter(env,{dryRun,log});}catch(e){explainConfig(e,log);return 2;}
