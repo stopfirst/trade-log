@@ -73,15 +73,15 @@ test('HL 직전 마감 있음: 실현 −50%/−80% 사전 알림 1회씩 → �
  const h=hlRun(),t0=Z('2026-10-20T01:00:00Z');
  let r=h.step(t0,{pnl:-10,eq:2000});assert.equal(r.messages.length,0);assert.equal(r.status.periods.day.pct,-0.5);assert.equal(r.status.periods.day.budget,60);assert.equal(r.status.periods.day.basis,'realized');
  assert.equal(r.status.periods.day.startSource,'전일 마감 2,000.00 USDC');assert.ok(r.status.periods.dayEquity,'자산 변화 기준은 참고로 남음');
- r=h.step(t0+60000,{pnl:-31,eq:1960});assert.equal(r.messages.length,1);assert.match(r.messages[0].text,/^🔔 하이퍼리퀴드 하루 실현손익 −1\.55% \(−31\.00 USDC\) · 한도 −3% \(−60\.00 USDC\)의 51%\n기준: 전일 마감 2,000\.00 USDC/);
- assert.match(r.messages[0].text,/참고: 미실현 포함 자산 변화 −2\.00% \(−40\.00 USDC\) — 판정에는 쓰지 않음/);
+ r=h.step(t0+60000,{pnl:-31,eq:1960});assert.equal(r.messages.length,1);assert.match(r.messages[0].text,/^🔔 하이퍼리퀴드 · 하루 한도 51% 사용\n\n오늘 실현: −1\.55% \(−31\.00 USDC\)\n한도: −3% \(−60\.00 USDC\)\n기준: 전일 마감 2,000\.00 USDC/);
+ assert.match(r.messages[0].text,/\n참고: 미실현 포함 −2\.00% \(−40\.00 USDC\) · 판정 제외/);
  r=h.step(t0+120000,{pnl:-32,eq:1950});assert.equal(r.messages.length,0,'같은 단계 재알림 없음');
- r=h.step(t0+180000,{pnl:-49,eq:1950});assert.equal(r.messages.length,1);assert.match(r.messages[0].text,/^⚠️ .*의 81%/);
+ r=h.step(t0+180000,{pnl:-49,eq:1950});assert.equal(r.messages.length,1);assert.match(r.messages[0].text,/^⚠️ 하이퍼리퀴드 · 하루 한도 81% 사용\n/);
  r=h.step(t0+240000,{pnl:-60,trades:-55,funding:-5,eq:1920});
  assert.equal(r.status.stopped,true);const s=r.status.stops[0];assert.equal(s.id,'HL:dayr:2026-10-20');assert.equal(s.until,kstWall('2026-10-21',9),'KST 10/21 09:00까지');assert.equal(s.label,'하루 실현 −3%');
  const m=r.messages.find(x=>x.text.startsWith('⛔'));assert.ok(m);
- assert.match(m.text,/^⛔ 하이퍼리퀴드 오늘 실현손익 −3\.00% \(−60\.00 USDC\) · 하루 한도 −3% \(−60\.00 USDC\) 도달\n기준: 전일 마감 2,000\.00 USDC · 체결 −55\.00 USDC \+ 펀딩 −5\.00 USDC\n참고: 미실현 포함 자산 변화 −4\.00% \(−80\.00 USDC\)/);
- assert.match(m.text,/신규 진입 중단 ~ 10\/21\(수\) 09:00 KST까지/);
+ assert.match(m.text,/^⛔ 하이퍼리퀴드 거래 중단 · 하루 실현 −3% 도달\n\n오늘 실현: −3\.00% \(−60\.00 USDC\)\n한도: −3% \(−60\.00 USDC\)\n기준: 전일 마감 2,000\.00 USDC\n내역: 체결 −55\.00 USDC \+ 펀딩 −5\.00 USDC\n참고: 미실현 포함 −4\.00% \(−80\.00 USDC\) · 판정 제외\n신규 진입 중단: /);
+ assert.match(m.text,/\n신규 진입 중단: ~ 10\/21\(수\) 09:00 KST까지\n\n주문은 막지 않습니다/);
  r=h.step(t0+300000,{pnl:-80,eq:1900});assert.equal(r.events.length,0,'중단 중복 없음');
  // KST 자정이 지나도(UTC 15:00) 같은 UTC 날 → 중단 유지
  r=h.step(kstWall('2026-10-21',0,30),{pnl:-80,eq:1900});assert.equal(r.status.stopped,true);
@@ -102,7 +102,7 @@ test('HL 직전 마감 없음 → 현재 기준액(BALANCE) 분모, 메시지 "�
  const h=hlRun(),t0=Z('2026-10-20T03:00:00Z');
  let r=h.step(t0,{pnl:-70,eq:2150,denom:{value:2150,mode:'basis',key:null,source:'HL BALANCE'}});
  assert.equal(r.status.periods.day.pct,-3.2558);assert.equal(r.status.periods.day.budget,64.5);assert.equal(r.status.stopped,true);
- assert.match(r.messages[0].text,/기준: 현재 기준액 2,150\.00 USDC/);assert.match(r.messages[0].text,/참고: 미실현 포함 자산 변화 0\.00%|참고: 미실현 포함 자산 변화 \+?0/,'관측 시작 = 현재 → 0');
+ assert.match(r.messages[0].text,/기준: 현재 기준액 2,150\.00 USDC/);assert.match(r.messages[0].text,/참고: 미실현 포함 0\.00%|참고: 미실현 포함 \+?0/,'관측 시작 = 현재 → 0');
  const g=hlRun();r=g.step(t0,{pnl:-70,eq:null,denom:null});assert.equal(r.status.periods.day.pct,null);assert.match(r.status.note,/분모/);assert.equal(r.status.stopped,false);
 });
 
@@ -113,7 +113,7 @@ test('US: 키움 실현 −$61 ÷ 전일 마감 $2,000 → 중단 ~ 그날 16:00
  const den={value:2000,mode:'close',key:'2026-10-19',expected:true,closeAt:etWall('2026-10-19',16)};
  let r=run(t0,-20,den);assert.equal(r.status.stopped,false);
  r=run(t0+3600000,-61,den);assert.equal(r.status.stopped,true);assert.equal(r.status.stops[0].until,etWall('2026-10-20',16));
- assert.match(r.messages.find(m=>m.text.startsWith('⛔')).text,/^⛔ 미국주식 오늘 실현손익 −3\.05% \(−\$61\.00\) · 하루 한도 −3% \(−\$60\.00\) 도달\n기준: 전일 마감 \$2,000\.00\n참고: 미실현 포함/);
+ assert.match(r.messages.find(m=>m.text.startsWith('⛔')).text,/^⛔ 미국주식 거래 중단 · 하루 실현 −3% 도달\n\n오늘 실현: −3\.05% \(−\$61\.00\)\n한도: −3% \(−\$60\.00\)\n기준: 전일 마감 \$2,000\.00\n참고: 미실현 포함/);
  r=run(etWall('2026-10-20',16,5),0,{value:1939,mode:'close',key:'2026-10-20',expected:true,closeAt:etWall('2026-10-20',16)});
  assert.equal(r.status.today,'2026-10-21');assert.equal(r.status.stopped,false);assert.equal(r.status.periods.day.startSource,'전일 마감 $1,939.00');
 });
