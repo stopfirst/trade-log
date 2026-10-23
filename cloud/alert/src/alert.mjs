@@ -1,4 +1,5 @@
-// trade-alert 2.5.0 (alert7): 미래 한도 기준일 — 기존 중단 전부 해제·그 전엔 판정/알림/재시작 절반 없음·요약 'MM/DD부터 적용'. 규칙 이름 v1.6 그대로.
+// trade-alert 2.5.1 (alert8): 텔레그램 메시지 가독성 — 제목 · 빈 줄 · '라벨: 값', 시장 블록 구분 제목, 제목만 굵게(HTML), 위반 진입 알림 묶음, 4096자 분할. 판정 로직 변경 없음.
+// (이전) 2.5.0 (alert7): 미래 한도 기준일 — 기존 중단 전부 해제·그 전엔 판정/알림/재시작 절반 없음·요약 'MM/DD부터 적용'. 규칙 이름 v1.6 그대로.
 // (이전) 2.4.0 (alert6): 손실한도 판정 v1.6 — 주·월 한도 분모 = 기간 시작 직전 마감 잔액(없으면 현재 기준액, 앱 v31과 같음).
 // (이전) 2.3.0 (alert5): 손실한도 판정 v1.5 — 텔레그램 알림 + Supabase 거래 중단 상태(앱 배너) + 규칙 위반 기록.
 // v1.5: 주·월 한도와 연속 손실일도 실현손익 기준(앱 v29 limitStatus와 같음) — 주·월 % = 기간 실현손익 합 ÷ 현재 기준액,
@@ -24,11 +25,12 @@ import {pathToFileURL} from 'node:url';
 import * as risk from './risk.mjs';
 import * as src from './sources.mjs';
 import * as day from './day.mjs';
-import {usCalendar,hlCalendar,untilText,addDays} from './calendar.mjs';
+import {usCalendar,hlCalendar,untilText,addDays,etDate} from './calendar.mjs';
+import * as fmt from './format.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.5.0';
+export const VERSION='2.5.1';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -72,7 +74,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
    checkSec:numIn(env,'RISK_CHECK_SEC',60,60,300,{int:true}),idleSec:numIn(env,'RISK_IDLE_SEC',300,60,1800,{int:true}),pushMin:numIn(env,'RISK_PUSH_MIN',5,1,30,{int:true}),
    usFlowMin:numIn(env,'US_FLOW_MIN_USD',50,1,1e7),usStaleMin:numIn(env,'US_STALE_MIN',20,5,240,{int:true}),anchorMaxGapMin:numIn(env,'ANCHOR_MAX_GAP_MIN',20,2,120,{int:true}),
    usExtraHolidays:extra,dayBasis,riskStartDate:rsd||null,hlAddress:hlAddr?hlAddr.toLowerCase():null,
-   dailySummary:bool(env,'DAILY_SUMMARY',true),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
+   dailySummary:bool(env,'DAILY_SUMMARY',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
    stateDir:String(env.STATE_DIRECTORY||env.ALERT_STATE_DIR||'/var/lib/trade-alert').split(':')[0]};
  }catch(e){if(e.fields)problems.push(...e.fields);else throw e;}
  if(problems.length){const e=Error('CONFIG_INCOMPLETE');e.fields=problems;throw e;}
@@ -101,7 +103,7 @@ export function makeLogger(env,out=l=>console.log(l)){
 
 // ---- Telegram ----------------------------------------------------------------------------
 export class Telegram{
- constructor(bot,chat,fetcher=fetch,sleep=ms=>new Promise(r=>setTimeout(r,ms))){this.bot=bot;this.chat=chat;this.fetcher=fetcher;this.sleep=sleep;}
+ constructor(bot,chat,fetcher=fetch,sleep=ms=>new Promise(r=>setTimeout(r,ms)),{html=true}={}){this.bot=bot;this.chat=chat;this.fetcher=fetcher;this.sleep=sleep;this.html=html;}
  async api(method,body){
   for(let attempt=0;;attempt++){
    let r;try{r=await this.fetcher(`https://api.telegram.org/bot${this.bot}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{}),redirect:'error',signal:AbortSignal.timeout(20000)});}
@@ -115,7 +117,13 @@ export class Telegram{
    return data.result;
   }
  }
- send(text){return this.api('sendMessage',{chat_id:this.chat,text:String(text).slice(0,4000),disable_web_page_preview:true});}
+ // 2.5.1: 3800자 넘으면 블록·줄 경계에서 나눠 보냄. HTML(제목만 <b>, 나머지 이스케이프) → 400이면 같은 내용을 plain으로 다시.
+ async send(text){let last;for(const part of fmt.splitText(String(text)))last=await this.sendOne(part);return last;}
+ async sendOne(part){
+  if(this.html){try{return await this.api('sendMessage',{chat_id:this.chat,text:fmt.toHtml(part),parse_mode:'HTML',disable_web_page_preview:true});}
+   catch(e){if(!/^TELEGRAM_HTTP_400/.test(String(e.message||e)))throw e;}}
+  return this.api('sendMessage',{chat_id:this.chat,text:part,disable_web_page_preview:true});
+ }
  async findChats(){
   const updates=await this.api('getUpdates',{limit:100,timeout:0,allowed_updates:['message','channel_post','my_chat_member']});
   const chats=new Map();
@@ -165,7 +173,7 @@ export async function saveState(dir,state){await mkdir(dir,{recursive:true});con
 export class Alerter{
  constructor(env,{fetcher=fetch,now=Date.now,log,sleep,dryRun=false,out=l=>console.log(l)}={}){
   this.env=env;this.cfg=readConfig(env);this.fetcher=fetcher;this.now=now;this.log=log||makeLogger(env);this.dryRun=dryRun;this.out=out;
-  this.rpc=new SupabaseRpc(this.cfg,fetcher,sleep);this.tg=new Telegram(this.cfg.bot,this.cfg.chat,fetcher,sleep);
+  this.rpc=new SupabaseRpc(this.cfg,fetcher,sleep);this.tg=new Telegram(this.cfg.bot,this.cfg.chat,fetcher,sleep,{html:this.cfg.telegramHtml});
   this.cal={US:usCalendar({extraHolidays:this.cfg.usExtraHolidays}),HL:hlCalendar()};this.rcal=day.utcCalendar();this.periodMissing=false;
   this.state=emptyLocal();this.hl={addr:null,fills:new Map(),fillsAt:0,funding:new Map(),fundingAt:0,ledger:[],ledgerAt:0,portfolio:null,portfolioAt:0};this.failures=0;this.lastStatus={};this.dayData=null;this.dayDataMissing=false;
  }
@@ -289,31 +297,49 @@ export class Alerter{
   const [h,m]=this.cfg.summaryTime;if(mins<h*60+m||mins>=23*60)return null;const key='summary:'+d;return this.state.sent[key]?null:key;
  }
  summaryText(statuses,t){
-  const lines=['📊 '+RULES+' 요약'];
-  for(const s of statuses){const P=s.periods||{};const part=(k,lbl)=>P[k]&&P[k].pct!==null?`${lbl} ${risk.pctText(P[k].pct)}`+(P[k].limit?`/−${P[k].limit}%`:''):`${lbl} —`;
-   const rd=P.day?.basis==='realized';
-   const rp=s.periodBasis==='realized';
-   lines.push(`${risk.MARKET_LABEL[s.market]} (${s.todayLabel}) ${part('day',rd?'오늘 실현':'오늘')} · ${part('week',rp?'주 실현':'주')} · ${part('month',rp?'달 실현':'달')}`);
-   if(rp&&P.week?.startSource)lines.push(`  ${P.month?.startSource&&P.month.startSource!==P.week.startSource?'주 기준: '+P.week.startSource+' · 월 기준: '+P.month.startSource:'주·월 기준: '+P.week.startSource}${P.weekEquity&&Number.isFinite(P.weekEquity.pct)?' · 참고 미실현 포함 주 '+risk.pctText(P.weekEquity.pct):''}`);
-   if(s.riskStart)lines.push(s.riskStart.before?`  한도 기준일 ${s.riskStart.date.slice(5).replace('-','/')}부터 적용 (${s.riskStart.atText}) · 그 전엔 판정·알림 안 함(기록만)`:`  한도 기준일 ${s.riskStart.date.slice(5).replace('-','/')}부터 (${s.riskStart.atText})`);
-   if(rd&&P.day.startSource)lines.push(`  하루 기준: ${P.day.startSource}${P.day.budget?' · 한도 '+risk.usd(P.day.budget,s.market):''}${P.day.ref&&Number.isFinite(P.day.ref.pct)?' · 참고 미실현 포함 '+risk.pctText(P.day.ref.pct):''}`);
-   const dd=(rp?P.weekEquity:P.week)?.ddPct;if(Number.isFinite(dd)&&dd<0)lines.push(`  주 고점 대비 ${risk.pctText(dd)} (참고)`);
-   if(s.stops.length)lines.push('  ⛔ '+s.stops.map(x=>`${x.label} ~ ${x.untilText}`).join(' / '));
-   if(s.halfRisk?.active)lines.push(`  ✅ 오늘 재시작 첫날 · 위험 ${Math.round(s.halfRisk.factor*100)}%`);
-   if(s.streak?.count)lines.push(`  연속 손실일 ${s.streak.count}/${s.streak.need}`);}
-  return lines.join('\n');
+  return fmt.multi(`📊 손실 한도 요약 · 미국 ${fmt.dayWithDow(etDate(t))} 장마감`,statuses.map(st=>this.block(st,false)));
  }
+ /** 시장 블록(장마감 요약 = 짧게, --test = detail 줄 포함). 첫 줄 = 구분 제목('🇺🇸 미국주식 · …') */
+ block(s,detail){
+  const P=s.periods||{},mk=s.market,rs=s.riskStart||null,U=x=>risk.usd(x,mk),SU=x=>risk.signedUsd(x,mk);
+  const hk=mk==='HL'&&P.day?.basis==='realized'&&/^\d{4}-\d{2}-\d{2}$/.test(String(P.day.key||''))?P.day.key:null; // HL 하루 = UTC 날짜(KST 09:00 시작)
+  const rows=[`${fmt.MARKET_HEAD[mk]} · ${hk?'하루 '+fmt.dayWithDow(hk)+' 09:00~':'거래일 '+s.todayLabel}`];
+  if(detail)rows.push(`자산: ${s.equity?U(s.equity.value)+' ('+s.equity.source+')':'없음'}`);
+  for(const [k,nm] of [['day','오늘'],['week','주간'],['month','월간']]){
+   const x=P[k];rows.push(fmt.usageRow(nm,{...(x||{}),pct:x?x.pct:null,startDay:rs?rs.day:null,beforeStart:!!x?.beforeStart||(!!rs?.before&&!x)}));
+   if(!detail||!x||x.pct===null||!Number.isFinite(x.pct))continue;
+   if(x.basis==='realized'){
+    const pt=k==='day'&&mk==='HL'&&x.parts?` = 체결 ${SU(x.parts.trades)} + 펀딩 ${SU(x.parts.funding)}`:'';
+    rows.push(`  · 손익 ${SU(x.pnl)}${pt}`);
+    rows.push(`  · 기준 ${x.startSource}${x.cut?' · 기준일부터':''}${x.budget?' · 한도 '+U(-x.budget):''}`);
+    const q=k==='day'?x.ref:P[k+'Equity'];
+    if(q&&Number.isFinite(q.pct))rows.push(`  · 참고 미실현 포함 ${risk.pctText(q.pct)} (${SU(q.pnl)}${q.flows?' · 입출금 '+SU(q.flows)+' 제외':''})`);
+   }else{
+    rows.push(`  · 손익 ${SU(x.pnl)} · 시작 ${U(x.startEquity)}${x.startSource?' '+x.startSource:''}${x.cut?' · 기준일부터':''}${x.flows?' · 입출금 '+SU(x.flows)+' 제외':''}`);
+    if(Number.isFinite(x.ddPct)&&x.ddPct<0)rows.push(`  · 고점 대비 ${risk.pctText(x.ddPct)}`);
+   }
+  }
+  rows.push(`연속 손실: ${s.streak?.count??0}/${s.streak?.need??0}일`);
+  if(s.stops?.length)for(const x of s.stops)rows.push(`⛔ 중단: ${x.label} ~ ${x.untilText}`);else rows.push('중단: 없음');
+  if(s.halfRisk?.active)rows.push(`✅ 재시작 첫날: 1회 위험 ${Math.round(s.halfRisk.factor*100)}%`);
+  if(rs){if(rs.before)rows.push(`한도 적용: ${fmt.applyText(mk,rs.day,rs.at)}`);
+   else if(detail)rows.push(`한도 기준일: ${fmt.dayWithDow(rs.date)}부터${rs.base?' (기준 자산 '+U(rs.base.equity)+' · '+rs.base.source+')':''}`);}
+  if(s.note&&!rs?.before)rows.push('※ '+s.note);
+  return rows;
+ }
+ /** --test 각주: 긴 '기준:' 설명은 여기서 한 번만 */
+ testFoot(statuses){
+  const foot=[],labels=[...new Set(statuses.map(s=>s.basis?.label).filter(Boolean))];
+  if(labels.length===1)foot.push('※ 기준: '+labels[0]);
+  else for(const s of statuses)if(s.basis?.label)foot.push(`※ ${fmt.MARKET_NAME[s.market]} 기준: ${s.basis.label}`);
+  for(const s of statuses){const rs=s.riskStart;if(s.market==='US'&&rs?.before){const [kst,et]=String(untilText(rs.at,'US')).split(' · 미국 ');foot.push(`※ 미국 ${rs.day.slice(5).replace('-','/')} 거래일 몫 = ${et}(${kst}) 이후 체결부터 (애프터·프리마켓 포함)`);}}
+  return foot;
+ }
+ testText(statuses){return fmt.multi(`✅ trade-alert ${VERSION} 테스트 · ${RULES}`,statuses.map(s=>this.block(s,true)),this.testFoot(statuses));}
+ describe(statuses){return statuses.map(s=>this.block(s,true).join('\n')).join('\n\n');}
  delay(){const t=this.now();const hasHL=!!this.lastStatus.HL;if(hasHL)return this.cfg.checkSec*1000;
   const p=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t));const g=k=>p.find(x=>x.type===k)?.value;const mins=Number(g('hour'))*60+Number(g('minute'));
   const active=!['Sat','Sun'].includes(g('weekday'))&&mins>=4*60&&mins<20*60+5;return (active?this.cfg.checkSec:this.cfg.idleSec)*1000;}
- describe(statuses){return statuses.map(s=>{const P=s.periods||{};const L=k=>{const x=P[k];if(k==='day'&&x&&x.basis==='realized'){if(x.pct===null)return `오늘(실현) — ${x.missing==='data'?'데이터 없음':x.missing==='before-start'?'기준일 전':'분모 없음'}`;const pt=x.parts&&s.market==='HL'?` = 체결 ${risk.signedUsd(x.parts.trades,'HL')} + 펀딩 ${risk.signedUsd(x.parts.funding,'HL')}`:'';
-   return `오늘(실현) ${risk.pctText(x.pct)} (${risk.signedUsd(x.pnl,s.market)}${pt}) · 기준 ${x.startSource} · 한도 −${x.limit??'—'}%${x.budget?' = '+risk.usd(-x.budget,s.market):''}`+(x.ref&&Number.isFinite(x.ref.pct)?`\n   참고: 미실현 포함 자산 변화 ${risk.pctText(x.ref.pct)} (${risk.signedUsd(x.ref.pnl,s.market)})`:'');}
-  const nm={day:'오늘',week:'이번 주',month:'이번 달'}[k];
-  if(k!=='day'&&x&&x.basis==='realized'){if(x.pct===null)return `${nm}(실현) — ${x.missing==='data'?'데이터 없음':x.missing==='before-start'?'기준일 전':'분모 없음'}`;
-   const rq=s.periods?.[k+'Equity'];return `${nm}(실현) ${risk.pctText(x.pct)} (${risk.signedUsd(x.pnl,s.market)}) · 기준 ${x.startSource}${x.cut?' · 기준일부터':''} · 한도 −${x.limit??'—'}%${x.budget?' = '+risk.usd(-x.budget,s.market):''}`+(rq&&Number.isFinite(rq.pct)?`\n   참고: 미실현 포함 자산 변화 ${risk.pctText(rq.pct)} (${risk.signedUsd(rq.pnl,s.market)}${rq.flows?' · 입출금 '+risk.signedUsd(rq.flows,s.market)+' 제외':''})`:'');}
-  if(!x||x.pct===null)return `${k} —${x?.beforeStart?' (기준일 전)':''}`;return `${nm} ${risk.pctText(x.pct)} (${risk.signedUsd(x.pnl,s.market)} / 시작 ${risk.usd(x.startEquity,s.market)} ${x.startSource||''}${x.cut?' · 기준일부터':''}${x.flows?` · 입출금 ${risk.signedUsd(x.flows,s.market)} 제외`:''}) 한도 −${x.limit??'—'}%`+(Number.isFinite(x.ddPct)?` · 고점 대비 ${risk.pctText(x.ddPct)}`:'');};
-  const rsT=s.riskStart?`\n 한도 기준일 ${s.riskStart.date} → ${s.riskStart.atText}부터 (이전 손익 제외${s.riskStart.base?' · 기준 자산 '+risk.usd(s.riskStart.base.equity,s.market)+' '+s.riskStart.base.source:''})`:'';
-  return `${risk.MARKET_LABEL[s.market]} · 거래일 ${s.todayLabel} · 자산 ${s.equity?risk.usd(s.equity.value,s.market)+' ('+s.equity.source+')':'없음'}${rsT}\n ${L('day')}\n ${L('week')}\n ${L('month')}\n 연속 손실일 ${s.streak.count}/${s.streak.need}`+(s.basis?.label?'\n 기준: '+s.basis.label:'')+(s.stops.length?'\n ⛔ '+s.stops.map(x=>`${x.label} ~ ${x.untilText}`).join(' / '):'\n 거래 중단 없음')+(s.halfRisk?.active?`\n ✅ 재시작 첫날(위험 ${Math.round(s.halfRisk.factor*100)}%)`:'')+(s.note?'\n ※ '+s.note:'');}).join('\n');}
  async run(){
   await this.init();const c=this.cfg;
   this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월(÷ 기간 시작 직전 마감)·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:''));
@@ -352,10 +378,10 @@ export async function main(argv=process.argv.slice(2),env=process.env){
  const dryRun=argv.includes('--dry-run');
  if(argv.includes('--test')){
   let cfg;try{cfg=readConfig(env,{needSupabase:false});}catch(e){explainConfig(e,log);return 2;}
-  let detail='';
-  try{const a=new Alerter(env,{dryRun:true,log,out:()=>{}});await a.init();const r=await a.check();detail=r.statuses.length?a.describe(r.statuses):'(판정할 시장 없음: 키움 수집 스냅샷·HL 주소가 없습니다)';}
-  catch(e){detail='(Supabase 확인 실패: '+(e.fields?'.env 미입력 '+e.fields.join(', '):String(e.message||e))+')';}
-  try{await new Telegram(cfg.bot,cfg.chat).send(`✅ 매매일지 ${RULES} 테스트 · trade-alert ${VERSION}\n`+detail);console.log('테스트 메시지를 보냈습니다.\n'+detail);return 0;}
+  let text='';const T=`✅ trade-alert ${VERSION} 테스트 · ${RULES}`;
+  try{const a=new Alerter(env,{dryRun:true,log,out:()=>{}});await a.init();const r=await a.check();text=r.statuses.length?a.testText(r.statuses):fmt.card(T,['판정할 시장 없음: 키움 수집 스냅샷·HL 주소가 없습니다']);}
+  catch(e){text=fmt.card(T,['Supabase 확인 실패: '+(e.fields?'.env 미입력 '+e.fields.join(', '):String(e.message||e))]);}
+  try{await new Telegram(cfg.bot,cfg.chat,fetch,undefined,{html:cfg.telegramHtml}).send(text);console.log('테스트 메시지를 보냈습니다.\n'+text);return 0;}
   catch(e){log('ERROR','테스트 전송 실패: '+String(e.message));return 1;}
  }
  let a;try{a=new Alerter(env,{dryRun,log});}catch(e){explainConfig(e,log);return 2;}
