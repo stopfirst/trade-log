@@ -1,4 +1,5 @@
-// trade-alert 2.4.0 (alert6): 손실한도 판정 v1.6 — 주·월 한도 분모 = 기간 시작 직전 마감 잔액(없으면 현재 기준액, 앱 v31과 같음).
+// trade-alert 2.5.0 (alert7): 미래 한도 기준일 — 기존 중단 전부 해제·그 전엔 판정/알림/재시작 절반 없음·요약 'MM/DD부터 적용'. 규칙 이름 v1.6 그대로.
+// (이전) 2.4.0 (alert6): 손실한도 판정 v1.6 — 주·월 한도 분모 = 기간 시작 직전 마감 잔액(없으면 현재 기준액, 앱 v31과 같음).
 // (이전) 2.3.0 (alert5): 손실한도 판정 v1.5 — 텔레그램 알림 + Supabase 거래 중단 상태(앱 배너) + 규칙 위반 기록.
 // v1.5: 주·월 한도와 연속 손실일도 실현손익 기준(앱 v29 limitStatus와 같음) — 주·월 % = 기간 실현손익 합 ÷ 현재 기준액,
 //       연속 손실일 = 그날 실현손익 ÷ 직전 마감. 입출금이 손실로 잡히지 않음. 미실현 포함 변동은 '참고' 줄로만.
@@ -27,7 +28,7 @@ import {usCalendar,hlCalendar,untilText,addDays} from './calendar.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.4.0';
+export const VERSION='2.5.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -294,7 +295,7 @@ export class Alerter{
    const rp=s.periodBasis==='realized';
    lines.push(`${risk.MARKET_LABEL[s.market]} (${s.todayLabel}) ${part('day',rd?'오늘 실현':'오늘')} · ${part('week',rp?'주 실현':'주')} · ${part('month',rp?'달 실현':'달')}`);
    if(rp&&P.week?.startSource)lines.push(`  ${P.month?.startSource&&P.month.startSource!==P.week.startSource?'주 기준: '+P.week.startSource+' · 월 기준: '+P.month.startSource:'주·월 기준: '+P.week.startSource}${P.weekEquity&&Number.isFinite(P.weekEquity.pct)?' · 참고 미실현 포함 주 '+risk.pctText(P.weekEquity.pct):''}`);
-   if(s.riskStart)lines.push(`  한도 기준일 ${s.riskStart.date.slice(5).replace('-','/')}부터 (${s.riskStart.atText})`);
+   if(s.riskStart)lines.push(s.riskStart.before?`  한도 기준일 ${s.riskStart.date.slice(5).replace('-','/')}부터 적용 (${s.riskStart.atText}) · 그 전엔 판정·알림 안 함(기록만)`:`  한도 기준일 ${s.riskStart.date.slice(5).replace('-','/')}부터 (${s.riskStart.atText})`);
    if(rd&&P.day.startSource)lines.push(`  하루 기준: ${P.day.startSource}${P.day.budget?' · 한도 '+risk.usd(P.day.budget,s.market):''}${P.day.ref&&Number.isFinite(P.day.ref.pct)?' · 참고 미실현 포함 '+risk.pctText(P.day.ref.pct):''}`);
    const dd=(rp?P.weekEquity:P.week)?.ddPct;if(Number.isFinite(dd)&&dd<0)lines.push(`  주 고점 대비 ${risk.pctText(dd)} (참고)`);
    if(s.stops.length)lines.push('  ⛔ '+s.stops.map(x=>`${x.label} ~ ${x.untilText}`).join(' / '));
