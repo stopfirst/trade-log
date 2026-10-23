@@ -1,5 +1,6 @@
 // alert4(trade-alert 2.2.0) 서비스 통합 테스트 — RISK_START_DATE(한도 기준일). 네트워크 없음.
 import test from 'node:test';
+import {fromHtml} from '../src/format.mjs'; // 2.5.1: 텔레그램 HTML(제목 <b>) → plain으로 비교
 import assert from 'node:assert/strict';
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -22,7 +23,7 @@ function world(){
   if(url.endsWith('/rpc/risk_day_data')){w.dayCalls++;if(w.dayMode==='missing')return J({code:'PGRST202',message:'Could not find the function public.risk_day_data(p_token) in the schema cache'},404);
    if(w.dayMode==='down')return J({message:'x'},503);return J({ok:true,version:3,...w.day});}
   if(url.endsWith('/rpc/risk_push')){const p=body.p_payload;w.pushes.push(p);for(const e of p.events||[])w.dbEvents.push({market:e.market,ref:e.ref,kind:e.kind});return J({ok:true});}
-  if(url.includes('api.telegram.org')){w.tg.push(body.text);return J({ok:true,result:{}});}
+  if(url.includes('api.telegram.org')){w.tg.push(fromHtml(body.text));return J({ok:true,result:{}});}
   if(url==='https://api.hyperliquid.xyz/info'){
    switch(body.type){case 'userAbstraction':return J('default');case 'spotClearinghouseState':return J({balances:[{token:0,coin:'USDC',total:'0',hold:'0'}]});
     case 'clearinghouseState':return J({assetPositions:[],marginSummary:{accountValue:w.hlEq},time:Date.now()});case 'perpDexs':return J([null]);
@@ -49,9 +50,9 @@ test('check(): RISK_START_DATE=2026-10-20 → HL 기준 자산 = HL 마감 10/19
  assert.equal(s.periods.week.startEquity,1900);assert.equal(s.periods.week.pct,-2.6316);
  const p=w.pushes.at(-1);assert.ok(p.events.some(e=>e.kind==='clear'&&e.rule==='risk-start'&&e.detail.stopId==='HL:week-intraday:2026-10-20'));
  assert.equal(p.states[0].status.riskStart.date,'2026-10-20');assert.equal(p.states[0].status.riskStart.atText,'10/20(화) 09:00 KST');
- assert.ok(w.tg.some(x=>/^🔄 하이퍼리퀴드 손실 한도 기준일 10\/20/.test(x)&&/중단 해제: 주간 −6% 장중 도달/.test(x)));
- assert.match(b.describe(r.statuses),/한도 기준일 2026-10-20 → 10\/20\(화\) 09:00 KST부터 \(이전 손익 제외 · 기준 자산 1,900\.00 USDC HL 마감 10\/19 UTC\)/);
- assert.match(b.summaryText(r.statuses,w.now),/한도 기준일 10\/20부터 \(10\/20\(화\) 09:00 KST\)/);
+ assert.ok(w.tg.some(x=>/^🔄 하이퍼리퀴드 · 손실 한도 10\/20부터 새로 셈\n\n한도 적용: 10\/20\(화\) 09:00 KST부터/.test(x)&&/중단 해제: 주간 −6% 장중 도달/.test(x)));
+ assert.match(b.describe(r.statuses),/한도 기준일: 10\/20\(화\)부터 \(기준 자산 1,900\.00 USDC · HL 마감 10\/19 UTC\)/);
+ assert.doesNotMatch(b.summaryText(r.statuses,w.now),/한도 (기준일|적용)/,'기준일 지난 뒤 장마감 요약엔 기준일 줄 없음(2.5.1)');
 });
 
 test('check(): US RISK_START_DATE → 기준 자산 = 키움 마감 잔액(직전 거래일 etDate), 하루 실현 키 10/20부터',async()=>{
