@@ -1,4 +1,10 @@
-# 매매일지 손실한도 판정 v1.6 (trade-alert 2.4.0 · alert6)
+# 매매일지 손실한도 판정 v1.6 (trade-alert 2.5.0 · alert7)
+
+## 2.5.0 — 미래 한도 기준일(실험 기간)
+- `RISK_START_DATE`를 **미래 날짜**로 두면(예: `2026-10-26`): 서버를 다시 시작한 첫 판정에서 **지금 걸린 중단을 전부 해제**(기준일 전에 끝나는 중단 포함 — 모두 기준일 전 손실로 생긴 것, `risk_events` clear rule `risk-start`) + 시장별 🔄 1회('… 기준일 10/26 — 10/26(월) 09:00 KST부터 다시 셉니다 … 10/26부터 적용 · 그 전엔 판정·알림 안 함(기록만)').
+- 기준 시각 전까지: 하루·주·월·연속 손실 판정, 50/80% 사전 알림, 재시작 첫날(위험 절반) **없음**. 장마감 요약에 `한도 기준일 10/26부터 적용 (…) · 그 전엔 판정·알림 안 함(기록만)`.
+- 기준 시각(HL = 그날 UTC 00:00 = KST 09:00, US = 그 날짜 ET 거래일 시작)부터는 2.4.0과 같음(기준일 키부터 합계).
+- 바꾸는 한 줄: `sudo sed -i '/^RISK_START_DATE=/d' /opt/trade-alert/.env; echo RISK_START_DATE=2026-10-26 | sudo tee -a /opt/trade-alert/.env >/dev/null; sudo systemctl restart trade-alert`
 
 키움 수집기가 있는 같은 Lightsail 서버의 **별도 서비스**(`trade-alert`)입니다. alert2(2.0.0)·alert3(2.1.0)·alert4(2.2.0)를 같은 자리에서 업데이트합니다.
 
