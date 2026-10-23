@@ -1,5 +1,6 @@
 // alert6(trade-alert 2.4.0) 손실한도 판정 v1.6 — 주·월 한도 분모 = 기간 시작 직전 마감 잔액(없으면 현재 기준액).  node --test tests/*.test.mjs
 import test from 'node:test';
+import {fromHtml} from '../src/format.mjs'; // 2.5.1: 텔레그램 HTML(제목 <b>) → plain으로 비교
 import assert from 'node:assert/strict';
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -39,7 +40,7 @@ test('HL 출금 후에도 분모 유지: 주 시작(10/19 월) 직전 마감 10/
  assert.equal(r5.status.periods.week.pct,-20);assert.equal(r5.status.periods.week.startSource,'현재 기준액 5,000.00 USDC');assert.equal(r5.status.stopped,true);assert.equal(r5.status.periodDenom,undefined);
  // 50% 경고에도 새 기준 표기
  const R2=runner(HL);const r2=R2.step(t,5000,PR('HL',t,{'2026-10-20':-700},{basis:5000,acct}));
- assert.match(r2.messages.find(m=>/주간 실현손익/.test(m.text)).text,/한도 −6% \(−1,200\.00 USDC\)의 58%\n기준: 10\/18 마감 20,000\.00 USDC/);
+ assert.match(r2.messages.find(m=>/주간 한도 \d+% 사용/.test(m.text)).text,/^🔔 하이퍼리퀴드 · 주간 한도 58% 사용\n\n이번 주 실현: −3\.50% \(−700\.00 USDC\)\n한도: −6% \(−1,200\.00 USDC\)\n기준: 10\/18 마감 20,000\.00 USDC/);
 });
 
 test('한도 기준일이 기간 시작: RISK_START_DATE=2026-10-20 → 주·월 분모 = 10/19 UTC 마감(기준일 직전) · denomStart 10/20',()=>{
@@ -82,7 +83,7 @@ test('마감 판정(다음 키로 넘어갈 때)도 기간 분모 사용 · 메�
  R.step(t1,4000,PR('HL',t1,{'2026-10-20':-100},{basis:4000,acct}));
  let r=R.step(t1+3600000,4000,PR('HL',t1,{'2026-10-20':-650},{basis:4000,acct}));
  const st=r.status.stops.find(s=>s.rule==='week-intraday');assert.ok(st,'−6.5% 장중');assert.match(st.reason,/기준 10\/18 마감 10,000\.00 USDC/);
- assert.match(R.all.messages.find(m=>m.text.startsWith('⛔')).text,/주간 한도 −6% \(−600\.00 USDC\) 장중 도달\n기준: 10\/18 마감 10,000\.00 USDC/);
+ assert.match(R.all.messages.find(m=>m.text.startsWith('⛔')).text,/주간 실현 −6% 장중 도달\n\n이번 주 실현: [^\n]+\n한도: −6% \(−600\.00 USDC\)\n기준: 10\/18 마감 10,000\.00 USDC/);
  r=R.step(t2,4000,PR('HL',t2,{'2026-10-20':-650},{basis:4000,acct}));
  const w=r.status.stops.find(s=>s.rule==='week');assert.ok(w);assert.equal(w.id,'HL:weekr:2026-10-19');assert.match(w.reason,/마감 10\/20 UTC · 기준 10\/18 마감 10,000\.00 USDC/);
 });
@@ -96,10 +97,10 @@ test('처음 v1.6 적용: 새 분모로 성립하지 않는 v1.5 실현 주·월
  let r=R.step(t+60000,5000,PR('HL',t,{'2026-10-20':-1000},{basis:5000,acct}));
  assert.equal(r.status.stopped,false);assert.equal(r.events.filter(e=>e.kind==='clear'&&e.rule==='denom-period-start').length,2);
  const m=r.messages.filter(x=>x.text.startsWith('🔄'));assert.equal(m.length,1);
- assert.match(m[0].text,/^🔄 하이퍼리퀴드 손실 한도 판정 v1\.6 — 주·월 한도 분모 = 기간 시작 직전 마감 잔액\(없으면 현재 기준액\)/);
- assert.match(m[0].text,/이번 주 기준: 10\/18 마감 20,000\.00 USDC · 한도 −6% = −1,200\.00 USDC · 지금 실현 −5\.00%/);
+ assert.match(m[0].text,/^🔄 하이퍼리퀴드 · 손실 한도 판정 v1\.6 — 주·월 분모 변경\n\n주·월 분모: 기간 시작 직전 마감 잔액 \(없으면 현재 기준액\)/);
+ assert.match(m[0].text,/\n이번 주 기준: 10\/18 마감 20,000\.00 USDC · 한도 −6% = −1,200\.00 USDC · 지금 실현 −5\.00%/);
  assert.match(m[0].text,/이번 달 기준: 09\/30 마감 20,000\.00 USDC · 한도 −10% = −2,000\.00 USDC/);
- assert.match(m[0].text,/새 분모로 성립하지 않는 중단 해제: 주간 실현 −6% 장중 도달 \(~ /);
+ assert.match(m[0].text,/\n중단 해제: (\d건\n· )?주간 실현 −6% 장중 도달 \(~ /);
  assert.equal(R.state.periodDenom,'start-close');assert.deepEqual(r.status.clearedBasis.length,2);
  r=R.step(t+120000,5000,PR('HL',t,{'2026-10-20':-1000},{basis:5000,acct}));assert.equal(r.messages.filter(x=>x.text.startsWith('🔄')).length,0,'반복 없음');assert.equal(r.status.stopped,false);
  // 새 분모로도 주는 성립(−6.5%) → 주 유지, 달(−6.5% > −10%)만 해제, 🔄 1회
@@ -111,7 +112,7 @@ test('처음 v1.6 적용: 새 분모로 성립하지 않는 v1.5 실현 주·월
 });
 
 test('서비스: alert5.sql(v5) acct 40일로 월 시작 직전 마감까지 읽음 → status·describe·statusMeta v1.6, SQL v3이면 v1.4 폴백 그대로',async()=>{
- assert.equal(VERSION,'2.5.0');assert.equal(RULES,'손실한도 판정 v1.6');
+ assert.equal(VERSION,'2.5.1');assert.equal(RULES,'손실한도 판정 v1.6');
  assert.match(statusMeta({dayBasis:'realized',periodBasis:'realized',periodDenom:'start-close'}).basis.label,/주·월 ÷ 기간 시작 직전 마감\(없으면 현재 기준액\)/);
  assert.match(statusMeta({dayBasis:'realized',periodBasis:'realized'}).basis.label,/주·월 ÷ 현재 기준액/);
  const BOT='123456789:AAH'+'x'.repeat(32),TOKEN='kwc_'+'A'.repeat(43),KEY='sb_publishable_'+'k'.repeat(24);
@@ -122,17 +123,17 @@ test('서비스: alert5.sql(v5) acct 40일로 월 시작 직전 마감까지 읽
    acct_us:[],hl_address:null,journal:{US:{revision:1,unchanged:body.p_us_revision===1,defaultRisk:1,account:60000},HL:{revision:1,unchanged:true,defaultRisk:1,account:null}},risk:{state:[],events:[],flows:[]}});
   if(url.endsWith('/rpc/risk_day_data'))return J({ok:true,version:w.dayVersion,kw_days:[{date:'2026-10-19',as_of:1,total:'-600',count:2},{date:'2026-10-20',as_of:2,total:'-400',count:1}],acct,hl:null});
   if(url.endsWith('/rpc/risk_push')){w.pushes.push(body.p_payload);return J({ok:true});}
-  if(url.includes('api.telegram.org')){w.tg.push(body.text);return J({ok:true,result:{}});}
+  if(url.includes('api.telegram.org')){w.tg.push(fromHtml(body.text));return J({ok:true,result:{}});}
   return J({message:'not found'},404);};
  const env=dir=>({SUPABASE_URL:'https://abcdefgh.supabase.co',SUPABASE_KEY:KEY,KW_COLLECTOR_TOKEN:TOKEN,TELEGRAM_BOT_TOKEN:BOT,TELEGRAM_CHAT_ID:'987654321',ALERT_STATE_DIR:dir,DAILY_SUMMARY:'0',ALERT_MARKETS:'US'});
  const a=new Alerter(env(await mkdtemp(path.join(tmpdir(),'ta6-'))),{fetcher:w.fetcher,now:()=>w.now,log:()=>{},sleep:async()=>{}});await a.init();
  const r=await a.check();const s=r.statuses[0];
- assert.equal(s.version,'2.5.0');assert.equal(s.rules,'손실한도 판정 v1.6');assert.equal(s.periodDenom,'start-close');
+ assert.equal(s.version,'2.5.1');assert.equal(s.rules,'손실한도 판정 v1.6');assert.equal(s.periodDenom,'start-close');
  assert.equal(s.periods.week.startSource,'10/16 마감 $63,000.00');assert.equal(s.periods.week.pct,-1.5873);assert.equal(s.periods.month.startSource,'09/30 마감 $61,000.00');
  assert.equal(s.stopped,false,'2.3.0이면 −6.16% 주간 실현 중단(alert5.test)');
  assert.equal(w.pushes.at(-1).states[0].status.periods.week.denomStart,'2026-10-19');
- assert.match(a.describe(r.statuses),/이번 주\(실현\) −1\.59% \(−\$1,000\.00\) · 기준 10\/16 마감 \$63,000\.00 · 한도 −6% = −\$3,780\.00/);
- assert.match(a.summaryText(r.statuses,w.now),/주 기준: 10\/16 마감 \$63,000\.00 · 월 기준: 09\/30 마감 \$61,000\.00/);
+ assert.match(a.describe(r.statuses),/주간   −1\.59% \/ 6%  \(26%\)\n  · 손익 −\$1,000\.00\n  · 기준 10\/16 마감 \$63,000\.00 · 한도 −\$3,780\.00/);
+ assert.match(a.describe(r.statuses),/월간   [^\n]+\n  · 손익 [^\n]+\n  · 기준 09\/30 마감 \$61,000\.00/);assert.match(a.summaryText(r.statuses,w.now),/^📊 손실 한도 요약 · 미국 \d\d\/\d\d\(.\) 장마감\n\n🇺🇸 미국주식 · 거래일 [^\n]+\n오늘   [^\n]+\n주간   −1\.59% \/ 6%  \(26%\)\n/);
  // SQL v3(alert3.sql만) → 주·월은 v1.4(자산 변화)로 폴백 — v1.6 필드 없음
  const w3={...w};const b=new Alerter(env(await mkdtemp(path.join(tmpdir(),'ta6b-'))),{fetcher:async(u,o)=>{w.dayVersion=3;return w.fetcher(u,o);},now:()=>w.now,log:()=>{},sleep:async()=>{}});await b.init();
  const r3=await b.check();assert.equal(r3.statuses[0].periodBasis,'equity');assert.equal(r3.statuses[0].periodDenom,undefined);void w3;
