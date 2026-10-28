@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 매매일지 손실한도 판정 v1.6 알림 + 텔레그램 즉시 복기(trade-alert 2.6.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
+# 매매일지 손실한도 판정 v1.6 알림 + 텔레그램 즉시 복기 · 현물 포함 분모(trade-alert 2.7.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
 #   curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash
 # 다시 실행하면 코드만 업데이트합니다(.env와 알림 기록은 절대 덮어쓰지 않음).
 # 키움 수집기(kiwoom-collector)와 별개의 서비스입니다. 수집기는 건드리지 않습니다.
@@ -12,7 +12,7 @@ SVC=trade-alert
 USR=tradealert
 STATE=/var/lib/trade-alert
 KWC_ENV=/opt/kiwoom-collector/.env
-FILES="package.json src/alert.mjs src/risk.mjs src/format.mjs src/quick.mjs src/calendar.mjs src/sources.mjs src/day.mjs src/hl-balance.cjs env.template trade-alert.service"
+FILES="package.json src/alert.mjs src/risk.mjs src/format.mjs src/quick.mjs src/spot.mjs src/calendar.mjs src/sources.mjs src/day.mjs src/hl-balance.cjs env.template trade-alert.service"
 
 say(){ printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 die(){ printf '\n\033[1;31m[중단] %s\033[0m\n' "$*" >&2; exit 1; }
@@ -105,6 +105,10 @@ else
     # 2.6.0 안내(주석)만 덧붙입니다. 기본 = 켜짐(QUICK_REVIEW=1), Supabase alert9.sql 필요(없으면 질문 안 함·알림은 그대로).
     sed -n '/^# \[즉시 복기 2.6.0\]/,/^# \[손실한도 판정 v1.6\]/p' "$DIR/env.template" | sed '$d' >> "$DIR/.env"
     echo "기존 .env에 텔레그램 즉시 복기(QUICK_REVIEW) 안내(주석)를 덧붙였습니다."
+  fi
+  if ! grep -q '^# \[현물 포함 분모 2.7.0\]' "$DIR/.env"; then
+    sed -n '/^# \[현물 포함 분모 2.7.0\]/,/^# \[손실한도 판정 v1.6\]/p' "$DIR/env.template" | sed '$d' >> "$DIR/.env"
+    echo "기존 .env에 현물 포함 분모(SPOT_IN_BASIS) 안내(주석)를 덧붙였습니다."
   fi
   if ! grep -q '^# \[손실한도 판정 v1.6\]' "$DIR/.env"; then
     # 2.4.0 안내(주석)만 덧붙입니다. 설정할 값 없음(주·월 분모 = 기간 시작 직전 마감 잔액, 새 SQL 없음).
