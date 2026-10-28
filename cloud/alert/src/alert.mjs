@@ -33,7 +33,7 @@ import * as spot from './spot.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.7.0';
+export const VERSION='2.7.1';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -273,6 +273,7 @@ export class Alerter{
    const ecH=engineCfg(this.cfg,'HL',S.journal.HL?.defaultRisk,dayMode,cal);
    const anchorH=ecH.riskStart?ms=>{const pk=addDays(ecH.riskStart.date,-1),r=dd?day.closeRows(dd.acct,'HL')[pk]:null;if(r&&r.value>0)return {equity:r.value,at:ecH.riskStart.at,source:'HL 마감 '+pk.slice(5).replace('-','/')+' UTC'};return src.hlPortfolioAt(h.portfolio,ms,h.equity);}:null;
    const res=risk.step(S.engine.HL,{now:t,cal,cfg:ecH,equity:h.equity,flows,fills:h.fills,fallbackStart:fb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorH,periodMode,periodRealized});
+   if(spotNote&&this.spotB?.cur&&!this.spotB.cur.miss)res.status.spot={usd:Math.round(this.spotB.cur.usd*100)/100,coins:this.spotB.cur.items.map(i=>i.coin)};
    results.push({m:'HL',res,newFlows});
    this.qrSeen={rawFills:h.rawFills,rawFunding:h.rawFunding,equity:h.equity?.value,defaultRisk:S.journal.HL?.defaultRisk}; // 2.6.0 즉시 복기용(판정과 무관)
   }
@@ -314,46 +315,49 @@ export class Alerter{
   const [h,m]=this.cfg.summaryTime;if(mins<h*60+m||mins>=23*60)return null;const key='summary:'+d;return this.state.sent[key]?null:key;
  }
  summaryText(statuses,t){
-  return fmt.multi(`📊 손실 한도 요약 · 미국 ${fmt.dayWithDow(etDate(t))} 장마감`,statuses.map(st=>this.block(st,false)));
+  return fmt.multi(`📊 손실 한도 요약 · 미국 ${fmt.dayWithDow(etDate(t))} 장마감`,hlFirst(statuses).map(st=>this.block(st,false)));
  }
- /** 시장 블록(장마감 요약 = 짧게, --test = detail 줄 포함). 첫 줄 = 구분 제목('🇺🇸 미국주식 · …') */
+ /** 시장 블록 2.7.1(가독성): 기간마다 '상태 이모지 % / 한도 + 막대' 한 줄 + '손익 · 남은 한도' 한 줄. HL 먼저. */
  block(s,detail){
-  const P=s.periods||{},mk=s.market,rs=s.riskStart||null,U=x=>risk.usd(x,mk),SU=x=>risk.signedUsd(x,mk);
-  const hk=mk==='HL'&&P.day?.basis==='realized'&&/^\d{4}-\d{2}-\d{2}$/.test(String(P.day.key||''))?P.day.key:null; // HL 하루 = UTC 날짜(KST 09:00 시작)
-  const rows=[`${fmt.MARKET_HEAD[mk]} · ${hk?'하루 '+fmt.dayWithDow(hk)+' 09:00~':'거래일 '+s.todayLabel}`];
-  if(detail)rows.push(`자산: ${s.equity?U(s.equity.value)+' ('+s.equity.source+')':'없음'}`);
+  const P=s.periods||{},mk=s.market,rs=s.riskStart||null,HLm=mk==='HL';
+  const C=x=>{if(!Number.isFinite(x))return '—';const a=Math.abs(x),t=a>=1000?Math.round(a).toLocaleString('en-US'):a.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});return (x<0?'−':'')+(HLm?'':'$')+t;};
+  const SC=x=>(x>0?'+':'')+C(x);
+  const hk=HLm&&/^\d{4}-\d{2}-\d{2}$/.test(String(P.day?.key||''))?P.day.key:null;
+  const rows=[`${fmt.MARKET_HEAD[mk]} · ${hk?fmt.dayWithDow(hk):s.todayLabel}`];
+  if(detail&&s.equity){const e=s.equity.value,sp=s.spot&&s.spot.usd>0?s.spot.usd:0;rows.push(`자산 ${C(sp?e+sp:e)}${HLm?' USDC':''}${sp?` (거래 ${C(e)} + 현물 ${C(sp)})`:''}`);}
+  else if(detail)rows.push('자산 없음');
   for(const [k,nm] of [['day','오늘'],['week','주간'],['month','월간']]){
-   const x=P[k];rows.push(fmt.usageRow(nm,{...(x||{}),pct:x?x.pct:null,startDay:rs?rs.day:null,beforeStart:!!x?.beforeStart||(!!rs?.before&&!x)}));
-   if(!detail||!x||x.pct===null||!Number.isFinite(x.pct))continue;
-   if(x.basis==='realized'){
-    const pt=k==='day'&&mk==='HL'&&x.parts?` = 체결 ${SU(x.parts.trades)} + 펀딩 ${SU(x.parts.funding)}`:'';
-    rows.push(`  · 손익 ${SU(x.pnl)}${pt}`);
-    rows.push(`  · 기준 ${x.startSource}${x.cut?' · 기준일부터':''}${x.budget?' · 한도 '+U(-x.budget):''}`);
-    const q=k==='day'?x.ref:P[k+'Equity'];
-    if(q&&Number.isFinite(q.pct))rows.push(`  · 참고 미실현 포함 ${risk.pctText(q.pct)} (${SU(q.pnl)}${q.flows?' · 입출금 '+SU(q.flows)+' 제외':''})`);
-   }else{
-    rows.push(`  · 손익 ${SU(x.pnl)} · 시작 ${U(x.startEquity)}${x.startSource?' '+x.startSource:''}${x.cut?' · 기준일부터':''}${x.flows?' · 입출금 '+SU(x.flows)+' 제외':''}`);
-    if(Number.isFinite(x.ddPct)&&x.ddPct<0)rows.push(`  · 고점 대비 ${risk.pctText(x.ddPct)}`);
-   }
+   const x=P[k];
+   if(!x||x.pct===null||x.pct===undefined||!Number.isFinite(x.pct)){rows.push(fmt.usageRow(nm,{...(x||{}),pct:null,startDay:rs?rs.day:null,beforeStart:!!x?.beforeStart||(!!rs?.before&&!x)}).replace(/\s{3}/,'  '));continue;}
+   const lim=x.limit,ratio=lim>0?(Number.isFinite(x.ratio)?Math.max(0,x.ratio):Math.max(0,-x.pct)/lim):0;
+   const ic=!(lim>0)?'⚪':ratio>=1?'⛔':ratio>=0.8?'🔴':ratio>=0.5?'🟡':'🟢';
+   const bar=lim>0?' '+'▰'.repeat(Math.min(10,Math.round(ratio*10)))+'▱'.repeat(10-Math.min(10,Math.round(ratio*10))):'';
+   rows.push(`${ic} ${nm} ${risk.pctText(x.pct)} / ${lim>0?lim+'%':'한도 끔'}${bar}`);
+   const left=x.budget>0?Math.max(0,x.budget+(Number.isFinite(x.pnl)?x.pnl:0)):null;
+   rows.push(`      손익 ${SC(x.pnl)}${left!==null?' · 남은 '+C(left):''}`);
   }
-  rows.push(`연속 손실: ${s.streak?.count??0}/${s.streak?.need??0}일`);
-  if(s.stops?.length)for(const x of s.stops)rows.push(`⛔ 중단: ${x.label} ~ ${x.untilText}`);else rows.push('중단: 없음');
+  const st=s.stops?.length?s.stops.map(x=>`⛔ 중단: ${x.label} ~ ${x.untilText}`):null;
+  rows.push(`연속 손실 ${s.streak?.count??0}/${s.streak?.need??0}일 · ${st?'중단 있음':'중단 없음'}`);if(st)rows.push(...st);
   if(s.halfRisk?.active)rows.push(`✅ 재시작 첫날: 1회 위험 ${Math.round(s.halfRisk.factor*100)}%`);
-  if(rs){if(rs.before)rows.push(`한도 적용: ${fmt.applyText(mk,rs.day,rs.at)}`);
-   else if(detail)rows.push(`한도 기준일: ${fmt.dayWithDow(rs.date)}부터${rs.base?' (기준 자산 '+U(rs.base.equity)+' · '+rs.base.source+')':''}`);}
+  if(rs?.before)rows.push(`한도 적용: ${fmt.applyText(mk,rs.day,rs.at)}`);
+  if(detail){const d=P.day,w=P.week,m=P.month,md=k=>k?String(k).slice(5).replace('-','/'):'';const parts=[];
+   if(d&&Number.isFinite(d.startEquity))parts.push(`오늘 ${C(d.startEquity)}`);
+   const wl=w&&Number.isFinite(w.startEquity)?`${C(w.startEquity)}${w.denomKey?'('+md(w.denomKey)+' 마감)':''}`:null,ml=m&&Number.isFinite(m.startEquity)?`${C(m.startEquity)}${m.denomKey?'('+md(m.denomKey)+' 마감)':''}`:null;
+   if(wl&&wl===ml)parts.push('주·월 '+wl);else{if(wl)parts.push('주 '+wl);if(ml)parts.push('월 '+ml);}
+   if(parts.length)rows.push(`기준 잔액: ${parts.join(' · ')}${s.spot&&s.spot.usd>0?' · 현물 포함':''}`);}
   if(s.note&&!rs?.before)rows.push('※ '+s.note);
   return rows;
  }
  /** --test 각주: 긴 '기준:' 설명은 여기서 한 번만 */
  testFoot(statuses){
   const foot=[],labels=[...new Set(statuses.map(s=>s.basis?.label).filter(Boolean))];
-  if(labels.length===1)foot.push('※ 기준: '+labels[0]);
-  else for(const s of statuses)if(s.basis?.label)foot.push(`※ ${fmt.MARKET_NAME[s.market]} 기준: ${s.basis.label}`);
+  if(statuses.some(s=>s.basis?.day==='realized'))foot.push('※ 손익 = 실현손익(수수료·펀딩 포함), 미실현 제외 · 입출금은 손실 아님 · 오늘 ÷ 전일 마감, 주·월 ÷ 기간 시작 직전 마감');
+  else if(labels.length)foot.push('※ 기준: '+labels[0]);
   for(const s of statuses){const rs=s.riskStart;if(s.market==='US'&&rs?.before){const [kst,et]=String(untilText(rs.at,'US')).split(' · 미국 ');foot.push(`※ 미국 ${rs.day.slice(5).replace('-','/')} 거래일 몫 = ${et}(${kst}) 이후 체결부터 (애프터·프리마켓 포함)`);}}
   return foot;
  }
- testText(statuses){return fmt.multi(`✅ trade-alert ${VERSION} 테스트 · ${RULES}`,statuses.map(s=>this.block(s,true)),this.testFoot(statuses));}
- describe(statuses){return statuses.map(s=>this.block(s,true).join('\n')).join('\n\n');}
+ testText(statuses){statuses=hlFirst(statuses);return fmt.multi(`✅ trade-alert ${VERSION} 테스트`,statuses.map(s=>this.block(s,true)),this.testFoot(statuses));}
+ describe(statuses){return hlFirst(statuses).map(s=>this.block(s,true).join('\n')).join('\n\n');}
  delay(){const t=this.now();const hasHL=!!this.lastStatus.HL;if(hasHL)return this.cfg.checkSec*1000;
   const p=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t));const g=k=>p.find(x=>x.type===k)?.value;const mins=Number(g('hour'))*60+Number(g('minute'));
   const active=!['Sat','Sun'].includes(g('weekday'))&&mins>=4*60&&mins<20*60+5;return (active?this.cfg.checkSec:this.cfg.idleSec)*1000;}
@@ -369,6 +373,7 @@ export class Alerter{
   }
  }
 }
+const hlFirst=a=>[...(a||[])].sort((x,y)=>(x.market==='HL'?0:1)-(y.market==='HL'?0:1));
 const fmtL=l=>`${l.day?'−'+l.day:'끔'}/${l.week?'−'+l.week:'끔'}/${l.month?'−'+l.month:'끔'}%`;
 
 function explainConfig(e,log){if(e.message==='CONFIG_SECRET_KEY_REFUSED')log('ERROR','SUPABASE_KEY에 secret/service_role 키를 넣지 마세요. sb_publishable_… 키만 사용합니다.');else if(e.message==='CONFIG_INCOMPLETE')log('ERROR','.env 값이 비었거나 형식이 다릅니다: '+e.fields.join(', ')+'  → sudo nano /opt/trade-alert/.env');else log('ERROR',String(e.message||e));}
