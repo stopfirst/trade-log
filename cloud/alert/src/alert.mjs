@@ -29,10 +29,11 @@ import * as day from './day.mjs';
 import {usCalendar,hlCalendar,untilText,addDays,etDate} from './calendar.mjs';
 import * as fmt from './format.mjs';
 import * as qr from './quick.mjs';
+import * as spot from './spot.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.6.0';
+export const VERSION='2.7.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -76,7 +77,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
    checkSec:numIn(env,'RISK_CHECK_SEC',60,60,300,{int:true}),idleSec:numIn(env,'RISK_IDLE_SEC',300,60,1800,{int:true}),pushMin:numIn(env,'RISK_PUSH_MIN',5,1,30,{int:true}),
    usFlowMin:numIn(env,'US_FLOW_MIN_USD',50,1,1e7),usStaleMin:numIn(env,'US_STALE_MIN',20,5,240,{int:true}),anchorMaxGapMin:numIn(env,'ANCHOR_MAX_GAP_MIN',20,2,120,{int:true}),
    usExtraHolidays:extra,dayBasis,riskStartDate:rsd||null,hlAddress:hlAddr?hlAddr.toLowerCase():null,
-   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,telegramHtml:bool(env,'TELEGRAM_HTML',true),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
+   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
    stateDir:String(env.STATE_DIRECTORY||env.ALERT_STATE_DIR||'/var/lib/trade-alert').split(':')[0]};
  }catch(e){if(e.fields)problems.push(...e.fields);else throw e;}
  if(problems.length){const e=Error('CONFIG_INCOMPLETE');e.fields=problems;throw e;}
@@ -164,6 +165,7 @@ export class HLClient{
  async funding(startTime){const out=[];let from=startTime;for(let i=0;i<10;i++){const page=await this.info({type:'userFunding',startTime:from});if(!Array.isArray(page))throw Error('HL_BAD_FUNDING');out.push(...page);if(page.length<500)break;from=Math.max(...page.map(f=>f.time))+1;}return out;}
  async ledger(startTime){const r=await this.info({type:'userNonFundingLedgerUpdates',startTime});if(!Array.isArray(r))throw Error('HL_BAD_LEDGER');return r;}
  async portfolio(){return this.info({type:'portfolio'});}
+ async raw(body){const r=await this.fetcher('https://api.hyperliquid.xyz/info',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('HL_HTTP_'+r.status);return r.json();}
 }
 
 // ---- state -------------------------------------------------------------------------------
@@ -252,14 +254,22 @@ export class Alerter{
    const known=new Set(dbFlows('HL').map(f=>f.ref));const newFlows=h.flows.filter(f=>!known.has(f.ref)&&!S.pending.flows.some(p=>p.ref===f.ref));
    const fm=new Map();for(const f of [...dbFlows('HL'),...S.pending.flows.filter(f=>f.market==='hl'),...h.flows])fm.set(f.ref,f);const flows=[...fm.values()];
    const fb=src.hlPortfolioFallback(h.portfolio,cal,h.equity);
+   // 2.7.0 현물 포함 분모: 마감값·현재 기준액에 현물 평가 더함(SPOT_IN_BASIS=0이면 끔)
+   let acctH=dd?.acct,acctP=pdd?.acct,curH=h.equity?.value,spotNote=null;
+   if(this.cfg.spotInBasis&&(dd||pdd)){try{const sb=this.spotB||(this.spotB=new spot.SpotBasis({post:q=>h.client.raw(q),now:this.now,log:this.log}));const a=String(addr).toLowerCase();
+     const c=await sb.current(a);if(c.items.length){
+      const lim=spot.addDaysKey(day.utcDate(t),-45),keys=[...new Set([...(dd?.acct||[]),...(pdd?.acct||[])].filter(r=>r&&r.market==='hl'&&r.day>=lim).map(r=>r.day))];
+      const m=await sb.closes(a,keys);acctH=spot.withSpot(dd?.acct,m);acctP=spot.withSpot(pdd?.acct,m);
+      if(!c.miss&&curH>0)curH=curH+c.usd;spotNote=`현물 포함(지금 ${c.items.map(i=>i.coin).join('·')} ≈ $${c.usd.toFixed(2)})`;}}
+    catch(e){this.log('WARN','현물 평가 실패 → 이번 회차 분모 USDC만: '+String(e.message||e).slice(0,80));acctH=dd?.acct;acctP=pdd?.acct;curH=h.equity?.value;spotNote=null;}}
    let dayRealized=null;
    if(dayMode==='realized'){const k=day.utcDate(t),db=dd?.hl&&String(dd.hl.address||'').toLowerCase()===String(addr).toLowerCase()?dd.hl:null;
     const D=day.hlDayRealized(day.mergeHlFills(h.rawFills,db?.fills),day.mergeHlFunding(h.rawFunding,db?.funding),k);
-    D.denom=day.dayDenom({acct:dd?.acct,k0:k,market:'HL',current:h.equity?.value,manual:S.journal.HL?.account});dayRealized=D;}
+    D.denom=day.dayDenom({acct:acctH,k0:k,market:'HL',current:curH,manual:S.journal.HL?.account});if(D.denom&&spotNote)D.denom.spot=spotNote;dayRealized=D;}
    let periodRealized=null;
-   if(pdd){const k=day.utcDate(t),rc=this.rcal,db=pdd.hl&&String(pdd.hl.address||'').toLowerCase()===String(addr).toLowerCase()?pdd.hl:null,basis=day.basisDenom(h.equity?.value,S.journal.HL?.account,'HL');
+   if(pdd){const k=day.utcDate(t),rc=this.rcal,db=pdd.hl&&String(pdd.hl.address||'').toLowerCase()===String(addr).toLowerCase()?pdd.hl:null,basis=day.basisDenom(curH,S.journal.HL?.account,'HL');
     const days=day.hlPeriodDays(day.mergeHlFills(h.rawFills,db?.fills),day.mergeHlFunding(h.rawFunding,db?.funding),db?.days||null,day.periodFrom(rc,k),k);
-    const dn=day.dayDenomFor(pdd.acct,'HL',basis);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal:rc,rows:days.map(d=>({label:d.key,pnl:d.pnl})),days,basis,denomAt:dn};} // v1.6
+    const dn=day.dayDenomFor(acctP,'HL',basis);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal:rc,rows:days.map(d=>({label:d.key,pnl:d.pnl})),days,basis,denomAt:dn};} // v1.6
    const ecH=engineCfg(this.cfg,'HL',S.journal.HL?.defaultRisk,dayMode,cal);
    const anchorH=ecH.riskStart?ms=>{const pk=addDays(ecH.riskStart.date,-1),r=dd?day.closeRows(dd.acct,'HL')[pk]:null;if(r&&r.value>0)return {equity:r.value,at:ecH.riskStart.at,source:'HL 마감 '+pk.slice(5).replace('-','/')+' UTC'};return src.hlPortfolioAt(h.portfolio,ms,h.equity);}:null;
    const res=risk.step(S.engine.HL,{now:t,cal,cfg:ecH,equity:h.equity,flows,fills:h.fills,fallbackStart:fb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorH,periodMode,periodRealized});
