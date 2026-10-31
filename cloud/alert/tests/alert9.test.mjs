@@ -18,7 +18,7 @@ const NOW0=kstWall('2026-10-24',1); // 토 01:00 KST
 const F=(tid,time,side,sz,start,o={})=>({coin:'BTC',side,sz:String(sz),px:'60000',startPosition:String(start),feeToken:'USDC',tid,time,closedPnl:'0',fee:'0',hash:'0x'+tid,dir:'x',...o});
 
 test('버전 2.6.0 · QUICK_REVIEW 기본 켜짐, 0이면 끔',()=>{
- assert.equal(VERSION,'2.8.0');
+ assert.equal(VERSION,'2.9.0');
  assert.equal(readConfig(env('/tmp')).quickReview,true);assert.equal(readConfig(env('/tmp',{QUICK_REVIEW:'1'})).quickReview,true);
  assert.equal(readConfig(env('/tmp',{QUICK_REVIEW:'0'})).quickReview,false);assert.equal(readConfig(env('/tmp',{QUICK_REVIEW:'off'})).quickReview,false);
 });

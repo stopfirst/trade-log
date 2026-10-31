@@ -35,8 +35,8 @@ const F=(tid,time,closedPnl,fee,o={})=>({coin:'BTC',dir:'Close Long',side:'A',sz
 const mk=async(w,x={},logs=[])=>{const dir=await mkdtemp(path.join(tmpdir(),'ta5-'));const a=new Alerter(env(dir,x),{fetcher:w.fetcher,now:()=>w.now,log:(l,m)=>logs.push(l+' '+m),sleep:async()=>{}});await a.init();return a;};
 
 test('버전 2.4.0 · 판정 v1.6 · status에 version·rules·basis(앱 v30 표시용)',()=>{
- assert.equal(VERSION,'2.8.0');assert.equal(RULES,'손실한도 판정 v1.6');
- const m=statusMeta({dayBasis:'realized',periodBasis:'realized'});assert.equal(m.version,'2.8.0');assert.equal(m.rules,'손실한도 판정 v1.6');assert.equal(m.basis.period,'realized');assert.match(m.basis.label,/^손익 = 실현손익/);
+ assert.equal(VERSION,'2.9.0');assert.equal(RULES,'손실한도 판정 v1.6');
+ const m=statusMeta({dayBasis:'realized',periodBasis:'realized'});assert.equal(m.version,'2.9.0');assert.equal(m.rules,'손실한도 판정 v1.6');assert.equal(m.basis.period,'realized');assert.match(m.basis.label,/^손익 = 실현손익/);
  assert.match(statusMeta({dayBasis:'realized',periodBasis:'equity'}).basis.label,/alert5\.sql 미설치/);assert.match(statusMeta({dayBasis:'equity',periodBasis:'equity'}).basis.label,/^손익 = 계좌 순자산 변화/);
 });
 
@@ -45,7 +45,7 @@ test('실데이터 재현(US 출금): alert5.sql 없으면 v1.4 폴백(주·월 
  w.day.kw_days=[{date:'2026-10-20',as_of:w.now-60000,total:'392.23',count:3}];
  let r=await a.check();let s=r.statuses[0];
  assert.equal(s.periodBasis,'equity');assert.deepEqual(s.stops.map(x=>x.rule).sort(),['month-intraday','week-intraday'],'v1.4 동작: 출금이 손실로 잡힘');
- assert.equal(s.periods.week.pct,-74.4687);assert.equal(s.version,'2.8.0');assert.match(s.basis.label,/alert5\.sql 미설치/);
+ assert.equal(s.periods.week.pct,-74.4687);assert.equal(s.version,'2.9.0');assert.match(s.basis.label,/alert5\.sql 미설치/);
  assert.ok(logs.some(l=>/^WARN alert5\.sql이 아직 없습니다 → 주·월 한도·연속 손실일은 v1\.4/.test(l)),logs.join('\n'));
  assert.equal(logs.filter(l=>/alert5\.sql이 아직/.test(l)).length,1);
  // 사용자가 Supabase에서 alert5.sql 실행 → 같은 서비스의 다음 확인
@@ -54,7 +54,7 @@ test('실데이터 재현(US 출금): alert5.sql 없으면 v1.4 폴백(주·월 
  assert.equal(s.periodBasis,'realized');assert.equal(s.stopped,false);assert.equal(s.stops.length,0);assert.equal(s.halfRisk.active,false);
  assert.equal(s.periods.week.pnl,392.23);assert.equal(s.periods.week.pct,0.6168,'v1.6: ÷ 기준일(10/20) 직전 마감 10/19 $63,592.79');assert.equal(s.periods.week.startSource,'10/19 마감 $63,592.79');assert.equal(s.periodDenom,'start-close');assert.equal(s.periods.weekEquity.pct,-74.4687);
  assert.equal(s.basis.period,'realized');assert.equal(s.rules,'손실한도 판정 v1.6');assert.match(s.basis.label,/주·월 ÷ 기간 시작 직전 마감/);
- const p=w.pushes.at(-1);assert.equal(p.events.filter(e=>e.kind==='clear'&&e.rule==='basis-realized').length,2);assert.equal(p.states[0].status.version,'2.8.0');assert.equal(p.states[0].status.basis.period,'realized');
+ const p=w.pushes.at(-1);assert.equal(p.events.filter(e=>e.kind==='clear'&&e.rule==='basis-realized').length,2);assert.equal(p.states[0].status.version,'2.9.0');assert.equal(p.states[0].status.basis.period,'realized');
  const sent=w.tg.slice(tg0);assert.equal(sent.filter(x=>x.startsWith('🔄')).length,1);assert.match(sent.find(x=>x.startsWith('🔄')),/\n중단 해제: (2건\n· )?주간 −6% 장중 도달 \(~ 10\/21\(수\) 05:00 KST/);
  assert.ok(logs.some(l=>/^INFO alert5\.sql 확인 → 주·월 한도·연속 손실일을 실현손익 기준/.test(l)));
  const d=a.describe(r.statuses);assert.match(d,/🟢 주간 \+0\.62% \/ 6% ▱{10}\n      손익 \+\$392\.23 · 남은 \$4,208/);assert.match(d,/주·월 \$63,593\(10\/19 마감\)/);

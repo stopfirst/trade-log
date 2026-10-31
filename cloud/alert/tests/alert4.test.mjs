@@ -51,7 +51,7 @@ test('check(): RISK_START_DATE=2026-10-20 → HL 기준 자산 = HL 마감 10/19
  const p=w.pushes.at(-1);assert.ok(p.events.some(e=>e.kind==='clear'&&e.rule==='risk-start'&&e.detail.stopId==='HL:week-intraday:2026-10-20'));
  assert.equal(p.states[0].status.riskStart.date,'2026-10-20');assert.equal(p.states[0].status.riskStart.atText,'10/20(화) 09:00 KST');
  assert.ok(w.tg.some(x=>/^🔄 하이퍼리퀴드 · 손실 한도 10\/20부터 새로 셈\n\n한도 적용: 10\/20\(화\) 09:00 KST부터/.test(x)&&/중단 해제: 주간 −6% 장중 도달/.test(x)));
- assert.match(b.describe(r.statuses),/한도 기준일: 10\/20\(화\)부터 \(기준 자산 1,900\.00 USDC · HL 마감 10\/19 UTC\)/);
+ assert.equal(r.statuses.find(s=>s.market==='HL').riskStart.base.equity,1900);assert.match(r.statuses.find(s=>s.market==='HL').riskStart.base.source,/HL 마감 10\/19 UTC/);
  assert.doesNotMatch(b.summaryText(r.statuses,w.now),/한도 (기준일|적용)/,'기준일 지난 뒤 장마감 요약엔 기준일 줄 없음(2.5.1)');
 });
 

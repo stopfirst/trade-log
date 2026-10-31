@@ -37,7 +37,7 @@ const F=(tid,time,closedPnl,fee,o={})=>({coin:'BTC',dir:'Close Long',side:'A',sz
 const mk=async(w,x={})=>{const dir=await mkdtemp(path.join(tmpdir(),'ta3-'));const a=new Alerter(env(dir,x),{fetcher:w.fetcher,now:()=>w.now,log:()=>{},sleep:async()=>{}});await a.init();return a;};
 
 test('버전 2.4.0 · DAY_LIMIT_BASIS 기본 realized, equity 허용, 그 밖은 오류',()=>{
- assert.equal(VERSION,'2.8.0');assert.equal(readConfig(env('/tmp')).dayBasis,'realized');assert.equal(readConfig(env('/tmp',{DAY_LIMIT_BASIS:'equity'})).dayBasis,'equity');
+ assert.equal(VERSION,'2.9.0');assert.equal(readConfig(env('/tmp')).dayBasis,'realized');assert.equal(readConfig(env('/tmp',{DAY_LIMIT_BASIS:'equity'})).dayBasis,'equity');
  assert.throws(()=>readConfig(env('/tmp',{DAY_LIMIT_BASIS:'x'})),/CONFIG_INCOMPLETE/);
 });
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily trade journal server backup (06:40 KST)
+
+[Timer]
+OnCalendar=*-*-* 06:40:00 Asia/Seoul
+RandomizedDelaySec=10min
+Persistent=true
+Unit=trade-alert-backup.service
+
+[Install]
+WantedBy=timers.target
