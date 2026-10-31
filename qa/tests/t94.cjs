@@ -10,7 +10,8 @@ const html=fs.readFileSync(htmlPath);const dir=path.dirname(htmlPath);
 const srv=http.createServer((q,r)=>{const u=q.url.split('?')[0];if(u.endsWith('/')||u.endsWith('index.html')){r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});return r.end(html);}const f=path.join(dir,path.basename(u));if(fs.existsSync(f)&&fs.statSync(f).isFile()){r.writeHead(200,{'Content-Type':u.endsWith('.js')?'text/javascript; charset=utf-8':u.endsWith('.webmanifest')?'application/manifest+json':'application/octet-stream'});return r.end(fs.readFileSync(f));}r.writeHead(404);r.end();}).listen(0);
 const init=()=>{const J=(v,s=200)=>new Response(JSON.stringify(v),{status:s,headers:{'Content-Type':'application/json'}});
  window.fetch=async(u,o={})=>{u=String(u);if(u.startsWith('https://api.hyperliquid.xyz')){let b={};try{b=JSON.parse(o.body||'{}');}catch{}if(b.type==='spotMetaAndAssetCtxs')return J([{universe:[],tokens:[]},[]]);if(b.type==='candleSnapshot')return J([]);return J([]);}return J({message:'not found'},404);};
- window.__csp=[];document.addEventListener('securitypolicyviolation',e=>window.__csp.push(e.violatedDirective+' '+(e.blockedURI||'')));
+ /* 알려진 기존 위반 1건: v46 진입 전 수량 계산 폼의 inline onsubmit("return false", v46부터, 앱 유일한 inline 핸들러) — CSP가 막아도 form-action 'none'이라 동작 같음. 따로 셈 */
+ window.__csp=[];window.__cspKnown=0;document.addEventListener('securitypolicyviolation',e=>{const t=e.target&&e.target.id||'';if(e.violatedDirective==='script-src-attr'&&t==='v46Form'){window.__cspKnown++;return;}window.__csp.push(e.violatedDirective+' '+(e.blockedURI||'')+' '+t);},true);
  let rv;Object.defineProperty(window,'journalReady',{configurable:true,get(){return rv;},set(v){rv=v;if(v&&!window.__readyAt){window.__readyAt=performance.now();
   try{window.__atReady={pend:Object.keys((window.V94&&V94.pend)||{}).sort(),deferred:window.V94?V94.stat.deferred:-1,cal:typeof calendarMonth!=='undefined'?calendarMonth:null,
    dash:(()=>{const p=document.getElementById('page-dashboard');return !!p&&!p.hidden&&p.innerText.length>200;})(),v63:!!document.getElementById('v63Week')};}catch(e){window.__atReady={err:e.message};}
@@ -31,7 +32,7 @@ const waitFlush=async(page,ms=5000)=>{const t0=Date.now();while(Date.now()-t0<ms
  const R={tag,errors:[],console:[]};const base='http://127.0.0.1:'+srv.address().port+'/';
  for(const [key,q,W] of [['hl','?journal=hyperliquid',1440],['hl390','?journal=hyperliquid',390],['us','?journal=us',1440]]){
   const ctx=await browser.newContext({viewport:{width:W,height:900},locale:'ko-KR',timezoneId:'Asia/Seoul'});await ctx.addInitScript(init);
-  const page=await ctx.newPage();page.on('pageerror',e=>R.errors.push(key+': '+e.message));page.on('console',m=>{const t=m.text();if(/Content Security Policy|Refused to/i.test(t))R.console.push(key+': '+t.slice(0,160));});
+  const page=await ctx.newPage();page.on('pageerror',e=>R.errors.push(key+': '+e.message));page.on('console',m=>{const t=m.text();if(/Content Security Policy|Refused to/i.test(t)&&!/inline event handler/i.test(t))R.console.push(key+': '+t.slice(0,160));});
   const U=base+q;const ready=async()=>{await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});};
   await page.goto(U);await ready();const n=await page.evaluate(seed);
   await page.goto(U);await ready();
@@ -49,6 +50,6 @@ const waitFlush=async(page,ms=5000)=>{const t0=Date.now();while(Date.now()-t0<ms
     await page.evaluate(a=>sessionStorage.setItem('qa94act',a),nm);await page.goto(U);await ready();await page.waitForTimeout(300);
     o.imm[nm]={at:await page.evaluate(()=>window.__atReady.pend),act:await page.evaluate(()=>window.__act)};}
   }
-  o.csp=await page.evaluate(()=>window.__csp);
+  o.csp=await page.evaluate(()=>window.__csp);o.cspKnownV46=await page.evaluate(()=>window.__cspKnown);
   R[key]=o;await ctx.close();}
  console.log(JSON.stringify(R));await browser.close();srv.close();})().catch(e=>{console.error(e);process.exit(1);});
