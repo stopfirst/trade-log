@@ -22,3 +22,12 @@ test('마감 현물 = (지금 − 경계 뒤 순매수) × 경계 봉 시가',as
 });
 test('가격 없는 토큰 → 마감 현물 안 더함',async()=>{const post=async q=>q.type==='spotClearinghouseState'?{balances:[{coin:'X',token:9,total:'1'}]}:q.type==='spotMetaAndAssetCtxs'?[meta,ctxs]:[];
  const sb=new spot.SpotBasis({post,now:()=>Date.now()});const c=await sb.current('0xb');assert.equal(c.miss,1);const m=await sb.closes('0xb',['2026-10-01']);assert.equal(m.size,0);});
+test('2.8.1 회귀: hlData 결과에 client(raw) 포함 → 현물 평가가 분모에 들어감',async()=>{
+ const {Alerter}=await import('../src/alert.mjs');const {mkdtemp}=await import('node:fs/promises');const {tmpdir}=await import('node:os');
+ const dir=await mkdtemp(tmpdir()+'/ta-');
+ const env={SUPABASE_URL:'https://abcdefgh.supabase.co',SUPABASE_KEY:'sb_publishable_'+'A'.repeat(30),KW_COLLECTOR_TOKEN:'kwc_'+'a'.repeat(43),TELEGRAM_BOT_TOKEN:'123456789:'+'A'.repeat(35),TELEGRAM_CHAT_ID:'987654321',ALERT_STATE_DIR:dir,DAILY_SUMMARY:'0'};
+ const fetcher=async()=>({ok:true,json:async()=>[]});
+ const a=new Alerter(env,{fetcher,now:()=>Date.parse('2026-10-31T13:00:00Z'),log:()=>{},sleep:async()=>{}});
+ const h=await a.hlData('0x'+'a'.repeat(40),Date.parse('2026-10-31T13:00:00Z'));
+ assert.equal(typeof h.client?.raw,'function');
+});
