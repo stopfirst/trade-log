@@ -37,7 +37,7 @@ const F=(tid,time,closedPnl,fee,o={})=>({coin:'BTC',dir:'Close Long',side:'A',sz
 const mk=async(w,x={})=>{const dir=await mkdtemp(path.join(tmpdir(),'ta3-'));const a=new Alerter(env(dir,x),{fetcher:w.fetcher,now:()=>w.now,log:()=>{},sleep:async()=>{}});await a.init();return a;};
 
 test('버전 2.4.0 · DAY_LIMIT_BASIS 기본 realized, equity 허용, 그 밖은 오류',()=>{
- assert.equal(VERSION,'2.6.0');assert.equal(readConfig(env('/tmp')).dayBasis,'realized');assert.equal(readConfig(env('/tmp',{DAY_LIMIT_BASIS:'equity'})).dayBasis,'equity');
+ assert.equal(VERSION,'2.8.0');assert.equal(readConfig(env('/tmp')).dayBasis,'realized');assert.equal(readConfig(env('/tmp',{DAY_LIMIT_BASIS:'equity'})).dayBasis,'equity');
  assert.throws(()=>readConfig(env('/tmp',{DAY_LIMIT_BASIS:'x'})),/CONFIG_INCOMPLETE/);
 });
 
@@ -62,7 +62,7 @@ test('check(): HL 실현(API 체결 + Supabase 수집 체결·펀딩, 중복 제
  const p=w.pushes.at(-1);assert.ok(p.events.some(e=>e.ref==='HL:dayr:2026-10-20'&&e.kind==='stop'));
  const st=p.states.find(s=>s.market==='hl').status;assert.equal(st.periods.day.basis,'realized');assert.ok(st.periods.dayEquity,'자산 변화(참고) 함께 저장');
  assert.ok(w.tg.some(x=>/^⛔ 하이퍼리퀴드 거래 중단 · 하루 실현 −3% 도달\n\n오늘 실현: −3\.02% \(−60\.50 USDC\)/.test(x)&&/\n기준: 전일 마감 2,000\.00 USDC\n내역: 체결 −56\.50 USDC \+ 펀딩 −4\.00 USDC/.test(x)&&/\n참고: 미실현 포함/.test(x)));
- assert.match(a.describe(r.statuses),/오늘   −3\.02% \/ 3%  \(100%\)\n  · 손익 −60\.50 USDC = 체결 −56\.50 USDC \+ 펀딩 −4\.00 USDC\n  · 기준 전일 마감 2,000\.00 USDC · 한도 −60\.00 USDC/);
+ assert.match(a.describe(r.statuses),/⛔ 오늘 −3\.02% \/ 3% ▰{10}\n      손익 −60\.50 · 남은 0\.00\n[\s\S]*기준 잔액: 오늘 2,000 /);
 });
 
 test('check(): US 키움 일별 실현손익 ÷ 전일 마감 → 중단, 마감 없으면 현재 기준액(키움 총액) 표기',async()=>{
