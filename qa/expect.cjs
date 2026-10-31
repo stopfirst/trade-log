@@ -70,4 +70,12 @@ module.exports = {
     A.has(w + '.v91.txt', '포지션 +153.8% · 증거금(3×) +461.4%'); A.eq(w + '.v91.n', 1); A.has(w + '.v79.t', '계획의 12%'); A.has(w + '.v79.dx', '계획보다 일찍 익절'); A.has(w + '.v79.v', '12%만 실현'); } } },
   /* v91 복기·분석 구조 덤프 · 곡선 폭 · 넘침 0 */
   tdump: { check(A) { for (const w of W) { A.eq(w + '.open.open', true); A.eq(w + '.open.over', 0); A.ok(w + '.open.curveW'); A.has(w + '.dump.analysis', '핵심 지표'); A.has(w + '.v91.txt', '포지션 +153.8%'); A.has(w + '.v79.t', '계획의 12%'); } } },
+  /* v94 첫 로딩: CSP 그대로 로딩, 첫 그리기 때 분석·새 기록 미리보기·캘린더 기준 달을 한가할 때로 미룸 → 결과는 일반 renderAll과 같음, 바로 화면 이동·새 기록 열기 시 먼저 처리 */
+  t94: { check(A, o) { for (const k of ['hl', 'hl390', 'us']) { A.eq(k + '.n', 300); A.eq(k + '.at.pend', ['ana', 'cal', 'size']); A.eq(k + '.at.dash', true); A.eq(k + '.at.v63', false);
+    A.eq(k + '.after.flushed', 'idle'); A.eq(k + '.after.cal', '2026-09'); A.eq(k + '.after.latest', '2026-09'); A.eq(k + '.after.v63', true); A.eq(k + '.after.v71', true); A.eq(k + '.after.page', 'dashboard');
+    A.eq(k + '.same.ana', true); A.eq(k + '.same.wk', true); A.eq(k + '.same.size', true); A.eq(k + '.csp', []); if (!(o[k] && o[k].flushWait >= 0)) A.fail(k + '.flushWait: 미룬 일이 5초 안에 처리되지 않음'); }
+    for (const k of ['hl', 'us']) { A.eq(k + '.imm.analysis.act', { pend: false, flushed: 'setPage', v63: true, v71: true, page: 'analysis' }); A.eq(k + '.imm.weekly.act', { pend: false, flushed: 'setPage', v63: true, page: 'weekly' });
+      A.eq(k + '.imm.calendar.act', { pend: false, flushed: 'setPage', cal: '2026-09', page: 'calendar' }); A.eq(k + '.imm.newTrade.act', { pend: false, flushed: 'openNew', open: true, qty: true });
+      for (const nm of ['analysis', 'weekly', 'calendar', 'newTrade']) A.eq(k + '.imm.' + nm + '.at', ['ana', 'cal', 'size']); }
+    A.eq('console', []); } },
 };
