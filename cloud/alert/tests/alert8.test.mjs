@@ -6,7 +6,7 @@ import * as fmt from '../src/format.mjs';
 import {Telegram,VERSION} from '../src/alert.mjs';
 import * as S from './alert8-scenarios.mjs';
 
-const ROW=/^([^:\n]+: .+|· .+|  · .+|(오늘|주간|월간)   .+|⛔ 중단: .+|✅ 재시작 첫날: .+|※ .+)$/u;
+const ROW=/^([^:\n]+: .+|· .+|  · .+|(오늘|주간|월간)  .+|(🟢|🟡|🔴|⛔|⚪) (오늘|주간|월간) .+|      손익 .+|자산 .+|연속 손실 .+|⛔ 중단: .+|✅ 재시작 첫날: .+|※ .+)$/u; // 2.7.1 모양
 /** 카드 구조: 첫 줄 제목(이모지로 시작), 둘째 줄 빈 줄, 이후 빈 줄은 연속 금지, 블록 줄은 '라벨: 값'·'· 항목'·사용률 줄·구분 제목·각주 */
 function assertCard(text,{heads=false}={}){
  const L=text.split('\n');
@@ -22,7 +22,7 @@ function assertCard(text,{heads=false}={}){
  assert.ok(text.length<=4000);
 }
 
-test('버전 2.6.0',()=>{assert.equal(VERSION,'2.6.0');});
+test('버전 2.6.0',()=>{assert.equal(VERSION,'2.8.0');});
 
 test('모든 메시지 종류: 첫 줄 제목 · 빈 줄 · 라벨: 값 (경고 50/80, 중단, 해제 🔄/✅, 연속손실, 위반, 기준일 🔄)',()=>{
  const f=S.hlDayFlow(),p=S.periodFlow(),b=S.beforeStart(),c=S.afterStart();
@@ -42,24 +42,24 @@ test('장마감 요약: 시장 블록 사이 빈 줄 + 구분 제목, 사용률 
  const s1=a.summaryText([b.u.status,b.h.status],b.tSummary);
  assertCard(s1,{heads:true});
  assert.equal(s1,['📊 손실 한도 요약 · 미국 10/23(금) 장마감','',
-  '🇺🇸 미국주식 · 거래일 10/23(금)','오늘   — 10/26부터','주간   — 10/26부터','월간   — 10/26부터','연속 손실: 0/3일','중단: 없음','한도 적용: 10/26(월) 미국 장부터 (KST 10/26 22:30~)','',
-  '🟦 하이퍼리퀴드 · 하루 10/23(금) 09:00~','오늘   — 10/26부터','주간   — 10/26부터','월간   — 10/26부터','연속 손실: 0/3일','중단: 없음','한도 적용: 10/26(월) 09:00 KST부터'].join('\n'));
+  '🟦 하이퍼리퀴드 · 10/23(금)','오늘  — 10/26부터','주간  — 10/26부터','월간  — 10/26부터','연속 손실 0/3일 · 중단 없음','한도 적용: 10/26(월) 09:00 KST부터','',
+  '🇺🇸 미국주식 · 10/23(금)','오늘  — 10/26부터','주간  — 10/26부터','월간  — 10/26부터','연속 손실 0/3일 · 중단 없음','한도 적용: 10/26(월) 미국 장부터 (KST 10/26 22:30~)'].join('\n'));
  const s2=a.summaryText([c.u.status,c.h.status],c.tSummary);assertCard(s2,{heads:true});
- assert.match(s2,/\n🇺🇸 미국주식 · 거래일 10\/27\(화\)\n오늘   −1\.20% \/ 3%  \(40%\)\n주간   −2\.19% \/ 6%  \(36%\)\n월간   −2\.19% \/ 10%  \(21%\)\n연속 손실: 1\/3일\n중단: 없음\n\n🟦 하이퍼리퀴드/);
- assert.match(s2,/\n오늘   −3\.10% \/ 3%  \(103%\)\n[\s\S]*⛔ 중단: 하루 실현 −3% ~ 10\/28\(수\) 09:00 KST$/);
+ assert.match(s2,/\n🇺🇸 미국주식 · 10\/27\(화\)\n🟢 오늘 −1\.20% \/ 3% ▰{4}▱{6}\n      손익 [^\n]+\n🟢 주간 −2\.19% \/ 6% ▰{4}▱{6}\n      손익 [^\n]+\n🟢 월간 −2\.19% \/ 10% ▰{2}▱{8}\n      손익 [^\n]+\n연속 손실 1\/3일 · 중단 없음$/);
+ assert.match(s2,/^📊[^\n]+\n\n🟦 하이퍼리퀴드[^\n]+\n⛔ 오늘 −3\.10% \/ 3% ▰{10}\n[\s\S]*⛔ 중단: 하루 실현 −3% ~ 10\/28\(수\) 09:00 KST\n\n🇺🇸/);
  for(const s of [s1,s2]){assert.doesNotMatch(s,/기준: 손익|※|한도 기준일/);}
 });
 
 test('--test: 같은 스타일 + 긴 기준 설명은 맨 아래 각주 한 번 · 미국 실제 경계 각주',()=>{
  const a=S.alerter(),b=S.beforeStart(),c=S.afterStart();
  const t1=a.testText([b.u.status,b.h.status]);assertCard(t1,{heads:true});
- assert.equal(t1.match(/기준: 손익 = 실현손익/g).length,1,'한 번만');
- assert.match(t1,/\n\n※ 기준: 손익 = 실현손익[^\n]*\n※ 미국 10\/26 거래일 몫 = 10\/23 16:00 ET\(10\/24\(토\) 05:00 KST\) 이후 체결부터 \(애프터·프리마켓 포함\)$/);
+ assert.equal(t1.match(/※ 손익 = 실현손익/g).length,1,'한 번만');
+ assert.match(t1,/\n\n※ 손익 = 실현손익[^\n]*\n※ 미국 10\/26 거래일 몫 = 10\/23 16:00 ET\(10\/24\(토\) 05:00 KST\) 이후 체결부터 \(애프터·프리마켓 포함\)$/);
  assert.doesNotMatch(t1,/※ 손실 한도 기준일/,'status.note(기준일 전) 중복 줄 없음');
  assert.equal(b.u.status.note.includes('기준일 10/26 전'),true,'status.note 자체(앱용)는 그대로');
  const t2=a.testText([c.u.status,c.h.status]);assertCard(t2,{heads:true});
- assert.match(t2,/\n오늘   −3\.10% \/ 3%  \(103%\)\n  · 손익 −1,850\.00 USDC = 체결 −1,820\.00 USDC \+ 펀딩 −30\.00 USDC\n  · 기준 전일 마감 59,600\.00 USDC · 한도 −1,788\.00 USDC\n  · 참고 미실현 포함 −2\.52% \(−1,500\.00 USDC\)\n/);
- assert.match(t2,/한도 기준일: 10\/26\(월\)부터 \(기준 자산 /);
+ assert.match(t2,/\n⛔ 오늘 −3\.10% \/ 3% ▰{10}\n      손익 −1,850 · 남은 0\.00\n/);
+ assert.match(t2,/기준 잔액: 오늘 59,600 /);
 });
 
 test('기준일 표기: US = MM/DD(요일) 미국 장부터 (KST 정규장 개장, 서머타임 자동) · HL = 09:00 KST부터 · 계산(경계)은 그대로',()=>{
@@ -102,7 +102,7 @@ test('HTML: 전부 이스케이프, 첫 줄과 시장 구분 제목만 <b> · Te
  assert.match(h,/종목: xyz:&lt;TEST&gt;&amp;Co Open Short/);assert.equal((h.match(/<b>/g)||[]).length,1);
  assert.equal(fmt.fromHtml(h),txt);
  const a=S.alerter(),c=S.afterStart();const sh=fmt.toHtml(a.summaryText([c.u.status,c.h.status],c.tSummary));
- assert.equal((sh.match(/<b>/g)||[]).length,3,'제목 + 시장 2개');assert.match(sh,/\n<b>🇺🇸 미국주식 · 거래일 10\/27\(화\)<\/b>\n/);assert.match(sh,/\n<b>🟦 하이퍼리퀴드 · 하루 10\/27\(화\) 09:00~<\/b>\n/);
+ assert.equal((sh.match(/<b>/g)||[]).length,3,'제목 + 시장 2개');assert.match(sh,/\n<b>🇺🇸 미국주식 · 10\/27\(화\)<\/b>\n/);assert.match(sh,/\n<b>🟦 하이퍼리퀴드 · 10\/27\(화\)<\/b>\n/);assert.ok(sh.indexOf('하이퍼리퀴드')<sh.indexOf('미국주식'),'HL 먼저');
  assert.doesNotMatch(sh.replace(/<\/?b>/g,''),/[<>]/,'태그는 <b>만');
  // 전송: HTML 성공
  const calls=[];let fail=false;
