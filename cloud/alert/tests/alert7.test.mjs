@@ -27,7 +27,7 @@ function runner(cal){let state=null;const refs=new Set();const all={messages:[],
   step(now,equity,cfg,{pr=null,dr=null}={}){const r=risk.step(state,{now,cal,cfg,equity:{value:equity,t:now,source:'test'},flows:[],fills:[],eventRefs:refs,dayMode:'realized',dayRealized:dr,periodMode:pr?'realized':undefined,periodRealized:pr});
    state=r.state;for(const e of r.events)refs.add(e.ref);all.messages.push(...r.messages);all.events.push(...r.events);return r;}};}
 
-test('버전 2.6.0',()=>{assert.equal(VERSION,'2.6.0');});
+test('버전 2.6.0',()=>{assert.equal(VERSION,'2.8.0');});
 
 test('HL 실데이터 모양: 10/20 기준일로 걸린 월간 중단(~11/01 09:00 KST) + 하루 중단(~10/24 09:00) → 기준일 10/26으로 바꾸면 둘 다 해제 · 🔄 1회 · 그 전엔 기록만',()=>{
  const R=runner(HL),c20={...CFG,riskStart:RS20},c26={...CFG,riskStart:RS26};
@@ -95,10 +95,10 @@ test('서비스: RISK_START_DATE를 미래(10/26)로 바꿔 재시작 → 기존
  w.tg.length=0;w.now+=120000;
  const b=new Alerter(env('2026-10-26'),{fetcher:w.fetcher,now:()=>w.now,log:()=>{},sleep:async()=>{}});await b.init();
  r=await b.check();const s=r.statuses[0];
- assert.equal(s.stopped,false);assert.equal(s.version,'2.6.0');assert.equal(s.riskStart.date,'2026-10-26');assert.equal(s.riskStart.before,true);
+ assert.equal(s.stopped,false);assert.equal(s.version,'2.8.0');assert.equal(s.riskStart.date,'2026-10-26');assert.equal(s.riskStart.before,true);
  assert.equal(w.tg.filter(t=>t.startsWith('🔄')).length,1);assert.match(w.tg.find(t=>t.startsWith('🔄')),/중단 해제: 하루/);
  assert.ok(w.pushes.at(-1).events.some(e=>e.kind==='clear'&&e.rule==='risk-start'),'risk_events clear 기록');
- assert.match(b.summaryText(r.statuses,w.now),/\n오늘   — 10\/26부터\n주간   — 10\/26부터\n월간   — 10\/26부터\n연속 손실: 0\/3일\n중단: 없음\n한도 적용: 10\/26\(월\) 미국 장부터 \(KST 10\/26 22:30~\)$/);assert.doesNotMatch(b.summaryText(r.statuses,w.now),/※/,'요약엔 ※ 기준일 중복 줄 없음');
- assert.match(b.describe(r.statuses),/오늘   — 10\/26부터/);
+ assert.match(b.summaryText(r.statuses,w.now),/\n오늘  — 10\/26부터\n주간  — 10\/26부터\n월간  — 10\/26부터\n연속 손실 0\/3일 · 중단 없음\n한도 적용: 10\/26\(월\) 미국 장부터 \(KST 10\/26 22:30~\)/);assert.doesNotMatch(b.summaryText(r.statuses,w.now),/※/,'요약엔 ※ 기준일 중복 줄 없음');
+ assert.match(b.describe(r.statuses),/오늘  — 10\/26부터/);
  w.tg.length=0;w.now+=120000;w.today=-5000;r=await b.check();assert.equal(r.statuses[0].stopped,false);assert.equal(w.tg.length,0,'기준일 전 손실 더 커져도 알림 없음');
 });
