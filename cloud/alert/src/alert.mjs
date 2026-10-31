@@ -34,7 +34,7 @@ import * as spot from './spot.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.8.0';
+export const VERSION='2.8.1';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -204,7 +204,7 @@ export class Alerter{
    try{const start=h.fundingAt?Math.max(fs,h.fundingAt-2*3600000):fs;for(const f of await h.client.funding(start)){const c=f?.delta?.coin;if(f&&Number.isFinite(f.time)&&typeof c==='string')h.funding.set(f.time+':'+c,f);}h.fundingAt=t;for(const [k,f] of h.funding)if(f.time<fs)h.funding.delete(k);}
    catch(e){this.log('WARN','하이퍼리퀴드 펀딩 조회 실패(Supabase 수집분으로 계산): '+String(e.message||e).slice(0,80));}}
   if(t-h.portfolioAt>=60*MIN){try{h.portfolio=await h.client.portfolio();h.portfolioAt=t;}catch{}}
-  return {equity,fills:src.hlFills([...h.fills.values()]),rawFills:[...h.fills.values()],rawFunding:[...h.funding.values()],flows:src.hlFlows(h.ledger,addr),portfolio:h.portfolio};
+  return {equity,fills:src.hlFills([...h.fills.values()]),rawFills:[...h.fills.values()],rawFunding:[...h.funding.values()],flows:src.hlFlows(h.ledger,addr),portfolio:h.portfolio,client:h.client}; // 2.8.1: 현물 평가(spotB)가 h.client.raw를 씀 — 2.7.0~2.8.0엔 빠져 현물이 분모에 안 들어갔음
  }
  async check(){
   const t=this.now(),S=this.state;this.qrSeen=null;
