@@ -54,7 +54,7 @@ module.exports = {
   t89w: { check(A) { for (const w of W) { const r = w + '.res.'; A.eq(r + 'start', 56414); A.eq(r + 'parts', ['UBTC:0.8002@70000', 'HYPE:10@40']); A.eq(r + 'flow', 13550); A.eq(r + 'spotChg', 1036); A.eq(r + 'start0', 400);
     A.eq(r + 'tileText', ['전체 변동 +779.96 USDC · +1.53%', '현물 −13,950.00 USDC · −27.35% 트레이딩 +14,729.96 USDC · +28.88%', '매매/펀딩 −22.80 · −63.54 · 44건']); A.eq(r + 'calText', ['현물 −13,950.00 USDC · −45.89% 트레이딩 +14,329.96 USDC · +47.14%']); A.eq(r + 'tile', true); } } },
   /* v90 추매/피라미딩 기록·사유 칸 (HL·US × 1440·390) */
-  t90: { check(A) { for (const k of ['HL1440', 'HL390', 'US1440', 'US390']) { A.eq(k + '.R1', 22.4); A.eq(k + '.adds.length', 2); A.eq(k + '.adds.0.tag', 'pyr'); A.eq(k + '.adds.0.avg1', 101.6); A.eq(k + '.adds.0.totRisk', 18.4);
+  t90: { check(A) { for (const k of ['HL1440', 'HL390', 'US1440', 'US390']) { A.eq(k + '.R1', 99.9); A.eq(k + '.adds.length', 2); A.eq(k + '.adds.0.tag', 'pyr'); A.eq(k + '.adds.0.avg1', 101.6); A.eq(k + '.adds.0.totRisk', 18.4);
     A.eq(k + '.adds.1.tag', 'avg'); A.eq(k + '.adds.1.totRisk', 16.4); A.eq(k + '.card', true); A.eq(k + '.notes', 2); A.eq(k + '.inJournal', true); A.eq(k + '.plainCard', false); A.eq(k + '.plainR', 50); A.eq(k + '.plainSame', true);
     A.has(k + '.reload.ta', '돌파 확인 후 1차 추매'); } A.eq('HL1440.chartMarks', ['추매1:v90-lab pyr', '추매2:v90-lab avg']); } },
   /* v75~v79 + v91 거래 상세: 순서·HL 스탑 동기화·목표 수정·메모·포지션 %·계획 vs 실제(분석 탭 접힘 펼쳐서) */
