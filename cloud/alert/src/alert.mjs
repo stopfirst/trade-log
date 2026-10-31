@@ -29,11 +29,12 @@ import * as day from './day.mjs';
 import {usCalendar,hlCalendar,untilText,addDays,etDate} from './calendar.mjs';
 import * as fmt from './format.mjs';
 import * as qr from './quick.mjs';
+import * as rm from './remind.mjs';
 import * as spot from './spot.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.7.1';
+export const VERSION='2.8.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -62,6 +63,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
  if(tv){warn=[...new Set(tv.split(',').map(Number))].filter(x=>x<100).sort((a,b)=>a-b);if(tv.split(',').some(x=>!Number.isFinite(Number(x))||Number(x)<=0||Number(x)>100))P('ALERT_THRESHOLDS (한도 대비 % 사전 경고, 예: 50,80)');}
  if(String(env.ALERT_THRESHOLDS??'').trim()==='0')warn=[];
  const st=String(env.DAILY_SUMMARY_TIME_ET||'16:15').trim();const sm=/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(st);if(!sm)P('DAILY_SUMMARY_TIME_ET (HH:MM, 미국 동부)');
+ if(!rm.remindConfig(env).at)P('REVIEW_REMIND_AT (HH:MM, 한국 시간 · 기본 09:30)');
  const hlAddr=String(env.HL_ADDRESS||'').trim();if(hlAddr&&!/^0x[0-9a-fA-F]{40}$/.test(hlAddr))P('HL_ADDRESS (0x… 40자리, 비우면 앱에 저장한 HL 자동 수집 주소)');
  const dayBasis=String(env.DAY_LIMIT_BASIS||'realized').trim().toLowerCase();if(!['realized','equity'].includes(dayBasis))P('DAY_LIMIT_BASIS (realized = 실현손익·전일 마감 기준(기본), equity = v1.2 자산 변화 기준)');
  const rsd=String(env.RISK_START_DATE||'').trim();if(rsd&&!(/^\d{4}-\d{2}-\d{2}$/.test(rsd)&&!Number.isNaN(Date.parse(rsd+'T00:00:00Z'))&&new Date(rsd+'T00:00:00Z').toISOString().slice(0,10)===rsd))P('RISK_START_DATE (YYYY-MM-DD, 예: 2026-10-20 · 비우면 기준일 없음)');
@@ -77,7 +79,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
    checkSec:numIn(env,'RISK_CHECK_SEC',60,60,300,{int:true}),idleSec:numIn(env,'RISK_IDLE_SEC',300,60,1800,{int:true}),pushMin:numIn(env,'RISK_PUSH_MIN',5,1,30,{int:true}),
    usFlowMin:numIn(env,'US_FLOW_MIN_USD',50,1,1e7),usStaleMin:numIn(env,'US_STALE_MIN',20,5,240,{int:true}),anchorMaxGapMin:numIn(env,'ANCHOR_MAX_GAP_MIN',20,2,120,{int:true}),
    usExtraHolidays:extra,dayBasis,riskStartDate:rsd||null,hlAddress:hlAddr?hlAddr.toLowerCase():null,
-   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
+   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
    stateDir:String(env.STATE_DIRECTORY||env.ALERT_STATE_DIR||'/var/lib/trade-alert').split(':')[0]};
  }catch(e){if(e.fields)problems.push(...e.fields);else throw e;}
  if(problems.length){const e=Error('CONFIG_INCOMPLETE');e.fields=problems;throw e;}
@@ -182,6 +184,8 @@ export class Alerter{
   this.state=emptyLocal();this.hl={addr:null,fills:new Map(),fillsAt:0,funding:new Map(),fundingAt:0,ledger:[],ledgerAt:0,portfolio:null,portfolioAt:0};this.failures=0;this.lastStatus={};this.dayData=null;this.dayDataMissing=false;
   // 2.6.0 즉시 복기(dry-run·--test에선 없음). 상태는 state2.json의 qr에, 저장은 persist()로 직렬화(버튼 루프와 확인 루프가 같은 파일을 씀)
   this.qr=this.cfg.quickReview&&!dryRun?new qr.QuickReview({tg:this.tg,rpc:this.rpc,token:this.cfg.token,chat:this.cfg.chat,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist(),...(sleep?{sleep}:{})}):null;this.qrSeen=null;
+  // 2.8.0 매일 복기 알림(dry-run에선 메시지 출력만)
+  this.reminder=new rm.Reminder({rpc:this.rpc,token:this.cfg.token,cfg:this.cfg.remind,state:()=>this.state,log:this.log});
  }
  persist(){if(this.dryRun)return Promise.resolve();const p=(this._saving||Promise.resolve()).catch(()=>{}).then(()=>saveState(this.cfg.stateDir,this.state));this._saving=p;return p;}
  async init(){this.state=await loadState(this.cfg.stateDir);}
@@ -299,6 +303,7 @@ export class Alerter{
   }
   // 일일 요약(미국 장 마감 후)
   const sk=this.summaryDue(t);if(sk&&results.length){S.outbox.push({key:sk,at:t,text:this.summaryText(results.map(r=>r.res.status),t)});S.sent[sk]=t;}
+  try{await this.reminder.afterCheck(t);}catch(e){this.log('WARN','매일 복기 알림 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}
   // 텔레그램(실패분은 2시간 동안 재시도)
   const keep=[];let sent=0;
   for(const msg of S.outbox){if(t-msg.at>2*3600000)continue;try{await this.deliver(msg.text);sent++;}catch(e){keep.push(msg);this.log('ERROR','텔레그램 전송 실패: '+(e.message||e)+' (다음 확인 때 다시 시도)');}}
@@ -363,7 +368,7 @@ export class Alerter{
   const active=!['Sat','Sun'].includes(g('weekday'))&&mins>=4*60&&mins<20*60+5;return (active?this.cfg.checkSec:this.cfg.idleSec)*1000;}
  async run(){
   await this.init();const c=this.cfg;
-  this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월(÷ 기간 시작 직전 마감)·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:'')+` · 텔레그램 즉시 복기 ${c.quickReview?'켜짐(HL 청산, alert9.sql 필요)':'꺼짐(QUICK_REVIEW=0)'}`);
+  this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월(÷ 기간 시작 직전 마감)·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:'')+` · 텔레그램 즉시 복기 ${c.quickReview?'켜짐(HL 청산, alert9.sql 필요)':'꺼짐(QUICK_REVIEW=0)'}`+` · 매일 복기 알림 ${c.remind.enabled?c.remind.atText+' KST(alert11.sql 필요)':'꺼짐(REVIEW_REMIND=0)'}`);
   if(this.qr)this.qr.loop().catch(e=>this.log('ERROR','텔레그램 버튼 응답 루프 종료: '+String(e?.message||e)));
   for(;;){
    try{await this.check();if(this.failures)this.log('INFO','정상 복구');this.failures=0;}
@@ -407,6 +412,8 @@ export async function main(argv=process.argv.slice(2),env=process.env){
   try{await new Telegram(cfg.bot,cfg.chat,fetch,undefined,{html:cfg.telegramHtml}).send(text);console.log('테스트 메시지를 보냈습니다.\n'+text);
    if(cfg.quickReview){let q='꺼짐';try{const p=new qr.QuickReview({tg:null,rpc:new SupabaseRpc(cfg),token:cfg.token,chat:cfg.chat,log:()=>{},now:Date.now,state:()=>({}),save:async()=>{}});q=(await p.probe())?'켜짐 · alert9.sql 확인됨':'켜짐 · alert9.sql 없음(실행하면 다음 청산부터 질문)';}catch{q='켜짐 · 확인 실패';}console.log('텔레그램 즉시 복기: '+q);}
    else console.log('텔레그램 즉시 복기: 꺼짐 (QUICK_REVIEW=0)');
+   if(cfg.remind.enabled){let q;try{const d=await new SupabaseRpc(cfg).call('review_gaps',{p_token:cfg.token,p_since:rm.prevDate(rm.kstParts(Date.now()).date)});const rows=rm.pick(d.journal,rm.prevDate(rm.kstParts(Date.now()).date));q=`켜짐 · 매일 ${cfg.remind.atText} KST · alert11.sql 확인됨 · 어제 대상 거래 ${rows.length}건`;}catch(e){q=/SQL_NOT_INSTALLED/.test(String(e.message))?`켜짐 · 매일 ${cfg.remind.atText} KST · alert11.sql 없음(실행해야 알림이 감)`:'켜짐 · 확인 실패 '+String(e.message||e).slice(0,60);}console.log('매일 복기 알림: '+q);}
+   else console.log('매일 복기 알림: 꺼짐 (REVIEW_REMIND=0)');
    return 0;}
   catch(e){log('ERROR','테스트 전송 실패: '+String(e.message));return 1;}
  }
