@@ -126,3 +126,10 @@ alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_
 ## 보안
 - 비밀값은 `/opt/trade-alert/.env`(root:tradealert 0640)에만. 로그에 토큰·키를 `[비공개]`로 가림. secret/service_role 키 거부.
 - Supabase 쓰기는 `risk_push`(수집기 토큰 주인 행만), 앱은 RLS로 본인 행만 읽기. 하이퍼리퀴드는 공개 /info 읽기만.
+
+## 2.8.0 — 매일 복기 알림 (앱 v92)
+- 매일 `REVIEW_REMIND_AT`(한국 시간, 기본 09:30)에 한 번: 어제(HL UTC 하루 · 미국 ET 거래일) 체결했거나 들고 있던 거래 중 일지 빈 칸을 텔레그램으로.
+  항목 = 앱 '진입 전 체크'와 같음: 진입 근거 · 스탑 이유 · 손익비(앱 설정 최소, 기본 2:1) · 가격 반응 확인 · 타임프레임(LTF 진입이면 청산도 LTF).
+- 대상 = 첫 진입이 2026-11-01 이후(앱 settings.v92From). 어제 거래가 없으면 안 보냄.
+- Supabase SQL Editor에서 `alert11.sql` 1회 실행 필요(review_gaps, 읽기 전용 — 메모 본문·사진은 서버로 안 나감). 없으면 로그 1회 후 알림만 건너뜀.
+- 끄기: `.env`에 `REVIEW_REMIND=0`. `--test` 끝에 '매일 복기 알림: …' 상태 줄.
