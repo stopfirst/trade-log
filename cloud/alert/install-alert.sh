@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 매매일지 손실한도 판정 v1.6 알림 + 텔레그램 즉시 복기 · 현물 포함 분모 · 매일 복기 알림(trade-alert 2.8.1) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
+# 매매일지 손실한도 판정 v1.6 알림 + 텔레그램 즉시 복기 · 현물 포함 분모 · 매일 복기 알림 · 서버 일일 백업(trade-alert 2.9.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
 #   curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash
 # 다시 실행하면 코드만 업데이트합니다(.env와 알림 기록은 절대 덮어쓰지 않음).
 # 키움 수집기(kiwoom-collector)와 별개의 서비스입니다. 수집기는 건드리지 않습니다.
@@ -12,7 +12,7 @@ SVC=trade-alert
 USR=tradealert
 STATE=/var/lib/trade-alert
 KWC_ENV=/opt/kiwoom-collector/.env
-FILES="package.json src/alert.mjs src/risk.mjs src/format.mjs src/quick.mjs src/remind.mjs src/spot.mjs src/calendar.mjs src/sources.mjs src/day.mjs src/hl-balance.cjs env.template trade-alert.service"
+FILES="package.json src/alert.mjs src/risk.mjs src/format.mjs src/quick.mjs src/remind.mjs src/spot.mjs src/calendar.mjs src/sources.mjs src/day.mjs src/hl-balance.cjs src/backup.mjs env.template trade-alert.service trade-alert-backup.service trade-alert-backup.timer"
 
 say(){ printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 die(){ printf '\n\033[1;31m[중단] %s\033[0m\n' "$*" >&2; exit 1; }
@@ -49,6 +49,7 @@ mkdir -p "$DIR/src"
 for f in $FILES; do install -m 0644 -o root -g root "$TMP/$f" "$DIR/$f"; done
 install -m 0644 -o root -g root "$TMP/SHA256SUMS" "$DIR/SHA256SUMS"
 install -d -m 0700 -o "$USR" -g "$USR" "$STATE"
+install -d -m 0700 -o "$USR" -g "$USR" "$DIR/backups"   # 2.9.0 서버 일일 백업 보관 폴더(gzip JSON, 30일)
 
 say "3/5 설정 파일(.env)"
 if [ ! -f "$DIR/.env" ]; then
@@ -73,8 +74,12 @@ chown root:"$USR" "$DIR/.env"; chmod 0640 "$DIR/.env"
 
 say "4/5 자동 실행(systemd) 등록"
 install -m 0644 "$DIR/trade-alert.service" "/etc/systemd/system/$SVC.service"
+# 2.9.0: 매일 06:40 KST 서버 백업(oneshot + timer). 끄기: sudo systemctl disable --now trade-alert-backup.timer
+install -m 0644 "$DIR/trade-alert-backup.service" "/etc/systemd/system/trade-alert-backup.service"
+install -m 0644 "$DIR/trade-alert-backup.timer" "/etc/systemd/system/trade-alert-backup.timer"
 systemctl daemon-reload
 systemctl enable "$SVC" >/dev/null 2>&1
+if [ "${TA_BACKUP:-1}" = "1" ]; then systemctl enable --now trade-alert-backup.timer >/dev/null 2>&1 && echo "서버 일일 백업 타이머 켜짐 (매일 06:40 KST, $DIR/backups)"; fi
 
 say "5/5 시작"
 if grep -q '여기에_붙여넣기' "$DIR/.env"; then
@@ -109,6 +114,11 @@ else
   if ! grep -q '^# \[현물 포함 분모 2.7.0\]' "$DIR/.env"; then
     sed -n '/^# \[현물 포함 분모 2.7.0\]/,/^# \[손실한도 판정 v1.6\]/p' "$DIR/env.template" | sed '$d' >> "$DIR/.env"
     echo "기존 .env에 현물 포함 분모(SPOT_IN_BASIS) 안내(주석)를 덧붙였습니다."
+  fi
+  if ! grep -q '^# \[서버 백업 2.9.0\]' "$DIR/.env"; then
+    # 2.9.0 안내(주석)만 덧붙입니다. 기본 = 매일 06:40 KST, 30일 보관, 사진 포함, 실패 때만 텔레그램. Supabase alert13.sql 필요.
+    sed -n '/^# \[서버 백업 2.9.0\]/,$p' "$DIR/env.template" >> "$DIR/.env"
+    echo "기존 .env에 서버 일일 백업(BACKUP_*) 안내(주석)를 덧붙였습니다."
   fi
   if ! grep -q '^# \[손실한도 판정 v1.6\]' "$DIR/.env"; then
     # 2.4.0 안내(주석)만 덧붙입니다. 설정할 값 없음(주·월 분모 = 기간 시작 직전 마감 잔액, 새 SQL 없음).

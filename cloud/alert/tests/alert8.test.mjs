@@ -22,7 +22,7 @@ function assertCard(text,{heads=false}={}){
  assert.ok(text.length<=4000);
 }
 
-test('버전 2.6.0',()=>{assert.equal(VERSION,'2.8.0');});
+test('버전 2.6.0',()=>{assert.equal(VERSION,'2.9.0');});
 
 test('모든 메시지 종류: 첫 줄 제목 · 빈 줄 · 라벨: 값 (경고 50/80, 중단, 해제 🔄/✅, 연속손실, 위반, 기준일 🔄)',()=>{
  const f=S.hlDayFlow(),p=S.periodFlow(),b=S.beforeStart(),c=S.afterStart();

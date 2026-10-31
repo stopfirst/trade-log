@@ -1,4 +1,22 @@
-# 매매일지 손실한도 판정 v1.6 (trade-alert 2.6.0 · alert9)
+# 매매일지 손실한도 판정 v1.6 (trade-alert 2.9.0 · alert13)
+
+## 2.9.0 — 서버 일일 백업(판정·알림 로직 변경 없음)
+- 새 systemd 타이머 `trade-alert-backup.timer`: 매일 **06:40 KST**(±10분) `src/backup.mjs` 1회 → Supabase `backup_dump`(alert13.sql, 수집기 토큰, 읽기 전용)
+  → `/opt/trade-alert/backups/trade-journal-YYYY-MM-DD-HHMM.json.gz`(0600, `.sha256` 함께) · **30일 보관**(최신 3개는 항상 남김).
+- 담기는 것: 클라우드 일지 US·HL 전체(payload 그대로 — 거래·계획·복기·**사진** 포함), 이전 버전 목록(내용 제외), 키움 스냅샷, risk_state/days/events/flows,
+  acct_snapshots, quick_reviews, hl_watch, HL 원천 체결·펀딩. **토큰 해시(kw_collector)·auth 는 절대 안 담김.**
+- 호출 사이 2.5초(수집기·알림과 같은 분당 60회 한도를 나눠 씀), 하루 400회 상한(SQL). 실패하면 텔레그램 ⚠️ 1회(`BACKUP_NOTIFY=fail`, 기본).
+- 설정(.env, 모두 선택): `BACKUP_KEEP_DAYS=30` · `BACKUP_PHOTOS=1`(0 = 사진 빼고) · `BACKUP_NOTIFY=fail|always|0` · `BACKUP_DIR`(바꾸면 서비스 ReadWritePaths도).
+- 명령: 지금 한 번 `sudo systemctl start trade-alert-backup` · 결과 `sudo journalctl -u trade-alert-backup -n 5 --no-pager` · 목록 `sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/backup.mjs --list`
+  · 다음 실행 시각 `systemctl list-timers trade-alert-backup.timer` · 끄기 `sudo systemctl disable --now trade-alert-backup.timer`.
+- 복원(자세히: repo `cloud/security/BACKUP-RESTORE.md`)
+  1. 일지(가장 흔함): `sudo -u tradealert node /opt/trade-alert/src/backup.mjs --extract /opt/trade-alert/backups/<파일>.json.gz /tmp/restore`
+     → 만든 `trade-journal-usd-…json` / `trade-journal-hyperliquid-…json` 을 PC로 옮겨 앱 **설정 → 백업과 이전 → 기존 기록 가져오기** → 확인 뒤 클라우드 저장.
+  2. 서버 표(키움 스냅샷·손실 한도 기록 등): `node /opt/trade-alert/src/backup.mjs --restore-sql <파일> > restore.sql` → SQL Editor 실행(없는 행만 추가, 다시 실행해도 안전).
+     `--journal` 을 붙이면 일지도 SQL 로 교체(지금 저장본은 이전 버전으로 보관 → 앱에서 되돌릴 수 있음). 다른 프로젝트·계정으로 옮길 땐 `--user <새 uuid>`.
+- 보안 메모: 이 기능으로 수집기 토큰이 일지 **전체(메모·사진)** 를 읽을 수 있게 됨(이전엔 요약 필드만). 토큰은 이 서버 .env(0640)에만 있음.
+  유출이 의심되면 앱에서 토큰 다시 만들기(즉시 폐기) 또는 SQL `drop function public.backup_dump(text,text,text,bigint);`.
+
 
 ## 2.6.0 — 텔레그램 즉시 복기(판정 로직 변경 없음)
 - HL 포지션이 0이 되거나 방향이 바뀌는 체결(청산)을 보면 텔레그램 '📝 BTC 롱 청산 · +$120.00 (+0.6R) · 복기' + [규칙 준수] [규칙 위반] [나중에].
@@ -121,7 +139,7 @@ alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_
 앱 설정의 손실 한도(하루·주·달 %)는 앱 자체 표시용이고, 서버 판정은 `.env`(기본 3/6/10)를 씁니다. 앱 설정 → 계좌·위험에 서버 값이 그대로 보입니다.
 
 ## 테스트(개발)
-`node --test tests/*.test.mjs` · SQL: `node tests/alert2-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql fixtures`, `node tests/alert3-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql fixtures`, `node tests/alert5-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql alert5.sql fixtures` (@electric-sql/pglite)
+`node --test tests/*.test.mjs` · SQL: `node tests/alert13-sql.pglite.mjs <cloud 폴더>`(backup_dump·복원 왕복·security/harden-2026-11.sql), `node tests/alert2-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql fixtures`, `node tests/alert3-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql fixtures`, `node tests/alert5-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql alert5.sql fixtures` (@electric-sql/pglite)
 
 ## 보안
 - 비밀값은 `/opt/trade-alert/.env`(root:tradealert 0640)에만. 로그에 토큰·키를 `[비공개]`로 가림. secret/service_role 키 거부.

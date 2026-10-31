@@ -1,0 +1,30 @@
+[Unit]
+Description=Trade journal daily server backup (trade-alert 2.9.0, Supabase backup_dump -> /opt/trade-alert/backups)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=tradealert
+Group=tradealert
+WorkingDirectory=/opt/trade-alert
+ExecStart=/usr/bin/node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/backup.mjs
+Environment=NODE_ENV=production
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=30min
+# Hardening: read-only system, writes only to the backup folder. Outbound HTTPS (Supabase, Telegram) only.
+ReadWritePaths=/opt/trade-alert/backups
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=600M
