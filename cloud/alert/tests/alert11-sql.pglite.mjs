@@ -1,0 +1,30 @@
+/* SQL test for alert11.sql (review_gaps). node tests/alert11-sql.pglite.mjs <cloud.sql> <kiwoom-collector.sql> <alert11.sql> */
+import {PGlite} from '@electric-sql/pglite';import fs from 'node:fs';import {createHash,randomBytes} from 'node:crypto';
+import * as rm from '../src/remind.mjs';
+const [cloudPath,kwPath,aPath]=process.argv.slice(2);const read=p=>fs.readFileSync(p,'utf8');
+const U1='11111111-1111-1111-1111-111111111111',U2='22222222-2222-2222-2222-222222222222';
+const PRE=`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key);
+create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.sub',true),'')::uuid $$;
+grant usage on schema auth to anon,authenticated; grant usage on schema public to anon,authenticated; grant execute on function auth.uid() to anon,authenticated;
+insert into auth.users values('${U1}'),('${U2}');`;
+let passed=0;const ok=(c,m)=>{if(!c){console.error('FAIL',m);process.exit(1);}passed++;console.log('ok',m);};
+const newToken=()=>'kwc_'+randomBytes(32).toString('base64url');const hash=t=>createHash('sha256').update(t,'utf8').digest('hex');
+const db=new PGlite();await db.exec(PRE);await db.exec(read(cloudPath));await db.exec(read(kwPath));await db.exec(read(aPath));await db.exec(read(aPath));ok(true,'두 번 실행 — 멱등');
+const as=(user,q,params=[])=>db.transaction(async tx=>{await tx.exec(user?`set local role authenticated; select set_config('request.jwt.sub','${user}',true);`:`set local role anon;`);return (await tx.query(q,params)).rows;});
+const T1=newToken(),T2=newToken();await as(U1,'select public.kw_register_token($1)',[hash(T1)]);await as(U2,'select public.kw_register_token($1)',[hash(T2)]);
+const tr=(o)=>({id:o.name,name:o.name,market:'HL',direction:'long',entries:[{id:'e',date:o.d,time:'10:00:00',price:100,shares:1,fee:0.1}],fills:o.f||[],stop0:95,riskPlan:{target:112,stop:95},
+ entryNote:o.en??'전고점 반응',stopNote:o.sn??'',holdNote:'비밀 메모',react:o.react??true,tfIn:'ltf',tfOut:'4h',images:[{data:'x'}],chartNotes:[{kind:'note',text:'메모'},{kind:'rr',side:'long',tp:115}],...(o.x||{})});
+const payload={settings:{v92From:'2026-11-01',v92MinRR:2,account:1000},trades:[tr({name:'BTC',d:'2026-11-02'}),tr({name:'OLD',d:'2026-08-01'}),tr({name:'ETH',d:'2026-11-02',en:'  ',react:'yes'}),'junk']};
+await db.query(`insert into public.journal_cloud(user_id,scope,payload,revision) values($1,'HL',$2::jsonb,1),($3,'HL',$4::jsonb,1)`,[U1,JSON.stringify(payload),U2,JSON.stringify({trades:[tr({name:'OTHER',d:'2026-11-02'})]})]).catch(async e=>{console.log('insert shape',e.message);process.exit(1);});
+const call=(t,d)=>as(null,'select public.review_gaps($1,$2::date) r',[t,d]).then(x=>x[0].r);
+let r=await call(T1,'2026-11-02');ok(r.ok&&r.version===11,'anon + 토큰 호출 · version 11');
+const H=r.journal.HL;ok(H.trades.length===2&&H.trades.map(t=>t.name).join()==='BTC,ETH','40일 전 거래·잘못된 항목 제외, 자기 일지만');
+ok(H.from==='2026-11-01'&&H.minRR===2,'설정 v92From·v92MinRR 전달');
+const b=H.trades[0];ok(b.entryNote===true&&b.stopNote===false&&b.react===true&&b.tfIn==='ltf'&&b.target===112&&b.rrTp===115,'불리언·TF·목표·R 도구 목표');
+ok(!JSON.stringify(r).includes('비밀')&&!JSON.stringify(r).includes('전고점')&&!JSON.stringify(r).includes('images'),'메모 본문·사진·차트 메모는 안 나감');
+ok(H.trades[1].entryNote===false&&H.trades[1].react===false,'공백 메모 = 없음, 불리언 아닌 react = false');
+const rows=rm.pick(r.journal,'2026-11-02');ok(rows.length===2&&rows[0].gaps.map(g=>g.k).join()==='stop,tf','서버 pick과 연결: 스탑 이유·LTF→HTF');
+let bad=false;try{await call(newToken(),'2026-11-02');}catch(e){bad=/invalid collector token/.test(e.message);}ok(bad,'모르는 토큰 거부');
+ok((await call(T1,'2019-01-01')).error==='bad_since','이상한 날짜 거부');
+ok((await call(T2,'2026-11-02')).journal.HL.trades[0].name==='OTHER','다른 사용자 토큰 = 그 사용자 일지만');
+console.log(passed+' passed');
