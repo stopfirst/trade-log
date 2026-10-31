@@ -127,6 +127,9 @@ alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_
 - 비밀값은 `/opt/trade-alert/.env`(root:tradealert 0640)에만. 로그에 토큰·키를 `[비공개]`로 가림. secret/service_role 키 거부.
 - Supabase 쓰기는 `risk_push`(수집기 토큰 주인 행만), 앱은 RLS로 본인 행만 읽기. 하이퍼리퀴드는 공개 /info 읽기만.
 
+## 2.8.1 — 현물 포함 분모 버그 수정
+2.7.0~2.8.0은 현물 평가가 매 회차 'Cannot read properties of undefined (reading \'raw\')'로 실패해 HL 분모·자산이 USDC만이었습니다. hlData 결과에 HL client를 넘겨 고쳤습니다(판정 규칙 v1.6 그대로).
+
 ## 2.8.0 — 매일 복기 알림 (앱 v92)
 - 매일 `REVIEW_REMIND_AT`(한국 시간, 기본 09:30)에 한 번: 어제(HL UTC 하루 · 미국 ET 거래일) 체결했거나 들고 있던 거래 중 일지 빈 칸을 텔레그램으로.
   항목 = 앱 '진입 전 체크'와 같음: 진입 근거 · 스탑 이유 · 손익비(앱 설정 최소, 기본 2:1) · 가격 반응 확인 · 타임프레임(LTF 진입이면 청산도 LTF).
