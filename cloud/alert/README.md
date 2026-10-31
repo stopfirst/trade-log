@@ -1,4 +1,32 @@
-# 매매일지 손실한도 판정 v1.6 (trade-alert 2.9.0 · alert13)
+# 매매일지 손실한도 판정 v1.6 (trade-alert 2.10.0 · alert14)
+
+## 2.10.0 — flow-chart 존 터치 알림(판정·백업 로직 변경 없음 · 새 SQL 없음 · 기본 꺼짐)
+- flow-chart(stopfirst.github.io/flow-chart)가 그리는 **BB+FVG**(브레이커 블록 ∩ 같은 방향 FVG, 무효화 안 된 것 중 가격에 가까운 2개)와
+  **OB 백도식**(스윙 BOS/CHoCH 직전 마지막 반대색 봉 몸통, 방향별 최근 1개, 진행 중 봉은 돌파·무효화에서 제외)에 가격이 닿으면 텔레그램 1회:
+  ```
+  🎯 BTC 1H BB+FVG 약세 존 터치
+
+  존: 79,811.2 – 79,871.2
+  현재가: 79,840.5
+  존 시작 봉: 10/27 18:00 KST · Binance 선물
+  https://stopfirst.github.io/flow-chart/?s=BTC&tf=1h
+  ```
+- 계산: `src/zones.mjs` = flow-chart `js/calc.js`(e99a059)의 atr·findFVG·findOB(백도식/넓게)·swings·findBBFVG를 **글자 그대로** 복사 +
+  data.js의 존 부분(표시 봉 + 워밍업 260봉, 진행 중 봉 처리) + render.js의 표시 선택. 차트 y축 가격 범위 밖 존을 숨기는 것만 생략(가격이 닿을 땐 화면 안).
+- 봉: `ZONE_SOURCE=auto`(기본) = flow-chart와 같은 순서 **Binance USDT-M 선물 → Binance 현물 → Hyperliquid candleSnapshot**. 서버가 미국 리전이면
+  Binance 선물이 451이라 현물을 씀(한국에서 보는 차트는 선물) — `--zones-dry` 첫 줄의 소스로 확인. `ZONE_SOURCE=hl`이면 Hyperliquid만.
+- 요청량: 처음·6시간마다·틈이 생기면 전체 360봉 1회, 그 사이엔 1분마다 종목당 최근 봉 2~3개 1회(BTC·ETH = 분당 2회). 429/5xx/네트워크 → 1·2·4·8·15분 백오프(Retry-After 우선).
+- 터치 = 직전 확인 뒤의 봉(진행 중 봉 포함) 고가·저가가 존 [하단, 상단]에 걸침. 이번에 처음 보이는 존은 **지금 가격이 존 안**일 때만.
+  존이 만들어진 봉(BB+FVG: FVG 셋째 봉·브레이커 돌파 봉 / OB: 돌파 봉)까지는 터치로 치지 않음(flow-chart `touched`와 같은 시작점).
+  1분 사이에 존을 뚫고 지나가 차트에서 사라진 존도, 직전에 보이던 존이면 한 번 알림(`(존을 종가로 넘는 중)`).
+- 같은 존은 한 번만: id = `종목:종류:방향:시작 봉 시각` → `/var/lib/trade-alert/state2.json`의 `zones.sent`(보내기 전에 먼저 저장 → 재시작해도 중복 없음, 실패분은 30분 동안 재전송).
+  존이 **마감된 봉** 종가로 무효화되면 기록 삭제(진행 중 봉 종가만으로는 유지), 계산에서 24시간 사라지면 삭제. 조용한 시간 없음.
+- 켜고 끄기: `.env` `ZONE_ALERT=1` 또는 텔레그램 **`/zones on` · `/zones off` · `/zones status`**(TELEGRAM_CHAT_ID 대화방만, 상태 파일에 저장).
+  텔레그램으로 바꾼 값이 우선이고, `.env`의 ZONE_ALERT 값을 바꾸면 다시 `.env` 값. 명령은 즉시 복기와 같은 getUpdates 루프로 받음
+  (`QUICK_REVIEW=0`이어도 `ZONE_ALERT=1`이면 명령용으로 받음, `ZONE_COMMANDS=0`이면 안 받음).
+- 설정(.env, 모두 선택): `ZONE_SYMBOLS=BTC,ETH` · `ZONE_TF=1h`(15m·1h·4h) · `ZONE_KINDS=bbfvg,ob` · `ZONE_CHECK_SEC=60` · `ZONE_BARS=100`(차트 '봉 개수'와 같게) · `ZONE_SOURCE=auto|hl|binance`.
+- 지금 존 목록(보내지도 저장하지도 않음, 꺼져 있어도 동작): `sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs --zones-dry`
+- 손실 한도 확인 루프와 별개 루프라 존 쪽 실패가 판정·알림에 영향 없음. 새 파일 `src/zones.mjs`, `src/zonewatch.mjs`(설치 FILES·SHA256SUMS에 추가).
 
 ## 2.9.0 — 서버 일일 백업(판정·알림 로직 변경 없음)
 - 새 systemd 타이머 `trade-alert-backup.timer`: 매일 **06:40 KST**(±10분) `src/backup.mjs` 1회 → Supabase `backup_dump`(alert13.sql, 수집기 토큰, 읽기 전용)
@@ -133,13 +161,14 @@ $A --once --dry-run                 # 지금 판정만 출력(보내지·저장�
 $A --flow US 500 "원화 환전 입금"     # 입출금 수동 등록(+입금 / −출금, 지금 시각) — 추정이 놓친 경우
 $A --flow-remove manual:US:…        # 수동 등록 취소
 $A --clear-stops US                 # 잘못 걸린 중단 해제(기록 남김)
+$A --zones-dry                      # 2.10.0 지금 존 목록(보내지·저장하지 않음)
 ```
 설정 바꾸기: `sudo nano /opt/trade-alert/.env` → `sudo systemctl restart trade-alert` (키 목록은 env.template).
 alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_SEC` 등은 2.0.0에서 쓰지 않습니다(무시).
 앱 설정의 손실 한도(하루·주·달 %)는 앱 자체 표시용이고, 서버 판정은 `.env`(기본 3/6/10)를 씁니다. 앱 설정 → 계좌·위험에 서버 값이 그대로 보입니다.
 
 ## 테스트(개발)
-`node --test tests/*.test.mjs` · SQL: `node tests/alert13-sql.pglite.mjs <cloud 폴더>`(backup_dump·복원 왕복·security/harden-2026-11.sql), `node tests/alert2-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql fixtures`, `node tests/alert3-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql fixtures`, `node tests/alert5-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql alert5.sql fixtures` (@electric-sql/pglite)
+`node --test tests/*.test.mjs`(존: zones.test.mjs = tests/fixtures/flow-chart 원본과 동일성, zonewatch.test.mjs = 터치·중복·재시작·정리·명령) · 라이브 비교(수동): `node tests/zones-live-compare.mjs` · SQL: `node tests/alert13-sql.pglite.mjs <cloud 폴더>`(backup_dump·복원 왕복·security/harden-2026-11.sql), `node tests/alert2-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql fixtures`, `node tests/alert3-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql fixtures`, `node tests/alert5-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql alert5.sql fixtures` (@electric-sql/pglite)
 
 ## 보안
 - 비밀값은 `/opt/trade-alert/.env`(root:tradealert 0640)에만. 로그에 토큰·키를 `[비공개]`로 가림. secret/service_role 키 거부.
