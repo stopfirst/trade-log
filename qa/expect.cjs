@@ -57,6 +57,13 @@ module.exports = {
   t90: { check(A) { for (const k of ['HL1440', 'HL390', 'US1440', 'US390']) { A.eq(k + '.R1', 22.4); A.eq(k + '.adds.length', 2); A.eq(k + '.adds.0.tag', 'pyr'); A.eq(k + '.adds.0.avg1', 101.6); A.eq(k + '.adds.0.totRisk', 18.4);
     A.eq(k + '.adds.1.tag', 'avg'); A.eq(k + '.adds.1.totRisk', 16.4); A.eq(k + '.card', true); A.eq(k + '.notes', 2); A.eq(k + '.inJournal', true); A.eq(k + '.plainCard', false); A.eq(k + '.plainR', 50); A.eq(k + '.plainSame', true);
     A.has(k + '.reload.ta', '돌파 확인 후 1차 추매'); } A.eq('HL1440.chartMarks', ['추매1:v90-lab pyr', '추매2:v90-lab avg']); } },
+  /* v93 HL 체결 실시간(모의 WebSocket): 스냅샷=병합만, 새 체결 즉시 반영, tid 중복 없음, 끊김→폴백·백오프 재연결, 탭 1개만 연결·넘겨받기, 헤더 넘침 없음 */
+  t93: { check(A, o) { A.eq('before.ws', 0); A.eq('conn.ws', 1); A.eq('conn.url', 'wss://api.hyperliquid.xyz/ws'); A.eq('conn.sub', [{ type: 'userFills', user: '0x1111111111111111111111111111111111111111', aggregateByTime: false }]); A.eq('afterSnap.j.n', 0); A.eq('afterSnap.mem', 1);
+    A.eq('afterFill.j.ids', ['5001', '5002', '5003']); A.eq('afterFill.j.open', [true]); A.has('afterFill.toast', '신규 체결 3건'); A.eq('dup.j.ids', ['5001', '5002', '5003']); A.eq('dup.j.uniq', 3); A.eq('dup.cacheN', 3); A.eq('dup.cacheUniq', 3); A.eq('dup.cursor', 3);
+    A.eq('w1440.on', true); A.eq('w390.on', true); A.eq('w390.shown', true); A.eq('v89.calls', 0); A.eq('v89.ret', false); A.eq('down', { live: false, on: false, polled: true, timer: true }); A.eq('v89down.calls', 1); { const n = o.backoff && o.backoff.tries; if (!(n >= 2 && n <= 3)) A.fail('backoff.tries: ' + n + ' (6.4초 동안 1·2(·4)초 백오프 → 2~3번 기대)'); } A.eq('backoff.live', false);
+    A.eq('fallback.ids', ['5001', '5002', '5003', '5004']); A.eq('fallback.open', [false]); A.eq('re.on', true); A.eq('re.open', 1); A.eq('re.j.uniq', 4);
+    A.eq('tab2.ws', 0); A.eq('tab2.leader', false); A.eq('tab2.on', true); A.eq('tab2.mem', true); A.eq('tab2.j.uniq', 5); A.eq('tab2.j.n', 2); A.eq('tab1.uniq', 5); A.eq('tab2b', { ws: 1, leader: true });
+    for (const k of ['connectMs', 'applyMs', 'reconnMs', 'tab1Ms', 'tab2Ms', 'takeoverMs']) { const v = o[k]; if (!(v >= 0 && v < 3000)) A.fail(k + ': ' + v + 'ms (3초 안 반영 기대)'); } } },
   /* v75~v79 + v91 거래 상세: 순서·HL 스탑 동기화·목표 수정·메모·포지션 %·계획 vs 실제(분석 탭 접힘 펼쳐서) */
   t91: { check(A) { for (const w of W) { A.eq(w + '.sync.stop', 1.2346); A.eq(w + '.sync.ir', 987.654); A.eq(w + '.order2', ['v76-sec v76-review', 'v76-sec v76-manage', 'v75-more', 'deleteTrade']); A.eq(w + '.lev', true);
     A.eq(w + '.v77stop.tg', 150); A.eq(w + '.v77stop.tile', '150'); A.eq(w + '.hold.saved', '보유 테스트');
