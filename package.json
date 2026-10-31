@@ -1,0 +1,13 @@
+{
+  "name": "trade-log-qa",
+  "private": true,
+  "description": "매매일지(cloud/index.html) 브라우저 QA — 모의 데이터만 사용",
+  "scripts": {
+    "qa": "node qa/run-all.cjs cloud/index.html",
+    "qa:install": "playwright-core install --with-deps chromium-headless-shell"
+  },
+  "engines": { "node": ">=24" },
+  "devDependencies": {
+    "playwright-core": "1.64.1"
+  }
+}

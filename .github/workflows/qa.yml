@@ -1,0 +1,77 @@
+name: QA
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qa:
+    name: 매매일지 QA (Chromium, 모의 데이터)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - name: Chromium + 한글 글꼴 설치
+        run: |
+          npx playwright-core install --with-deps chromium-headless-shell
+          sudo apt-get install -y --no-install-recommends fonts-nanum
+          fc-cache -f
+      - name: QA 실행 (cloud/index.html)
+        env:
+          QA_JOBS: '3'
+          QA_OUT: ${{ runner.temp }}/qa-out
+        run: node qa/run-all.cjs cloud/index.html
+      - name: 실패 시 스크린샷·로그 올리기
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-out
+          path: ${{ runner.temp }}/qa-out
+          retention-days: 7
+
+  # GitHub Pages 를 Actions 로 배포 (QA 통과해야만). main push 에서만 실행.
+  # 저장소 설정 Settings → Pages → Source 를 "GitHub Actions" 로 바꿔야 실제로 동작함.
+  # 바꾸기 전(현재 "Deploy from a branch: main /")에는 이 job 이 실패/무시될 수 있음 — 그 경우 기존 브랜치 배포가 계속 사이트를 올림.
+  deploy:
+    name: Pages 배포
+    needs: qa
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PAGES_VIA_ACTIONS == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: 사이트 묶기 (기존 브랜치 배포와 같은 루트, QA·설정 파일 제외)
+        run: |
+          mkdir -p "$RUNNER_TEMP/site"
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'qa' --exclude 'node_modules' \
+            --exclude 'package.json' --exclude 'package-lock.json' ./ "$RUNNER_TEMP/site/"
+          touch "$RUNNER_TEMP/site/.nojekyll"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/site
+      - id: deployment
+        uses: actions/deploy-pages@v4
