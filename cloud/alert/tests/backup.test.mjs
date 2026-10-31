@@ -31,7 +31,7 @@ function fakeServer({fills=4100,kw=130,failPart=null,rateOnce=false}={}){
 }
 const noSleep=async()=>{};
 
-test('버전 2.9.0',()=>{assert.equal(VERSION,'2.9.0');});
+test('버전 2.9.0',()=>{assert.equal(VERSION,'2.10.0');});
 
 test('설정: 기본값 · secret 키 거부 · 잘못된 값', ()=>{
  const c=bk.readBackupConfig(ENV);assert.equal(c.dir,'/opt/trade-alert/backups');assert.equal(c.keepDays,30);assert.equal(c.photos,true);assert.equal(c.notify,'fail');assert.ok(c.telegram);

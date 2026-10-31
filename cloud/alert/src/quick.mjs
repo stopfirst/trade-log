@@ -143,7 +143,8 @@ export class QuickReview{
  async pollOnce(timeoutSec=25){
   const Q=this.S;
   const ups=await this.tg.api('getUpdates',{offset:Q.offset||0,timeout:timeoutSec,allowed_updates:ALLOWED_UPDATES},(timeoutSec+15)*1000);
-  let n=0;for(const u of Array.isArray(ups)?ups:[]){if(Number.isSafeInteger(u?.update_id))Q.offset=Math.max(Q.offset||0,u.update_id+1);if(u?.callback_query){try{await this.handle(u.callback_query);}catch(e){this.log('WARN','버튼 응답 처리 실패: '+String(e.message||e).slice(0,80));}n++;}}
+  let n=0;for(const u of Array.isArray(ups)?ups:[]){if(Number.isSafeInteger(u?.update_id))Q.offset=Math.max(Q.offset||0,u.update_id+1);if(u?.callback_query){try{await this.handle(u.callback_query);}catch(e){this.log('WARN','버튼 응답 처리 실패: '+String(e.message||e).slice(0,80));}n++;}
+   else if(u?.message&&this.onMessage){try{await this.onMessage(u.message);}catch(e){this.log('WARN','텔레그램 명령 처리 실패: '+String(e.message||e).slice(0,80));}}} // 2.10.0: /zones 명령(alert.mjs onTgMessage)
   if(Array.isArray(ups)&&ups.length)await this.save();
   return n;
  }
