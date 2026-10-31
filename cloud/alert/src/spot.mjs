@@ -11,7 +11,7 @@ export function priceItems(balances,meta,ctxs){
  const uni=meta&&Array.isArray(meta.universe)?meta.universe:[];const items=[];let usd=0,miss=0;
  for(const b of balances||[]){if(!b||b.token===0)continue;const qty=num(b.total);if(!qty)continue;
   const pair=uni.find(u=>Array.isArray(u.tokens)&&u.tokens[0]===b.token&&u.tokens[1]===0),c=pair&&ctxs?.[pair.index];
-  const px=c?(num(c.midPx)||num(c.markPx)):null;
+  const px=c?(num(c.markPx)||num(c.midPx)):null; // 2.7.2: HL 화면과 같게 markPx 우선
   if(px>0){items.push({coin:String(b.coin),token:b.token,pair:pair.name,qty,px,usd:qty*px});usd+=qty*px;}else{miss++;items.push({coin:String(b.coin),token:b.token,pair:pair?pair.name:null,qty,px:null,usd:null});}}
  return {items,usd:Math.round(usd*1e6)/1e6,miss,sig:items.map(i=>i.coin+':'+i.qty).sort().join(',')};
 }
