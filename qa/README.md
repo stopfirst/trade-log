@@ -23,4 +23,5 @@ node qa/run-all.cjs cloud/index.html --only t90,t91   # 일부만
 - `expect.cjs` — 각 스크립트의 기대값. 새 기능 QA 를 넣으면 여기 한 줄 추가.
 - `check.cjs` — 공통 판정(페이지 오류 0, 넘침/잘림 0, 스크린샷 오류 없음, 정상 종료) + 비교 도우미.
 - `run-all.cjs` — 진입점. 실패한 검사는 1회 재시도, 최종 실패가 있으면 exit 1.
+- `perf-chips.cjs` — (수동, CI 아님) 일지 칩 클릭 반응 측정: `node qa/perf-chips.cjs cloud/index.html 라벨 [CPU 배율] [1=프로파일]` (거래 320건, 클릭→색·다음 프레임·long task·INP).
 - `lib/pw.cjs` — playwright-core 래퍼(브라우저 경로, 시계 고정, 외부 네트워크 차단, 종료 처리).
