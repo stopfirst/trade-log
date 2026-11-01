@@ -105,4 +105,29 @@ module.exports = {
     for (const s of ['pending', 'fail']) { P(s, 'center', ['BALANCE (USDC)', '1,000.00', '현물 계산 중']); P(s, 'rows', { 'p:ETH': ['20%', '200.00'], 'p:BTC': ['10%', '100.00'], free: ['70%', '700.00'] }); P(s, 'spotRow', false);
       A.has(k + '.' + s + '.meta', 'BALANCE(USDC) · 현물 계산 중'); A.has(k + '.' + s + '.note', '현물 계산 중'); P(s, 'ethLiq', 49); P(s, 'liqTotal', '계좌 −57.00%'); }
     A.eq(k + '.failErr', true); } A.eq('US', { card: true, v98: false, spotWord: false }); } },
+  /* v99 복수매매 감지: 쿨다운(정확히 15분 포함·15분 1초 제외·UTC 날짜 넘김) · US 갈아타기(ET 날짜) · 3연패 후 진입 · 위험 키움(쿨다운 안 / 같은 날 다음 거래) · 이익 청산 뒤 미표시 · 월간 집계 · 칩 저장 · 설정 */
+  t99: { check(A) {
+    for (const k of ['HL1440', 'HL390']) { const P = (p, v) => A.eq(k + '.' + p, v);
+      P('n', 12); P('dbg.S2', { gap: 5, f: ['revenge'] }); P('dbg.P2.f', []); P('dbg.F2.f', []); P('dbg.F3.f', []); P('dbg.G', { gap: 10, f: ['revenge'] }); P('dbg.A.f', []);
+      P('dbg.B', { gap: 15, f: ['revenge', 'riskup'] }); P('dbg.C', { gap: 15.02, f: [] }); P('dbg.D', { gap: 60, f: ['maxloss', 'riskup'] });
+      P('rec.B', { gap: '직전 손실 후 15분', b: ['복수매매 의심', '위험 키움!'], why: [] }); P('rec.C', { gap: '직전 손실 후 15분', b: [], why: [] }); P('rec.D.b', ['3연패 후 진입', '위험 키움!']);
+      P('rec.G.b', ['복수매매 의심']); P('rec.A', undefined); P('rec.P2', undefined); P('rec.F3.gap', '직전 손실 후 10시간');
+      P('link', { proc: '규칙 위반', procOk: '규칙 준수', tags: ['복수매매 의심', '위험 키움'], det: ['v99revenge', 'v99riskup'] });
+      P('detail', { gap: '직전 손실 후 15분', b: ['복수매매 의심', '위험 키움'], why: 0, auto: ['복수매매 의심', '위험 키움'] });
+      P('ana.cost', ['복수매매 의심', '위험 키움', '3연패 후 진입']); P('ana.pat', ['표시 없음:8', '복수매매 의심:3', '3연패 후 진입:1', '위험 키움:2']);
+      P('m10', { open: true, month: '2026년 10월', flagged: '3건', total: '−90.00', without: '−120.00', meta: '10월 표시 3건 · 위반 3건',
+        rows: { revenge: ['복수매매 의심', '2', '−50.00', '50%'], maxloss: ['3연패 후 진입', '1', '+80.00', '100%'], riskup: ['위험 키움', '2', '−20.00', '50%'] }, why: null, prev: false, next: true, empty: null });
+      P('m9.month', '2026년 9월'); P('m9.flagged', '1건'); P('m9.total', '−60.00'); P('m9.without', '−50.00'); P('m9.rows.revenge', ['복수매매 의심', '1', '−10.00', '0%']); P('m9.prev', true); P('m9.next', false); P('mBack', '2026년 10월');
+      P('set0', { cool: '', max: '', ph: '기본 15', vis: true });
+      P('set1', { cool: 20, max: 2, dbg: { S2: ['revenge'], F3: ['maxloss'], G: ['revenge'], B: ['revenge', 'riskup'], C: ['revenge', 'maxloss'], D: ['maxloss', 'riskup'] } });
+      P('setInvalid', 20); P('setClr', [false, 15]); }
+    for (const k of ['US1440', 'US390']) { const P = (p, v) => A.eq(k + '.' + p, v);
+      P('n', 6); P('et', [true, true]); P('dbg.U2', { gap: 15, f: ['revenge', 'switch(표시)'] }); P('dbg.U3.f', []); P('dbg.U4', { gap: 300, f: ['switch(표시)'] }); P('dbg.U8', { gap: 20, f: ['switch(표시)'] });
+      P('rec.U2', { gap: '직전 손실 후 15분', b: ['복수매매 의심', '갈아타기~'], why: ['미리 정한 가격', '강해 보여서'] }); P('rec.U3', { gap: '직전 손실 후 3시간', b: [], why: [] }); P('rec.U8.b', ['갈아타기~']);
+      P('link', { proc: '규칙 위반', procOk: '규칙 준수', tags: ['복수매매 의심'], det: ['v99revenge'] }); P('detail.b', ['복수매매 의심', '갈아타기']); P('detail.why', 2);
+      P('ana.pat', ['표시 없음:3', '복수매매 의심:1', '갈아타기:3']);
+      P('m10.flagged', '3건'); P('m10.total', '−$30.00'); P('m10.without', '−$70.00'); P('m10.meta', '10월 표시 3건 · 위반 1건'); P('m10.rows.switch', ['갈아타기', '3', '+$30.00', '67%']); P('m10.why', '강해 보여서 0 · 미리 정한 가격 0 · 미답 3');
+      P('chipN', 1); P('chip0', { why: 'strong', dlg: false, b: ['갈아타기 · 강해 보여서'], on: ['강해 보여서'] }); P('chip1', { proc: '규칙 위반', saved: true }); P('chip2', { why: 'strong' });
+      P('m10b.without', '−$50.00'); P('m10b.meta', '10월 표시 3건 · 위반 2건'); P('m10b.why', '강해 보여서 1 · 미리 정한 가격 0 · 미답 2'); P('chip3', { why: null, proc: '규칙 준수' });
+      P('set1', { cool: 20, max: 2, dbg: { U2: ['revenge', 'switch(표시)'], U4: ['switch(표시)'], U8: ['revenge', 'switch(표시)'] } }); P('setInvalid', 20); P('setClr', [false, 15]); } } },
 };
