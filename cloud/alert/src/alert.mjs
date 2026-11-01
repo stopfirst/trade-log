@@ -1,4 +1,4 @@
-// trade-alert 2.11.0 (alert15): 복수매매 차단 알림 — 손실 청산 뒤 REVENGE_COOLDOWN_MIN(15)분 안 진입 '[복수매매 의심]', US 손절한 날 다른 종목 진입(버튼 '미리 정한 가격'/'강해 보여서'), 하루 손실 DAILY_LOSS_STREAK_MAX(3)연패 '오늘은 여기까지'+이후 진입 경고, 손실 직후 위험 증가 강한 경고(revenge.mjs). 기록 = Supabase revenge_alerts(alert15.sql, 없으면 텔레그램만). 판정 로직 변경 없음.
+// trade-alert 2.11.0 (alert15): 복수매매 차단 알림 — 손실 청산 뒤 REVENGE_COOLDOWN_MIN(15)분 안 진입 '[복수매매 의심]', US 손절한 날 다른 종목 진입(버튼 '미리 정한 가격'/'강해 보여서'), 하루 손실 DAILY_LOSS_STREAK_MAX(3)회 '오늘은 여기까지'+이후 진입 경고, 손실 직후 위험 증가 강한 경고(revenge.mjs). 기록 = Supabase revenge_alerts(alert15.sql, 없으면 텔레그램만). 판정 로직 변경 없음.
 // (이전) 2.10.0 (alert14): flow-chart 존 터치 알림 — BB+FVG(가까운 2개)·OB 백도식(방향별 1개)에 가격이 닿으면 텔레그램 1회(zones.mjs·zonewatch.mjs). 기본 꺼짐(.env ZONE_ALERT=1 또는 텔레그램 /zones on). 판정 로직 변경 없음.
 // (이전) 2.9.0 (alert13): 서버 일일 백업(backup.mjs, alert13.sql).
 // (이전) 2.6.0 (alert9): 텔레그램 즉시 복기 — HL 청산 때 [규칙 준수][규칙 위반][나중에] 버튼, 답은 Supabase quick_reviews(alert9.sql) → 앱 v37 반영. .env QUICK_REVIEW=0이면 끔. 판정 로직 변경 없음.
@@ -416,7 +416,7 @@ export class Alerter{
   await this.init();const c=this.cfg;
   this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월(÷ 기간 시작 직전 마감)·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:'')+` · 텔레그램 즉시 복기 ${c.quickReview?'켜짐(HL 청산, alert9.sql 필요)':'꺼짐(QUICK_REVIEW=0)'}`+` · 매일 복기 알림 ${c.remind.enabled?c.remind.atText+' KST(alert11.sql 필요)':'꺼짐(REVIEW_REMIND=0)'}`);
   const rc=c.revenge;
-  this.log('INFO',`복수매매 차단 알림 ${rc.enabled?'켜짐':'꺼짐(REVENGE_ALERT=0)'}`+(rc.enabled?` · 쿨다운 ${rc.cooldownMin||'끔'}분 · 하루 손실 ${rc.streakMax||'끔'}연패 · US 갈아타기 ${rc.usSwitch?'켬':'끔'} · 위험 증가 ${rc.riskUp?'켬':'끔'} · 기록 alert15.sql`:''));
+  this.log('INFO',`복수매매 차단 알림 ${rc.enabled?'켜짐':'꺼짐(REVENGE_ALERT=0)'}`+(rc.enabled?` · 쿨다운 ${rc.cooldownMin||'끔'}분 · 하루 손실 ${rc.streakMax?rc.streakMax+'회':'끔'} · US 갈아타기 ${rc.usSwitch?'켬':'끔'} · 위험 증가 ${rc.riskUp?'켬':'끔'} · 기록 alert15.sql`:''));
   const zc=c.zones;
   this.log('INFO',`존 터치 알림 ${this.zones.enabled()?'켜짐':'꺼짐'} · ${zc.symbols.join(',')} ${zc.tf} · ${zc.kinds.join(',')} · ${zc.checkSec}초마다 · 소스 ${zc.source}`+(zc.commands?' · 텔레그램 /zones on|off|status':''));
   // 텔레그램 받기 루프: 즉시 복기(버튼) + 2.10.0 /zones 명령. QUICK_REVIEW=0이어도 ZONE_ALERT=1이면 명령용으로 받음.
@@ -518,7 +518,7 @@ export async function main(argv=process.argv.slice(2),env=process.env){
    {const z=cfg.zones;let on=z.envOn;try{const st=await loadState(cfg.stateDir);const o=st.zones?.override;if(o&&o.envOn===z.envOn)on=!!o.on;}catch{}
     console.log(`존 터치 알림: ${on?'켜짐':'꺼짐'} · ${z.symbols.join(',')} ${z.tf.toUpperCase()} · ${z.kinds.join(',')} (지금 목록: --zones-dry)`);}
    {const r=cfg.revenge;let q='';if(r.enabled){try{await new SupabaseRpc(cfg).call('revenge_push',{p_token:cfg.token,p_payload:{items:[]}});q=' · alert15.sql 확인됨';}catch(e){q=/ALERT15/.test(String(e.message))?' · alert15.sql 없음(텔레그램만, 기록은 서버에만)':' · 기록 확인 실패';}}
-    console.log(`복수매매 차단 알림: ${r.enabled?`켜짐 · 쿨다운 ${r.cooldownMin}분 · 하루 ${r.streakMax}연패${q}`:'꺼짐 (REVENGE_ALERT=0)'} (지난 체결로 보기: --revenge-dry)`);}
+    console.log(`복수매매 차단 알림: ${r.enabled?`켜짐 · 쿨다운 ${r.cooldownMin}분 · 하루 손실 ${r.streakMax}회${q}`:'꺼짐 (REVENGE_ALERT=0)'} (지난 체결로 보기: --revenge-dry)`);}
    return 0;}
   catch(e){log('ERROR','테스트 전송 실패: '+String(e.message));return 1;}
  }
