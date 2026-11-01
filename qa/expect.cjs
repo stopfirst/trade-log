@@ -85,4 +85,9 @@ module.exports = {
     A.eq(k + '.four.title', '투자 휴식 권고 (4거래일 연속 손실)'); A.eq(k + '.four.days', ['10/26 −0.50%', '10/27 −0.50%', '10/28 −1.00%', '10/29 −0.20%']);
     A.eq(k + '.d0.vis', true); A.eq(k + '.d1.vis', false); A.eq(k + '.d1.dis', '2026-10-29'); A.eq(k + '.d2.vis', false); A.eq(k + '.d3.vis', false); A.eq(k + '.d3.dis', '2026-10-29');
     A.eq(k + '.d4.vis', true); A.eq(k + '.d4.first', true); A.eq(k + '.d4.last', TD); A.eq(k + '.d4.title', '투자 휴식 권고 (4거래일 연속 손실)'); A.eq(k + '.d4.days', ['10/27 −0.50%', '10/28 −1.00%', '10/29 −0.20%', T + ' −0.40%']); } } },
+  /* v96 트레이딩뷰식 차트: 십자선·OHLC 범례·축 끌기 배율·더블클릭 리셋·체결 마커·말풍선·거래량 토글·가로선 도구·터치 길게 누르기 */
+  t96: { check(A) { for (const w of W) { A.eq(w + '.mk', { n: 4, buy: 2, sell: 2 }); A.eq(w + '.tags', ['entry', 'last', 'stop', 'target']); A.eq(w + '.ticks.p', true); A.has(w + '.tip', '매수'); A.has(w + '.tip', '수량 30');
+    A.eq(w + '.xh', { lines: 2, px: true, tl: true }); A.eq(w + '.leg', { o: true, pct: true, col: true }); A.eq(w + '.yzoom', true); A.eq(w + '.ysame', true); A.eq(w + '.yreset', true);
+    A.eq(w + '.xzoom', true); A.eq(w + '.xright', true); A.eq(w + '.xreset', true); A.eq(w + '.vol0', true); A.eq(w + '.vol1', 0); A.eq(w + '.volLs', '0'); A.eq(w + '.vol2', true); A.eq(w + '.hline', 1);
+    A.eq(w + '.touch', { on: true, moved: true, kept: true, off: true, pop: false }); } } },
 };
