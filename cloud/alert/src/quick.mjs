@@ -1,4 +1,4 @@
-// trade-alert 2.6.0 (alert9) — 텔레그램 즉시 복기. 손실 한도 판정과 무관(판정 코드·상태를 읽지도 바꾸지도 않음).
+// trade-alert 2.6.0 (alert9) — 텔레그램 즉시 복기. (2.11.0: 'rv|…' 버튼은 onCallback = 복수매매 처리기로 넘김) 손실 한도 판정과 무관(판정 코드·상태를 읽지도 바꾸지도 않음).
 //  HL 포지션이 0이 되거나 방향이 바뀌는 체결(= 청산 체결)을 보면 텔레그램에
 //   '📝 BTC 롱 청산 · +$120.00 (+0.6R) · 복기' + [규칙 준수] [규칙 위반] [나중에] 버튼을 보냄.
 //  [규칙 위반] → 같은 메시지가 위반 항목 칩(= 앱 OPTIONS.violations와 같은 라벨) + [← 뒤로] [완료]로 바뀜.
@@ -143,7 +143,7 @@ export class QuickReview{
  async pollOnce(timeoutSec=25){
   const Q=this.S;
   const ups=await this.tg.api('getUpdates',{offset:Q.offset||0,timeout:timeoutSec,allowed_updates:ALLOWED_UPDATES},(timeoutSec+15)*1000);
-  let n=0;for(const u of Array.isArray(ups)?ups:[]){if(Number.isSafeInteger(u?.update_id))Q.offset=Math.max(Q.offset||0,u.update_id+1);if(u?.callback_query){try{await this.handle(u.callback_query);}catch(e){this.log('WARN','버튼 응답 처리 실패: '+String(e.message||e).slice(0,80));}n++;}
+  let n=0;for(const u of Array.isArray(ups)?ups:[]){if(Number.isSafeInteger(u?.update_id))Q.offset=Math.max(Q.offset||0,u.update_id+1);if(u?.callback_query){try{if(this.onCallback&&/^rv\|/.test(String(u.callback_query.data||'')))await this.onCallback(u.callback_query);else await this.handle(u.callback_query);}catch(e){this.log('WARN','버튼 응답 처리 실패: '+String(e.message||e).slice(0,80));}n++;}
    else if(u?.message&&this.onMessage){try{await this.onMessage(u.message);}catch(e){this.log('WARN','텔레그램 명령 처리 실패: '+String(e.message||e).slice(0,80));}}} // 2.10.0: /zones 명령(alert.mjs onTgMessage)
   if(Array.isArray(ups)&&ups.length)await this.save();
   return n;

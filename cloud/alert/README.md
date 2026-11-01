@@ -1,4 +1,25 @@
-# 매매일지 손실한도 판정 v1.6 (trade-alert 2.10.0 · alert14)
+# 매매일지 손실한도 판정 v1.6 (trade-alert 2.11.0 · alert15)
+
+## 2.11.0 — 복수매매 차단 알림(판정·백업·존 로직 변경 없음 · 기본 켜짐 · 기록용 SQL alert15.sql)
+손실 직후 감정 진입을 텔레그램으로 바로 경고합니다. 주문을 막거나 취소하지 않습니다(알림만). HL·미국주식 각각 따로 봅니다.
+- 정의(앱 v99와 같게): 기준 시각 = **손실 청산 체결 시각 → 다음 진입 체결 시각**. 손실 = 그 거래(포지션 0 → 0 구간) 누적 실현손익 < 0
+  (HL = Σ(closedPnl − fee) + 구간 펀딩, 즉시 복기와 같은 계산 · US = 키움 일별 종목별 실현손익 ust21640 `pl_amt`(수수료·세금 뺀 값)).
+  새 진입 = 포지션이 0에서 열리거나 방향이 바뀌는 체결(같은 포지션 추가 매수는 새 진입 아님). 하루 = HL UTC 00:00(KST 09:00) · US 16:00 ET(손실 한도와 같음).
+- 규칙
+  1. **쿨다운**: 직전 청산이 손실이고 `REVENGE_COOLDOWN_MIN`(기본 15)분 안에 새 진입 → `🚨 [복수매매 의심]` (직전 손실 종목·손익·경과 분). 15분 정각은 밖.
+  2. **US 손절 후 갈아타기**: 손절한 거래일에 그 종목이 아닌 종목 매수 → 별도 메시지 `🔁 [손절 후 종목 갈아타기]` + 버튼 **[미리 정한 가격] [강해 보여서]**.
+     답은 Supabase `revenge_alerts.why`(`plan`/`strong`)에 저장(앱이 t.v99Why로 옮기는 건 앱 쪽 작업). SQL이 없으면 이 서버 state2.json에 보관했다가 설치되면 올림.
+  3. **오늘은 여기까지**: 같은 날 손실 청산 `DAILY_LOSS_STREAK_MAX`(기본 3)회 연속 → `🛑 [오늘은 여기까지]` 1회, 그 뒤 그날 진입마다 `⛔ [오늘은 여기까지 위반]`.
+  4. **위험 증가**: 손실 직후(쿨다운 안, 또는 같은 날 직전 청산이 손실) 진입의 위험이 직전 손실 거래보다 크면 제목에 🔥 + "잃은 걸 한 번에 되찾으려는 크기" 강한 문구.
+     위험 = HL 열린 스탑 주문(frontendOpenOrders)으로 잰 스탑 기준 위험 금액(진입·직전 거래 둘 다 있을 때) · 없으면 명목(최대 |포지션| × 가격).
+- 같은 진입은 한 번만(보내기 전에 state2.json `rv.sent`에 저장 → 재시작해도 다시 안 보냄). 설치 전·6시간 넘은 체결은 보내지 않음. 전송 실패는 2시간 동안 재시도.
+- 기록: **alert15.sql**(`revenge_alerts` 표 + `revenge_push`·`revenge_data`). 앱이 읽는 기존 위반 기록(risk_events kind=violation)은 앱이 '중단 중 진입'으로 표시하므로 쓰지 않음.
+  `revenge_data`는 US 손절 판정용 읽기 전용(키움 주문·종목별 실현·최신 보유). SQL이 없으면 텔레그램은 그대로, US 손익은 주문 평균단가로 추정(수수료 제외, 메시지에 '(추정)').
+- 지난 체결로 몇 건 나왔을지(보내지 않음·저장 안 함):
+  `sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs --revenge-dry --from 2026-10-01 --to 2026-10-31`
+  (US는 alert15.sql이 있어야 62일까지, 없으면 최근 7일만.)
+- `.env`(선택): `REVENGE_ALERT=1`(0 = 끔) · `REVENGE_COOLDOWN_MIN=15` · `DAILY_LOSS_STREAK_MAX=3` · `REVENGE_US_SWITCH=1` · `REVENGE_RISK_UP=1` · `REVENGE_MIN_LOSS_USD=0`(이 금액 이하 손실 무시).
+- 텔레그램 받기 루프: 즉시 복기와 같은 getUpdates를 함께 씀(`rv|…` 버튼만 복수매매 처리기로). QUICK_REVIEW=0이어도 복수매매가 켜져 있으면 받기 루프가 돎.
 
 ## 2.10.0 — flow-chart 존 터치 알림(판정·백업 로직 변경 없음 · 새 SQL 없음 · 기본 꺼짐)
 - flow-chart(stopfirst.github.io/flow-chart)가 그리는 **BB+FVG**(브레이커 블록 ∩ 같은 방향 FVG, 무효화 안 된 것 중 가격에 가까운 2개)와
@@ -168,6 +189,7 @@ alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_
 앱 설정의 손실 한도(하루·주·달 %)는 앱 자체 표시용이고, 서버 판정은 `.env`(기본 3/6/10)를 씁니다. 앱 설정 → 계좌·위험에 서버 값이 그대로 보입니다.
 
 ## 테스트(개발)
+2.11.0: `node --test tests/*.test.mjs` 163개 (revenge.test.mjs 15) · SQL `node tests/alert15-sql.pglite.mjs <cloud.sql> <kiwoom-collector.sql> <alert15.sql>` 30개.
 `node --test tests/*.test.mjs`(존: zones.test.mjs = tests/fixtures/flow-chart 원본과 동일성, zonewatch.test.mjs = 터치·중복·재시작·정리·명령) · 라이브 비교(수동): `node tests/zones-live-compare.mjs` · SQL: `node tests/alert13-sql.pglite.mjs <cloud 폴더>`(backup_dump·복원 왕복·security/harden-2026-11.sql), `node tests/alert2-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql fixtures`, `node tests/alert3-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql fixtures`, `node tests/alert5-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql alert5.sql fixtures` (@electric-sql/pglite)
 
 ## 보안

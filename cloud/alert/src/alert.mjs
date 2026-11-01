@@ -1,4 +1,5 @@
-// trade-alert 2.10.0 (alert14): flow-chart 존 터치 알림 — BB+FVG(가까운 2개)·OB 백도식(방향별 1개)에 가격이 닿으면 텔레그램 1회(zones.mjs·zonewatch.mjs). 기본 꺼짐(.env ZONE_ALERT=1 또는 텔레그램 /zones on). 판정 로직 변경 없음.
+// trade-alert 2.11.0 (alert15): 복수매매 차단 알림 — 손실 청산 뒤 REVENGE_COOLDOWN_MIN(15)분 안 진입 '[복수매매 의심]', US 손절한 날 다른 종목 진입(버튼 '미리 정한 가격'/'강해 보여서'), 하루 손실 DAILY_LOSS_STREAK_MAX(3)연패 '오늘은 여기까지'+이후 진입 경고, 손실 직후 위험 증가 강한 경고(revenge.mjs). 기록 = Supabase revenge_alerts(alert15.sql, 없으면 텔레그램만). 판정 로직 변경 없음.
+// (이전) 2.10.0 (alert14): flow-chart 존 터치 알림 — BB+FVG(가까운 2개)·OB 백도식(방향별 1개)에 가격이 닿으면 텔레그램 1회(zones.mjs·zonewatch.mjs). 기본 꺼짐(.env ZONE_ALERT=1 또는 텔레그램 /zones on). 판정 로직 변경 없음.
 // (이전) 2.9.0 (alert13): 서버 일일 백업(backup.mjs, alert13.sql).
 // (이전) 2.6.0 (alert9): 텔레그램 즉시 복기 — HL 청산 때 [규칙 준수][규칙 위반][나중에] 버튼, 답은 Supabase quick_reviews(alert9.sql) → 앱 v37 반영. .env QUICK_REVIEW=0이면 끔. 판정 로직 변경 없음.
 // (이전) 2.5.1 (alert8): 텔레그램 메시지 가독성 — 제목 · 빈 줄 · '라벨: 값', 시장 블록 구분 제목, 제목만 굵게(HTML), 위반 진입 알림 묶음, 4096자 분할. 판정 로직 변경 없음.
@@ -22,6 +23,7 @@
 //      node --env-file=.env src/alert.mjs --flow-remove <ref>     (수동 등록 취소)
 //      node --env-file=.env src/alert.mjs --clear-stops US        (잘못 걸린 중단 해제 — 기록 남김)
 //      node --env-file=.env src/alert.mjs --zones-dry             (2.10.0 존 목록만 출력 — 보내지도 저장하지도 않음, 꺼져 있어도 동작)
+//      node --env-file=.env src/alert.mjs --revenge-dry [--from YYYY-MM-DD] [--to YYYY-MM-DD]  (2.11.0 지난 체결로 복수매매 경고가 몇 건 나왔을지 — 보내지도 저장하지도 않음)
 import {readFile,writeFile,rename,mkdir} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import path from 'node:path';
@@ -35,10 +37,11 @@ import * as qr from './quick.mjs';
 import * as rm from './remind.mjs';
 import * as spot from './spot.mjs';
 import * as zw from './zonewatch.mjs';
+import * as rv from './revenge.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.10.0';
+export const VERSION='2.11.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -72,6 +75,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
  const dayBasis=String(env.DAY_LIMIT_BASIS||'realized').trim().toLowerCase();if(!['realized','equity'].includes(dayBasis))P('DAY_LIMIT_BASIS (realized = 실현손익·전일 마감 기준(기본), equity = v1.2 자산 변화 기준)');
  const rsd=String(env.RISK_START_DATE||'').trim();if(rsd&&!(/^\d{4}-\d{2}-\d{2}$/.test(rsd)&&!Number.isNaN(Date.parse(rsd+'T00:00:00Z'))&&new Date(rsd+'T00:00:00Z').toISOString().slice(0,10)===rsd))P('RISK_START_DATE (YYYY-MM-DD, 예: 2026-10-20 · 비우면 기준일 없음)');
  const zoneCfg=zw.zoneConfig(env);for(const f of zoneCfg.errors)P(f);
+ const revCfg=rv.revengeConfig(env);for(const f of revCfg.errors)P(f);
  const extra=String(env.US_EXTRA_HOLIDAYS||'').split(',').map(s=>s.trim()).filter(Boolean);if(extra.some(d=>!/^\d{4}-\d{2}-\d{2}$/.test(d)))P('US_EXTRA_HOLIDAYS (YYYY-MM-DD,YYYY-MM-DD)');
  let cfg;
  try{
@@ -84,7 +88,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
    checkSec:numIn(env,'RISK_CHECK_SEC',60,60,300,{int:true}),idleSec:numIn(env,'RISK_IDLE_SEC',300,60,1800,{int:true}),pushMin:numIn(env,'RISK_PUSH_MIN',5,1,30,{int:true}),
    usFlowMin:numIn(env,'US_FLOW_MIN_USD',50,1,1e7),usStaleMin:numIn(env,'US_STALE_MIN',20,5,240,{int:true}),anchorMaxGapMin:numIn(env,'ANCHOR_MAX_GAP_MIN',20,2,120,{int:true}),
    usExtraHolidays:extra,dayBasis,riskStartDate:rsd||null,hlAddress:hlAddr?hlAddr.toLowerCase():null,
-   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),zones:zoneCfg,summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
+   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),zones:zoneCfg,revenge:revCfg,summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
    stateDir:String(env.STATE_DIRECTORY||env.ALERT_STATE_DIR||'/var/lib/trade-alert').split(':')[0]};
  }catch(e){if(e.fields)problems.push(...e.fields);else throw e;}
  if(problems.length){const e=Error('CONFIG_INCOMPLETE');e.fields=problems;throw e;}
@@ -154,7 +158,7 @@ export class SupabaseRpc{
    if(r.status===429||r.status>=500){if(attempt<2){await this.sleep(2000*2**attempt);continue;}throw Error('SUPABASE_UNAVAILABLE_'+r.status);}
    const text=await r.text();let data=null;try{data=JSON.parse(text);}catch{}
    if(r.status===401||r.status===403||/invalid collector token/.test(String(data?.message||'')))throw Error('SUPABASE_TOKEN_REJECTED');
-   if(r.status===404||/risk_status|risk_push|risk_day_data|quick_review_push|could not find the function/i.test(String(data?.message||'')))throw Error(name==='risk_day_data'?'SUPABASE_ALERT3_SQL_NOT_INSTALLED':name==='quick_review_push'?'SUPABASE_ALERT9_SQL_NOT_INSTALLED':'SUPABASE_SQL_NOT_INSTALLED');
+   if(r.status===404||/risk_status|risk_push|risk_day_data|quick_review_push|revenge_push|revenge_data|could not find the function/i.test(String(data?.message||'')))throw Error(name==='risk_day_data'?'SUPABASE_ALERT3_SQL_NOT_INSTALLED':name==='quick_review_push'?'SUPABASE_ALERT9_SQL_NOT_INSTALLED':/^revenge_/.test(name)?'SUPABASE_ALERT15_SQL_NOT_INSTALLED':'SUPABASE_SQL_NOT_INSTALLED');
    if(!r.ok)throw Error('SUPABASE_HTTP_'+r.status);
    if(!data||typeof data!=='object')throw Error('SUPABASE_BAD_RESPONSE');
    if(data.ok===false)throw Error('SUPABASE_REJECTED_'+String(data.error||'unknown').replace(/[^a-z_]/g,'').slice(0,40));
@@ -193,6 +197,8 @@ export class Alerter{
   this.reminder=new rm.Reminder({rpc:this.rpc,token:this.cfg.token,cfg:this.cfg.remind,state:()=>this.state,log:this.log});
   // 2.10.0 존 터치 알림(별도 1분 루프 · 상태는 state2.json의 zones · 판정과 무관)
   this.zones=new zw.ZoneWatch({cfg:this.cfg.zones,fetcher,now:this.now,log:this.log,state:()=>this.state,save:()=>this.persist(),send:t=>this.tg.send(t),dryRun});
+  // 2.11.0 복수매매 차단 알림(dry-run·--test에선 없음). 상태는 state2.json의 rv
+  this.revenge=this.cfg.revenge.enabled&&!dryRun?new rv.Revenge({cfg:this.cfg.revenge,tg:this.tg,rpc:this.rpc,token:this.cfg.token,chat:this.cfg.chat,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist(),cal:this.cal}):null;this.rvIn=null;this.rvDataMissing=false;
  }
  /** 2.10.0 텔레그램 메시지(명령) — TELEGRAM_CHAT_ID 대화방의 /zones on|off|status만 */
  async onTgMessage(m){
@@ -228,7 +234,7 @@ export class Alerter{
   return {equity,fills:src.hlFills([...h.fills.values()]),rawFills:[...h.fills.values()],rawFunding:[...h.funding.values()],flows:src.hlFlows(h.ledger,addr),portfolio:h.portfolio,client:h.client}; // 2.8.1: 현물 평가(spotB)가 h.client.raw를 씀 — 2.7.0~2.8.0엔 빠져 현물이 분모에 안 들어갔음
  }
  async check(){
-  const t=this.now(),S=this.state;this.qrSeen=null;
+  const t=this.now(),S=this.state;this.qrSeen=null;this.rvIn={};
   const data=await this.rpc.call('risk_status',{p_token:this.cfg.token,p_us_revision:S.journal.US?.revision??null,p_hl_revision:S.journal.HL?.revision??null});
   for(const sc of ['US','HL']){const j=data.journal?.[sc];if(j&&!j.unchanged)S.journal[sc]={revision:j.revision,defaultRisk:Number(j.defaultRisk)||null,account:Number(j.account)>0?Number(j.account):null};}
   // v1.3 하루 한도 데이터(alert3.sql risk_day_data). 미설치 → v1.2 하루 판정, 일시 실패 → 10분 안의 직전 값, 그보다 오래되면 하루 판정 건너뜀
@@ -271,6 +277,7 @@ export class Alerter{
    const res=risk.step(S.engine.US,{now:t,cal,cfg:ecU,equity:eq,flows,fills:src.usFills(data.kw?.orders),fallbackStart:usFb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorU,periodMode,periodRealized});
    if(eq?.stale)res.status.note=`키움 스냅샷이 ${Math.round((t-eq.t)/MIN)}분 전 값입니다(시세만 바뀌면 수집기가 최대 10분마다 올림)`;
    results.push({m:'US',res,newFlows});
+   if(this.revenge){try{this.rvIn.US=await this.usRevengeInput(data,t);}catch(e){this.log('WARN','복수매매 US 입력 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
   }
   // --- 하이퍼리퀴드
   const addr=this.cfg.hlAddress||data.hl_address;
@@ -301,6 +308,7 @@ export class Alerter{
    if(spotNote&&this.spotB?.cur&&!this.spotB.cur.miss)res.status.spot={usd:Math.round(this.spotB.cur.usd*100)/100,coins:this.spotB.cur.items.map(i=>i.coin)};
    results.push({m:'HL',res,newFlows});
    this.qrSeen={rawFills:h.rawFills,rawFunding:h.rawFunding,equity:h.equity?.value,defaultRisk:S.journal.HL?.defaultRisk}; // 2.6.0 즉시 복기용(판정과 무관)
+   if(this.revenge){try{this.rvIn.HL=await this.hlRevengeInput(h,t);}catch(e){this.log('WARN','복수매매 HL 입력 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
   }
   // --- 상태 반영 + 알림 + 저장
   const payload={states:[],days:[],events:[],flows:[]};
@@ -331,8 +339,25 @@ export class Alerter{
   S.outbox=this.dryRun?[]:keep;
   for(const [k,v] of Object.entries(S.sent))if(v<t-45*86400000)delete S.sent[k];
   if(this.qr){try{await this.qr.afterCheck(this.qrSeen,t);}catch(e){this.log('WARN','즉시 복기 처리 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
+  if(this.revenge){try{await this.revenge.afterCheck(this.rvIn,t);}catch(e){this.log('WARN','복수매매 알림 처리 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
   await this.persist();
   return {results,sent,messages:results.flatMap(r=>r.res.messages.map(x=>x.text)),statuses:results.map(r=>r.res.status)};
+ }
+ /** 2.11.0 HL 복수매매 입력: 체결 구간 + 청산 손익(detectCloses, 펀딩 포함) + 열린 스탑 위험(frontendOpenOrders, 실패해도 명목으로) */
+ async hlRevengeInput(h,t){
+  const segs=rv.hlSegments(h.rawFills);
+  if(segs.some(s=>!s.closed&&s.openTime&&t-s.openTime<=2*86400000)){try{const oo=await h.client.info({type:'frontendOpenOrders'});this.revenge.noteStops(rv.hlStopRisks(segs,oo));}catch(e){this.log('WARN','HL 열린 스탑 조회 실패(명목 금액으로 비교): '+String(e.message||e).slice(0,60));}}
+  const closes=new Map(qr.detectCloses(h.rawFills,h.rawFunding).map(c=>[c.tid,c]));
+  return rv.hlEvents(h.rawFills,closes,this.revenge.S.stopRisk);
+ }
+ /** 2.11.0 US 복수매매 입력: 키움 주문 + 최신 보유 + 종목별 실현(alert15.sql revenge_data, 없으면 평균단가 추정) — 최근 6시간 체결이 있을 때만 Supabase 1회 더 */
+ async usRevengeInput(data,t){
+  const fills=src.usFills(data.kw?.orders);if(!fills.some(f=>t-f.t<=this.cfg.revenge.maxAgeMs))return {closes:[],entries:[]};
+  let realized=null,positions=data.kw?.latest?.positions||[];
+  if(!this.rvDataMissing||t-(this.rvDataMissingAt||0)>3600000){
+   try{const d=await this.rpc.call('revenge_data',{p_token:this.cfg.token,p_days:8});realized=Array.isArray(d.realized)?d.realized:null;this.rvDataMissing=false;}
+   catch(e){const c=String(e.message||e);if(/ALERT15_SQL_NOT_INSTALLED/.test(c)){if(!this.rvDataMissing)this.log('WARN','alert15.sql이 아직 없습니다 → US 손절 판정은 키움 주문의 평균단가로 추정합니다(수수료 제외).');this.rvDataMissing=true;this.rvDataMissingAt=t;}else this.log('WARN','US 종목별 실현손익 조회 실패(추정으로): '+c.slice(0,60));}}
+  return rv.usEvents(fills,positions,realized);
  }
  async deliver(text){if(this.dryRun){this.out('[보낼 메시지]\n'+text);return;}await this.tg.send(text);}
  summaryDue(t){
@@ -390,12 +415,15 @@ export class Alerter{
  async run(){
   await this.init();const c=this.cfg;
   this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월(÷ 기간 시작 직전 마감)·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:'')+` · 텔레그램 즉시 복기 ${c.quickReview?'켜짐(HL 청산, alert9.sql 필요)':'꺼짐(QUICK_REVIEW=0)'}`+` · 매일 복기 알림 ${c.remind.enabled?c.remind.atText+' KST(alert11.sql 필요)':'꺼짐(REVIEW_REMIND=0)'}`);
+  const rc=c.revenge;
+  this.log('INFO',`복수매매 차단 알림 ${rc.enabled?'켜짐':'꺼짐(REVENGE_ALERT=0)'}`+(rc.enabled?` · 쿨다운 ${rc.cooldownMin||'끔'}분 · 하루 손실 ${rc.streakMax||'끔'}연패 · US 갈아타기 ${rc.usSwitch?'켬':'끔'} · 위험 증가 ${rc.riskUp?'켬':'끔'} · 기록 alert15.sql`:''));
   const zc=c.zones;
   this.log('INFO',`존 터치 알림 ${this.zones.enabled()?'켜짐':'꺼짐'} · ${zc.symbols.join(',')} ${zc.tf} · ${zc.kinds.join(',')} · ${zc.checkSec}초마다 · 소스 ${zc.source}`+(zc.commands?' · 텔레그램 /zones on|off|status':''));
   // 텔레그램 받기 루프: 즉시 복기(버튼) + 2.10.0 /zones 명령. QUICK_REVIEW=0이어도 ZONE_ALERT=1이면 명령용으로 받음.
   let poller=this.qr;
-  if(!poller&&!this.dryRun&&zc.commands&&zc.envOn)poller=new qr.QuickReview({tg:this.tg,rpc:this.rpc,token:this.cfg.token,chat:this.cfg.chat,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist()});
+  if(!poller&&!this.dryRun&&((zc.commands&&zc.envOn)||this.revenge))poller=new qr.QuickReview({tg:this.tg,rpc:this.rpc,token:this.cfg.token,chat:this.cfg.chat,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist()});
   if(poller&&zc.commands)poller.onMessage=m=>this.onTgMessage(m);
+  if(poller&&this.revenge)poller.onCallback=cq=>this.revenge.handle(cq); // 2.11.0 'rv|…' 버튼
   if(poller)poller.loop().catch(e=>this.log('ERROR','텔레그램 버튼 응답 루프 종료: '+String(e?.message||e)));
   this.zoneLoop().catch(e=>this.log('ERROR','존 확인 루프 종료: '+String(e?.message||e)));
   for(;;){
@@ -420,6 +448,44 @@ async function adminPush(a,market,mutate){
  return {msg:r.msg};
 }
 
+/** 2.11.0 --revenge-dry: 지난 체결(HL 공개 API · 키움 주문)로 복수매매 경고가 몇 건 나왔을지 출력. 보내지 않음 · 저장 안 함 · 판정 상태 안 건드림.
+ *  기간 기본 = 지난달 1일 ~ 오늘(KST). --from/--to YYYY-MM-DD(KST 날짜, to 포함). US는 alert15.sql(revenge_data) 있으면 최대 62일 + 종목별 실현, 없으면 최근 7일 주문 + 평균단가 추정. */
+export async function revengeDry(argv,env,log,{fetcher=fetch,out=l=>console.log(l),now=Date.now}={}){
+ let cfg;try{cfg=readConfig(env,{needTelegram:false});}catch(e){explainConfig(e,log);return 2;}
+ const arg=k=>{const i=argv.indexOf(k);return i>=0?String(argv[i+1]||''):null;};
+ const okD=d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&!Number.isNaN(Date.parse(d+'T00:00:00Z'))&&new Date(d+'T00:00:00Z').toISOString().slice(0,10)===d;
+ const kd=new Date(now()+9*3600000).toISOString().slice(0,10);
+ const lm=(()=>{const [y,m]=kd.split('-').map(Number);return new Date(Date.UTC(m===1?y-1:y,m===1?11:m-2,1)).toISOString().slice(0,10);})();
+ const from=arg('--from')||lm,to=arg('--to')||kd;
+ if(!okD(from)||!okD(to)||from>to){out('사용법: --revenge-dry [--from YYYY-MM-DD] [--to YYYY-MM-DD]  (한국 날짜, to 포함)');return 2;}
+ const fromMs=Date.parse(from+'T00:00:00+09:00'),toMs=Date.parse(addDays(to,1)+'T00:00:00+09:00');
+ const rcfg={...cfg.revenge,enabled:true},cal={US:usCalendar({extraHolidays:cfg.usExtraHolidays}),HL:hlCalendar()};
+ const rpc=new SupabaseRpc(cfg,fetcher);let data=null;
+ try{data=await rpc.call('risk_status',{p_token:cfg.token});}catch(e){log('WARN','Supabase risk_status 실패(HL은 HL_ADDRESS로만): '+String(e.message||e).slice(0,80));}
+ const results=[];const inRange=x=>x>=fromMs&&x<toMs;
+ const pick=(m,ev,note)=>{const dayOf=m==='HL'?ms=>new Date(ms).toISOString().slice(0,10):ms=>cal.US.dayOf(ms);const j=rv.judge(ev,rcfg,dayOf);
+  const cl=ev.closes.filter(c=>inRange(c.time));results.push({market:m,closes:cl.length,losses:cl.filter(c=>c.pnl<0).length,entries:ev.entries.filter(e=>inRange(e.time)).length,
+   alerts:j.alerts.filter(a=>inRange(a.entry.time)),stops:j.stops.filter(s=>inRange(s.at)),note});};
+ const addr=cfg.hlAddress||data?.hl_address;
+ if(addr&&(!cfg.markets||cfg.markets.includes('HL'))){
+  try{const c=new HLClient(String(addr).toLowerCase(),fetcher,now);const start=fromMs-3*86400000;
+   const fills=(await c.fills(start)).filter(f=>f.time<toMs),funding=(await c.funding(start)).filter(f=>f.time<toMs);
+   const closes=new Map(qr.detectCloses(fills,funding).map(x=>[x.tid,x]));
+   pick('HL',rv.hlEvents(fills,closes,{}),`체결 ${fills.length}건 · 위험 = 명목(지난 스탑 주문은 조회 불가)`);}
+  catch(e){log('ERROR','HL 체결 조회 실패: '+String(e.message||e).slice(0,80));}
+ }
+ if(data?.kw&&(!cfg.markets||cfg.markets.includes('US'))){
+  const days=Math.min(62,Math.max(1,Math.ceil((now()-fromMs)/86400000)+1));let orders=data.kw.orders,realized=null,positions=data.kw.latest?.positions||[],note;
+  try{const d=await rpc.call('revenge_data',{p_token:cfg.token,p_days:days});orders=d.orders||orders;realized=d.realized||null;if(Array.isArray(d.positions))positions=d.positions;note=`키움 주문 ${days}일 · 종목별 실현손익(alert15.sql)`;}
+  catch(e){note=/ALERT15/.test(String(e.message))?'alert15.sql 없음 → 키움 최근 7일 주문만 · 손익은 평균단가 추정':'revenge_data 실패 → 최근 7일 주문만 · 손익 추정';}
+  pick('US',rv.usEvents(src.usFills(orders),positions,realized),note);
+ }
+ if(!results.length){out('볼 시장이 없습니다(HL 주소·키움 수집 데이터 없음).');return 1;}
+ out(rv.dryReport(results,rcfg,cal.US,{from,to}).text);
+ out(`\n복수매매 차단 알림: ${cfg.revenge.enabled?'켜짐':'꺼짐'} (.env REVENGE_ALERT=${cfg.revenge.enabled?1:0}) · 위 목록은 보내지 않았고 저장하지 않았습니다. 설치 뒤 새 체결부터 알립니다(지난 체결은 보내지 않음).`);
+ return 0;
+}
+
 export async function main(argv=process.argv.slice(2),env=process.env){
  const log=makeLogger(env);
  if(argv.includes('--version')){console.log(VERSION);return 0;}
@@ -429,6 +495,7 @@ export async function main(argv=process.argv.slice(2),env=process.env){
   try{console.log(await zw.dryList(zc,{log}));console.log(`\n존 터치 알림: ${on?'켜짐':'꺼짐'} (${how}) · 위 목록은 보내지 않았습니다.`);return 0;}
   catch(e){log('ERROR','존 목록 실패: '+String(e.message||e));return 1;}
  }
+ if(argv.includes('--revenge-dry'))return revengeDry(argv,env,log);
  if(argv.includes('--find-chat')){
   let cfg;try{cfg=readConfig(env,{needSupabase:false,needTelegram:false});}catch(e){explainConfig(e,log);return 2;}
   try{const chats=await new Telegram(cfg.bot,'').findChats();
@@ -450,6 +517,8 @@ export async function main(argv=process.argv.slice(2),env=process.env){
    else console.log('매일 복기 알림: 꺼짐 (REVIEW_REMIND=0)');
    {const z=cfg.zones;let on=z.envOn;try{const st=await loadState(cfg.stateDir);const o=st.zones?.override;if(o&&o.envOn===z.envOn)on=!!o.on;}catch{}
     console.log(`존 터치 알림: ${on?'켜짐':'꺼짐'} · ${z.symbols.join(',')} ${z.tf.toUpperCase()} · ${z.kinds.join(',')} (지금 목록: --zones-dry)`);}
+   {const r=cfg.revenge;let q='';if(r.enabled){try{await new SupabaseRpc(cfg).call('revenge_push',{p_token:cfg.token,p_payload:{items:[]}});q=' · alert15.sql 확인됨';}catch(e){q=/ALERT15/.test(String(e.message))?' · alert15.sql 없음(텔레그램만, 기록은 서버에만)':' · 기록 확인 실패';}}
+    console.log(`복수매매 차단 알림: ${r.enabled?`켜짐 · 쿨다운 ${r.cooldownMin}분 · 하루 ${r.streakMax}연패${q}`:'꺼짐 (REVENGE_ALERT=0)'} (지난 체결로 보기: --revenge-dry)`);}
    return 0;}
   catch(e){log('ERROR','테스트 전송 실패: '+String(e.message));return 1;}
  }
