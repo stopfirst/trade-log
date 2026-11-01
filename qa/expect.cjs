@@ -90,4 +90,10 @@ module.exports = {
     A.eq(w + '.xh', { lines: 2, px: true, tl: true }); A.eq(w + '.leg', { o: true, pct: true, col: true }); A.eq(w + '.yzoom', true); A.eq(w + '.ysame', true); A.eq(w + '.yreset', true);
     A.eq(w + '.xzoom', true); A.eq(w + '.xright', true); A.eq(w + '.xreset', true); A.eq(w + '.vol0', true); A.eq(w + '.vol1', 0); A.eq(w + '.volLs', '0'); A.eq(w + '.vol2', true); A.eq(w + '.hline', 1);
     A.eq(w + '.touch', { on: true, moved: true, kept: true, off: true, pop: false }); } } },
+  /* v97 투자 휴식 권고 배너가 재렌더(v12 order:8)·HL 동기화 뒤에도 맨 위 유지, × 만으로 숨김, 실제 연속 손실이 끊기면 숨김, v95Debug */
+  t97: { check(A) { for (const k of ['HL1440', 'HL390', 'US1440', 'US390']) { const top = { vis: true, n: 3, firstVisual: true, top: 0 };
+    for (const s of ['load', 't2s', 'sync', 'back']) { for (const [f, v] of Object.entries(top)) A.eq(k + '.' + s + '.' + f, v); A.eq(k + '.' + s + '.dis', null); }
+    A.eq(k + '.trades', k.startsWith('HL') ? 4 : 3); A.eq(k + '.dbg', { status: 'shown', run: 3, journal: k.startsWith('HL') ? 'hyperliquid' : 'us', days: 3, lastLoss: true, pct: -0.2, memo: false, first: 0 });
+    A.eq(k + '.x.vis', false); A.eq(k + '.x.dis', '2026-10-29'); A.eq(k + '.x2.vis', false); A.eq(k + '.xdbg', 'dismissed');
+    A.eq(k + '.flip.vis', false); A.eq(k + '.flip.dis', null); A.eq(k + '.fdbg', { status: 'no-streak', run: 0, lastPlus: true }); } } },
 };
