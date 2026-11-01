@@ -78,4 +78,11 @@ module.exports = {
       A.eq(k + '.imm.calendar.act', { pend: false, flushed: 'setPage', cal: '2026-09', page: 'calendar' }); A.eq(k + '.imm.newTrade.act', { pend: false, flushed: 'openNew', open: true, qty: true });
       for (const nm of ['analysis', 'weekly', 'calendar', 'newTrade']) A.eq(k + '.imm.' + nm + '.at', ['ana', 'cal', 'size']); }
     A.eq('console', []); } },
+  /* v95 투자 휴식 권고: 3거래일 연속 실현 손실 → 대시보드 맨 위 배너(무거래일 건너뜀·플러스/0원 끊김·4연속·× 닫기 유지·새 손실일 재표시), HL·US × 1440·390 */
+  t95: { check(A) { for (const k of ['HL1440', 'HL390', 'US1440', 'US390']) { const T = k.startsWith('HL') ? '10/31' : '10/30', TD = k.startsWith('HL') ? '2026-10-31' : '2026-10-30';
+    A.eq(k + '.today', TD); A.eq(k + '.s1.vis', true); A.eq(k + '.s1.first', true); A.eq(k + '.s1.title', '투자 휴식 권고 (3거래일 연속 손실)'); A.eq(k + '.s1.days', ['10/27 −0.50%', '10/28 −1.00%', '10/29 −0.20%']);
+    A.eq(k + '.gap.vis', true); A.eq(k + '.gap.days', ['10/26 −0.50%', '10/27 −0.50%', '10/29 −0.50%']); A.eq(k + '.plus.vis', false); A.eq(k + '.zero.vis', false);
+    A.eq(k + '.four.title', '투자 휴식 권고 (4거래일 연속 손실)'); A.eq(k + '.four.days', ['10/26 −0.50%', '10/27 −0.50%', '10/28 −1.00%', '10/29 −0.20%']);
+    A.eq(k + '.d0.vis', true); A.eq(k + '.d1.vis', false); A.eq(k + '.d1.dis', '2026-10-29'); A.eq(k + '.d2.vis', false); A.eq(k + '.d3.vis', false); A.eq(k + '.d3.dis', '2026-10-29');
+    A.eq(k + '.d4.vis', true); A.eq(k + '.d4.first', true); A.eq(k + '.d4.last', TD); A.eq(k + '.d4.title', '투자 휴식 권고 (4거래일 연속 손실)'); A.eq(k + '.d4.days', ['10/27 −0.50%', '10/28 −1.00%', '10/29 −0.20%', T + ' −0.40%']); } } },
 };
