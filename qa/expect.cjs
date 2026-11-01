@@ -130,4 +130,14 @@ module.exports = {
       P('chipN', 1); P('chip0', { why: 'strong', dlg: false, b: ['갈아타기 · 강해 보여서'], on: ['강해 보여서'] }); P('chip1', { proc: '규칙 위반', saved: true }); P('chip2', { why: 'strong' });
       P('m10b.without', '−$50.00'); P('m10b.meta', '10월 표시 3건 · 위반 2건'); P('m10b.why', '강해 보여서 1 · 미리 정한 가격 0 · 미답 2'); P('chip3', { why: null, proc: '규칙 준수' });
       P('set1', { cool: 20, max: 2, dbg: { U2: ['revenge', 'switch(표시)'], U4: ['switch(표시)'], U8: ['revenge', 'switch(표시)'] } }); P('setInvalid', 20); P('setClr', [false, 15]); } } },
+  /* v100 일지 칩 반응 속도: 칩 10종 같은 작업 안 반영 · 마우스 클릭→다음 프레임 <50ms · 클릭 뒤 350ms 안 80ms 넘는 long task 0 · 저장 중 5연타 모두 반영(다시 시도 알림 없음) · 잠금 중 타이핑 유지 · 저장본=state=화면 · 창 열린 동안 renderAll 0 · 새로고침 유지 · US v99 칩은 목록만 다시 그림 */
+  t100: { check(A, o) { const want = '{"react":true,"tfIn":"1h","tfOut":"ltf","setup":"EP","conf":2,"cond":"좋음","grade":"B","emo":{"pre":["확신"],"mid":["인내"],"post":["만족"]},"stopNote":"직전 저점 아래 ABC"}';
+    for (const w of W) { const P = (p, v) => A.eq(w + '.' + p, v);
+      P('n', 320); P('detail', { chart: true, v92: true, v63: true, v71: true });
+      P('sync', { pre: true, grade: true, react: true, tfIn: true, tfOut: true, setup: true, conf: true, cond: true, mid: true, post: true });
+      P('frameOk', true); P('lt80', 0); P('busy', { react: true, uiReact: true, tfIn: '1h', toast: false }); P('typed', '직전 저점 아래 ABC');
+      P('check.stopLi', true); P('check.n', '5/5'); P('check.want', '5/5'); A.ok(w + '.score.ui'); P('score.ui', o[w] && o[w].score && o[w].score.want);
+      P('match', { savedState: true, uiState: true }); P('scroll', 0); P('renderWhileOpen', 0); P('renderAfterClose', { full: true, dirty: false, pending: 0 });
+      P('savedFinal', true); P('reload', true); P('stateSum', want); }
+    A.eq('US', { chip: true, saved: 'strong', proc: '규칙 위반', recordsOnly: true, badge: '갈아타기 · 강해 보여서' }); } },
 };
