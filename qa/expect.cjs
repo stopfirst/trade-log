@@ -96,4 +96,13 @@ module.exports = {
     A.eq(k + '.trades', k.startsWith('HL') ? 4 : 3); A.eq(k + '.dbg', { status: 'shown', run: 3, journal: k.startsWith('HL') ? 'hyperliquid' : 'us', days: 3, lastLoss: true, pct: -0.2, memo: false, first: 0 });
     A.eq(k + '.x.vis', false); A.eq(k + '.x.dis', '2026-10-29'); A.eq(k + '.x2.vis', false); A.eq(k + '.xdbg', 'dismissed');
     A.eq(k + '.flip.vis', false); A.eq(k + '.flip.dis', null); A.eq(k + '.fdbg', { status: 'no-streak', run: 0, lastPlus: true }); } } },
+  /* v98 보유 비중 HL 전체 계좌(USDC 1,000 + 현물 500) 기준 · 현물 조각 · 청산 % 분모 · 현물 계산 중/실패면 USDC 기준 · US 그대로 */
+  t98: { check(A) { for (const k of ['HL1440', 'HL390']) { const P = (s, f, v) => A.eq(k + '.' + s + '.' + f, v);
+    P('ok', 'center', ['전체 계좌', '1,500.00', '현물 포함']); P('ok', 'rows', { 'p:ETH': ['13.3%', '200.00'], 'p:BTC': ['6.7%', '100.00'], spot: ['33.3%', '500.00'], free: ['46.7%', '700.00'] });
+    A.has(k + '.ok.meta', '사용 증거금 ÷ 전체 계좌(현물 포함)'); P('ok', 'note', '전체 계좌 = USDC 1,000.00 + 현물 500.00'); P('ok', 'spotSub', '현물 평가액 · UBTC'); P('ok', 'freeSub', 'USDC − 사용 증거금 합');
+    P('ok', 'liqTotal', '계좌 −38.00%'); P('ok', 'ethLiq', 32.67); A.has(k + '.ok.liqNote', '분모 전체 계좌(현물 포함) $1,500.00');
+    P('notional', 'rows', { 'p:ETH': ['133.3%', '2,000.00'], 'p:BTC': ['66.7%', '1,000.00'], spot: ['33.3%', '500.00'] }); A.has(k + '.notional.meta', '포지션 규모 ÷ 전체 계좌(현물 포함)'); A.has(k + '.notional.expoSub', '÷ 전체 계좌 1,500.00');
+    for (const s of ['pending', 'fail']) { P(s, 'center', ['BALANCE (USDC)', '1,000.00', '현물 계산 중']); P(s, 'rows', { 'p:ETH': ['20%', '200.00'], 'p:BTC': ['10%', '100.00'], free: ['70%', '700.00'] }); P(s, 'spotRow', false);
+      A.has(k + '.' + s + '.meta', 'BALANCE(USDC) · 현물 계산 중'); A.has(k + '.' + s + '.note', '현물 계산 중'); P(s, 'ethLiq', 49); P(s, 'liqTotal', '계좌 −57.00%'); }
+    A.eq(k + '.failErr', true); } A.eq('US', { card: true, v98: false, spotWord: false }); } },
 };
