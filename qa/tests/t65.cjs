@@ -52,11 +52,12 @@ const chk=()=>{const W=document.documentElement.clientWidth,bad=[];const dlg=doc
  const z2=await Z();r.dragChanged=JSON.stringify(z1[0][1])!==JSON.stringify(z2[0][1])&&JSON.stringify(z1[0][0])===JSON.stringify(z2[0][0]);r.popAfterDrag=await page.evaluate(()=>!!document.querySelector('.v40-pop'));
  await page.locator('#v37Chart').screenshot({path:process.argv[3]+'/zz-'+W+'.png'});
  // 두번째 지그재그를 Esc로 취소, 클릭 마감 확인
- await page.click('[data-v40mode="zz"]');await page.mouse.click(bb.x+bb.w*.1,bb.y+bb.h*.5);await page.waitForTimeout(150);await page.keyboard.press('Escape');await page.waitForTimeout(150);r.esc=await page.evaluate(()=>V40.pend);
+ await page.click('[data-v40mode="zz"]');await page.mouse.click(bb.x+bb.w*.1,bb.y+bb.h*.5);await page.waitForTimeout(150);await page.keyboard.press('Escape');await page.waitForTimeout(150);r.esc=await page.evaluate(()=>V40.pend);r.escMode=await page.evaluate(()=>V40.mode);
+ await page.evaluate(()=>document.querySelector('#v37Chart [data-v40mode="zz"]').click());await page.waitForTimeout(150); // v103: Esc 취소 뒤 보기로 돌아가므로 도구 다시 선택
  await page.mouse.click(bb.x+bb.w*.1,bb.y+bb.h*.5);await page.waitForTimeout(150);await page.mouse.click(bb.x+bb.w*.2,bb.y+bb.h*.4);await page.waitForTimeout(150);await page.mouse.click(bb.x+bb.w*.2,bb.y+bb.h*.4);await page.waitForTimeout(500);r.clickFinish=(await Z()).length;
  // 삭제 팝업
  await page.click('[data-v40mode="view"]');await page.waitForTimeout(200);
- h=await page.evaluate(()=>{const p=document.querySelector('.v65-zz .v65-hit');const pts=p.getAttribute('points').split(' ').map(s=>s.split(',').map(Number));const svg=p.ownerSVGElement,R=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;const sx=R.width/(vb&&vb.width||R.width),sy=R.height/(vb&&vb.height||R.height);return {x:R.left+(pts[0][0]+pts[1][0])/2*sx,y:R.top+(pts[0][1]+pts[1][1])/2*sy};});
+ h=await page.evaluate(()=>{const p=document.querySelector('.v65-zz .v65-hit');const pts=p.getAttribute('points').split(' ').map(s=>s.split(',').map(Number));const svg=p.ownerSVGElement,R=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;const sx=R.width/(vb&&vb.width||R.width),sy=R.height/(vb&&vb.height||R.height);let first=null;for(let i=0;i+1<pts.length;i++)for(const f of [.5,.3,.7]){const q={x:R.left+(pts[i][0]+(pts[i+1][0]-pts[i][0])*f)*sx,y:R.top+(pts[i][1]+(pts[i+1][1]-pts[i][1])*f)*sy};if(!first)first=q;const e=document.elementFromPoint(q.x,q.y);if(e&&e.closest('.v65-zz')===p.closest('.v65-zz'))return q;}return first;}); // v103: 다른 선(가로선)과 겹치지 않는 구간을 누름
  await page.mouse.click(h.x,h.y);await page.waitForTimeout(400);r.pop=await page.evaluate(()=>[...document.querySelectorAll('.v40-pop button')].map(b=>b.textContent));
  r.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1);
  rep['w'+W]=r;await ctx.close();}

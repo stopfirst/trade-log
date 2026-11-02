@@ -15,7 +15,7 @@ module.exports = {
   t60: { check(A, o) { const s = Object.assign({}, ...o.scenes); A.eq('direct.n', 2, s); A.eq('click.called', 1, s); A.eq('click.label', '거래기록 가져오기', s);
     A.eq('rrl.stop', 99.36, s); A.eq('rrl.target', 101.28, s); A.eq('second.n', 1, s); A.eq('rrs.rr', [['long', 100, 99.360436, 101.27913], ['short', 100, 100.63956, 98.720872]], s); } },
   /* v61 차트 사각형 그리기·크기·이동·삭제, 추세선 이동 (마지막 추세선 팝업 확인은 대상 요소가 앞 장면에서 지워져 건너뜀) */
-  t61: { check(A, o) { const s = Object.assign({}, ...o.scenes); A.eq('prev', true, s); A.eq('mode', 'rect', s); A.eq('popAfterDrag', false, s); A.eq('pop', ['삭제', '닫기'], s);
+  t61: { check(A, o) { const s = Object.assign({}, ...o.scenes); A.eq('prev', true, s); A.eq('mode', 'view', s); /* v103: 그린 뒤 보기 */ A.eq('popAfterDrag', false, s); A.eq('pop', ['삭제', '닫기'], s);
     A.eq('afterDel', [], s); A.eq('others', 3, s); A.ok('trend.after', s); } },
   /* v63 주간 리뷰(v91: 복기 탭으로 이동) · 거래 채점 · 셋업/확신/컨디션 저장 */
   t63: { check(A, o) { for (const i of [0, 5]) { const w = o.scenes[i]; A.eq('week.page', 'page-weekly', w); A.has('week.txt', '승률 33%', w); A.has('week.txt', '-4.86R', w); A.has('week.txt', '−338.88', w); }
@@ -23,7 +23,7 @@ module.exports = {
   /* v64 일 손실 한도 · 사용자 수정 유지 (스크립트가 스스로 시계를 고정) */
   t64: { env: { QA_REAL_CLOCK: '1' }, check(A) { for (const k of ['today', 'tomorrow']) { A.eq(k + '.limD', 2.5); A.eq(k + '.riskMax', 2.5); A.eq(k + '.flag', true); A.eq(k + '.afterUserEdit', 2); } } },
   /* v65 지그재그 그리기: 완료/취소/그만, 끌기 */
-  t65: { check(A) { for (const w of W) { A.eq(w + '.pend', 4); A.eq(w + '.act', ['완료', '한 점 취소', '그만']); A.eq(w + '.afterUndo', 3); A.eq(w + '.saved', [4]); A.eq(w + '.dragChanged', true); A.eq(w + '.clickFinish', 2); A.eq(w + '.pop', ['변동폭 보이기', '삭제', '닫기']); } } },
+  t65: { check(A) { for (const w of W) { A.eq(w + '.pend', 4); A.eq(w + '.act', ['완료', '한 점 취소', '그만']); A.eq(w + '.afterUndo', 3); A.eq(w + '.saved', [4]); A.eq(w + '.dragChanged', true); A.eq(w + '.clickFinish', 2); A.eq(w + '.escMode', 'view'); A.eq(w + '.pop', ['변동폭 보이기', '삭제', '닫기']); } } },
   /* v66 수동 기준액 */
   t66: { check(A) { A.eq('before', { b: 10000, u: 10000 }); A.eq('after.b', 20000); A.has('after.tile', '20,000.00'); } },
   /* v67 전일 마감(현물 계산 중) */
@@ -150,4 +150,24 @@ module.exports = {
   /* v102 '복기 저장'이 일지 글을 지우던 버그: 글칸 5종 × (칸 밖 안 누름·누름) + 칩 5종 + 전부 + 복기 폼 자체 값 + 정정 칸↔왜 샀나 동기화 + 셋업 칩 뒤 선택 + 계획·기준값·스탑·추매 사유 저장 + state 교체 뒤 저장 + 다른 폼 저장 실패 → state·저장본·다시 연 화면·새로고침 모두 유지 */
   t102: { check(A) { A.eq('n', 26); A.eq('okN', 26); A.eq('reloadN', 26); A.eq('reloadOk', 26); A.eq('foldSynced', '왜 샀나 먼저'); A.eq('cardSynced', '정정 칸 나중'); A.eq('selSynced', 'EP');
     A.eq('swapPlan', { state: '교체 뒤 실패 조건', saved: '교체 뒤 실패 조건' }); } },
+  /* v103 차트 그리기 도구: 하나 그리면·취소하면 '보기'(버튼 강조 포함), 그리는 도중 유지, 끌기 편집은 모드 그대로, 그린 것 저장 / 셋업 '빗각' 선택지·저장·새로고침·분석 */
+  t103: { check(A) { const V = { mode: 'view', on: 'view', pend: false };
+    for (const w of ['w1440', 'w390']) { A.eq(w + '.note', { ...V, added: 1 }); for (const k of ['noteEsc', 'noteEmpty', 'trendEsc']) A.eq(w + '.' + k, { ...V, added: 0 });
+      A.eq(w + '.noteSwitch', { mode: 'trend', on: 'trend', pend: false, added: 0 }); A.eq(w + '.trendMid.mode', 'trend'); A.eq(w + '.trendMid.pend', true); A.eq(w + '.trend', { ...V, added: 1 });
+      A.eq(w + '.dialogOpen', true); A.eq(w + '.overflow', false); }
+    A.eq('w390.final', ['note', 'trend']); A.eq('w390.stored', ['note', 'trend']);
+    const w = 'w1440'; for (const k of ['hline', 'rect', 'zz', 'zzEnter', 'cv', 'rrl', 'rrs']) A.eq(w + '.' + k, { ...V, added: 1 });
+    for (const k of ['zzStop', 'cvEsc']) A.eq(w + '.' + k, { ...V, added: 0 });
+    for (const [k, m] of [['hlineMid', 'hline'], ['rectMid', 'rect'], ['zzMid', 'zz'], ['zzUndo', 'zz'], ['cvMid', 'cv']]) { A.eq(w + '.' + k + '.mode', m); A.eq(w + '.' + k + '.pend', true); }
+    const all = ['cv', 'hline', 'note', 'rect', 'rr', 'rr', 'trend', 'zz', 'zz']; A.eq(w + '.final', all); A.eq(w + '.stored', all);
+    A.eq(w + '.dragNote', { found: true, moved: true, mode: 'note', n: 9 }); A.eq(w + '.dragZz', { found: true, moved: true, mode: 'view', n: 9 });
+    A.eq('setup.options', ['미분류', '베이스 돌파', 'EP', '눌림', '평균회귀', '빗각', '기타']); for (const k of ['newSetup', 'filter', 'chip', 'select', 'analysis']) A.eq('setup.' + k, true);
+    for (const k of ['before', 'after', 'stored']) A.eq('setup.' + k, ['loss', 'tg']); A.eq('setup.others', ['big:미분류']);
+    /* 손익비 상자 → 최초 손절·목표·1R·계획 손익비(HL SL 없이 끝난 숏), 끌면 따라감, 손으로 고친 최초 손절·사용자 목표·HL 최초 손절은 그대로 */
+    A.eq('rr.pre.stop0', null); A.eq('rr.pre.r1', null);
+    A.eq('rr.open', { stop0: 2315.5, src: 'chart', stop: 2315.5, target: 2298.8, r1: 18.026, plan: 2.34, R: 2.289, planRR: 2.34, rrOk: true }); A.eq('rr.text', { noPlan: false, r1: true });
+    A.eq('rr.drag.stop0', 2316.5); A.eq('rr.drag.stop', 2316.5); A.eq('rr.drag.r1', 21.6312); A.eq('rr.drag.plan', 1.95);
+    A.eq('rr.manual.stop0', 2318); A.eq('rr.manual.src', null);
+    A.eq('rr.user.stop0', 2320); A.eq('rr.user.target', 2290); A.eq('rr.user.src', null); A.eq('rr.hl.stop0', 2316); A.eq('rr.hl.src', null); A.eq('rr.hl.target', 2298.8);
+    A.eq('rr.reload.es.stop0', 2318); A.eq('rr.reload.es.r1', 27.039); A.eq('rr.reload.eu.target', 2290); A.eq('rr.reload.eh.stop0', 2316); } },
 };
