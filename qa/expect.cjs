@@ -140,4 +140,11 @@ module.exports = {
       P('match', { savedState: true, uiState: true }); P('scroll', 0); P('renderWhileOpen', 0); P('renderAfterClose', { full: true, dirty: false, pending: 0 });
       P('savedFinal', true); P('reload', true); P('stateSum', want); }
     A.eq('US', { chip: true, saved: 'strong', proc: '규칙 위반', recordsOnly: true, badge: '갈아타기 · 강해 보여서' }); } },
+  /* v101 일지 저장 유실: 칩 6종·텍스트칸 5종 × 입력 0.1초 뒤 (t101) 닫기 버튼·Esc·다른 거래 열기 (t101b) 새로고침·숨김/pagehide (t101d) 저장 못 끝낸 채 새로고침 → 다음 실행에서 11칸 되살림 (t101c) 다른 창 저장·원격 반영 → state·저장본(v83Read)·다시 연 화면 모두 값 유지.
+     t101 추가: 입력 중 renderDetail·v63PaintDetail 뒤 값·포커스 유지, 저장 2번 실패 → 알림 + 재시도 3번째에 저장(값 안 되돌림) */
+  t101: { check(A) { A.eq('n', 33); A.eq('okN', 33); A.eq('repaint', { val: '입력 중 다시 그리기 끝', focus: true }); A.eq('repaintSaved', '입력 중 다시 그리기 끝');
+    A.eq('failRetry', { toast: true, state: true, saved: true, tries: 3 }); } },
+  t101b: { check(A) { A.eq('n', 22); A.eq('okN', 22); } },
+  t101d: { check(A) { A.eq('n', 11); A.eq('okN', 11); A.eq('rec_kill', 11); } },
+  t101c: { check(A) { A.eq('n', 22); A.eq('okN', 22); } },
 };
