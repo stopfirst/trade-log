@@ -147,4 +147,7 @@ module.exports = {
   t101b: { check(A) { A.eq('n', 22); A.eq('okN', 22); } },
   t101d: { check(A) { A.eq('n', 11); A.eq('okN', 11); A.eq('rec_kill', 11); } },
   t101c: { check(A) { A.eq('n', 22); A.eq('okN', 22); } },
+  /* v102 '복기 저장'이 일지 글을 지우던 버그: 글칸 5종 × (칸 밖 안 누름·누름) + 칩 5종 + 전부 + 복기 폼 자체 값 + 정정 칸↔왜 샀나 동기화 + 셋업 칩 뒤 선택 + 계획·기준값·스탑·추매 사유 저장 + state 교체 뒤 저장 + 다른 폼 저장 실패 → state·저장본·다시 연 화면·새로고침 모두 유지 */
+  t102: { check(A) { A.eq('n', 26); A.eq('okN', 26); A.eq('reloadN', 26); A.eq('reloadOk', 26); A.eq('foldSynced', '왜 샀나 먼저'); A.eq('cardSynced', '정정 칸 나중'); A.eq('selSynced', 'EP');
+    A.eq('swapPlan', { state: '교체 뒤 실패 조건', saved: '교체 뒤 실패 조건' }); } },
 };
