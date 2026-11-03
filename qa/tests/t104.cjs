@@ -77,7 +77,7 @@ const svgAt=async(page,ms)=>{const t0=Date.now();while(Date.now()-t0<ms){const r
    await page.evaluate(()=>{window.__delay=300;});const open=async id=>page.evaluate(id=>{if($('tradeDialog').open)$('tradeDialog').close();openTrade(id,'manage');},id);
    const C={};await open('c1');C.first=await svgAt(page,20000);await open('open');C.open=await svgAt(page,20000);
    await page.evaluate(()=>{window.__r429=true;$('tradeDialog').close();});await page.clock.fastForward(70000);await open('open');C.r429=await svgAt(page,20000);
-   for(let i=0;i<80;i++){C.note=await page.evaluate(()=>{const h=document.querySelector('#v37Chart .v37-chart-head');return h?h.textContent:'';});if(/속도 제한/.test(C.note))break;await page.waitForTimeout(100);}
+   for(let i=0;i<150;i++){C.note=await page.evaluate(()=>{const h=document.querySelector('#v37Chart .v37-chart-head');return h?h.textContent:'';});if(/속도 제한/.test(C.note))break;await page.waitForTimeout(100);} /* v112: 부하 중 늦게 뜨는 안내 대기 8→15초(판정 그대로) */
    C.stillSvg=await page.evaluate(()=>!!document.querySelector('#v37Chart svg.v37-svg'));
    await page.evaluate(()=>{window.__r429=false;localStorage.removeItem('tj:v104:cool');});
    await page.reload();await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});await page.evaluate(seed);await page.waitForTimeout(2000);
