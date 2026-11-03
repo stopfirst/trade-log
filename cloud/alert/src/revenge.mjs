@@ -28,7 +28,7 @@ export function revengeConfig(env){
 
 // ---- HL: 원시 체결 → 포지션 구간(진입·청산) -----------------------------------------------------
 /** 같은 종목 체결을 (time, tid) + 같은 시각 startPosition 사슬 순서로(quick.mjs detectCloses와 같은 순서) */
-function orderCoin(list){
+export function orderCoin(list){
  list.sort((a,b)=>a.t-b.t||(a.tid.length-b.tid.length)||(a.tid<b.tid?-1:a.tid>b.tid?1:0));
  const ordered=[];let pos=null;
  for(let i=0;i<list.length;){let j=i;while(j<list.length&&list[j].t===list[i].t)j++;const rest=list.slice(i,j);

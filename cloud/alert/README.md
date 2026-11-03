@@ -1,4 +1,17 @@
-# 매매일지 손실한도 판정 v1.6 (trade-alert 2.12.0 · alert16)
+# 매매일지 손실한도 판정 v1.6 (trade-alert 2.13.0 · alert17)
+
+## 2.13.0 — HL 포지션 방향 전환 감지(손실 한도·백업·존·복수매매·복기 변경 없음 · 기본 켜짐 · 기록용 SQL alert17.sql)
+계기: 주문창에 남은 수량을 reduce-only 없이 반대로 내 롱 청산 + 숏 진입(11-03 kPEPE). 같은 코인(HIP-3 `dex:COIN` 포함, 현물 제외) 포지션이 롱↔숏으로 바뀌면 바로 경고합니다. 주문을 막지 않습니다(알림만).
+- 규칙
+  1. **한 주문 반전**: 한 주문(oid)의 체결로 포지션 부호가 바뀜(HL 체결 `dir` 'Long > Short'/'Short > Long', 또는 0으로 닫는 체결 + 같은 주문의 반대 진입 체결). = reduce-only 아닌 주문이 기존 포지션을 넘어 반대 포지션을 연 경우.
+  2. **청산 뒤 반대 진입**: 포지션이 0으로 청산된 뒤 `FLIP_WINDOW_MIN`(기본 5)분 이내(정각 포함) 다른 주문으로 반대 방향 진입(청산 마지막 체결 → 진입 첫 체결).
+- 메시지 `🔄 [방향 전환 의심]`: 코인, 이전/현재 방향·수량(현재 = 감지 시점), 체결가, 시각(KST, 초까지), 주문 oid·주문 종류·TIF·주문 수량·**reduce-only 여부**(공개 /info `orderStatus`, 실패하면 '체결로 판단'), 창 규칙이면 청산 시각·oid, 마지막 줄 'Positions 탭의 Close로만 청산' 안내.
+- 같은 주문은 한 번만(키 `flip:hl:<coin>:<oid>`, 보내기 전에 state2.json `flip.sent`에 저장 → 재시작해도 다시 안 보냄). 설치 전·6시간 넘은 체결은 보내지 않음. 전송 실패는 2시간 재시도. 같은 주문 체결이 뒤에 더 붙으면 메시지 없이 기록 크기만 갱신.
+- 확인 주기 = 기존 HL 확인 루프(RISK_CHECK_SEC, 기본 60초) — 체결 뒤 최대 약 1분 안에 경고.
+- 기록: **alert17.sql**(`flip_alerts` 표 + `flip_push`). 앱이 '주문 실수' 태그를 붙일 때 읽음(앱 v111 몫). SQL이 없으면 텔레그램은 그대로, 기록은 서버 대기열(최대 200)에 두었다가 설치되면 올림.
+  harden-2026-11.sql은 flip_push를 허용 목록에 안 갖고 있으므로 **harden 먼저, alert17.sql 나중**(뒤에 harden을 다시 돌렸으면 alert17.sql 한 번 더).
+- 지난 체결로 몇 건 나왔을지(보내지 않음·저장 안 함): `sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs --flip-dry --from 2026-10-01 --to 2026-10-31` (`--address 0x…`, `--no-orders` 선택)
+- `.env`(선택): `FLIP_ALERT=1`(0 = 끔) · `FLIP_WINDOW_MIN=5`(0 = 창 규칙 끔, 최대 60).
 
 ## 2.12.0 — 매일 복기 알림 = 앱 v106 '일지 빈 칸'과 같은 판정(손실 한도·백업·존·복수매매 변경 없음 · .env 추가값 없음)
 - 손익비: 계획 손익비(plan0.rr 또는 최초 손절·목표로 계산)가 **기록돼 있으면 기준(v92MinRR) 미달이어도 빈 칸 아님**. 빈 칸은 손익비 '미기록'일 때만.
@@ -195,6 +208,7 @@ alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_
 앱 설정의 손실 한도(하루·주·달 %)는 앱 자체 표시용이고, 서버 판정은 `.env`(기본 3/6/10)를 씁니다. 앱 설정 → 계좌·위험에 서버 값이 그대로 보입니다.
 
 ## 테스트(개발)
+2.13.0: `node --test tests/*.test.mjs` (flip.test.mjs) · SQL `node tests/alert17-sql.pglite.mjs <cloud 폴더>`(alert17.sql + harden 순서).
 2.12.0: `node --test tests/*.test.mjs` (remind.test.mjs 손익비 미달·숨김 포함) · SQL `node tests/alert11-sql.pglite.mjs <cloud.sql> <kiwoom-collector.sql> <alert11.sql>`.
 2.11.0: `node --test tests/*.test.mjs` 163개 (revenge.test.mjs 15) · SQL `node tests/alert15-sql.pglite.mjs <cloud.sql> <kiwoom-collector.sql> <alert15.sql>` 30개.
 `node --test tests/*.test.mjs`(존: zones.test.mjs = tests/fixtures/flow-chart 원본과 동일성, zonewatch.test.mjs = 터치·중복·재시작·정리·명령) · 라이브 비교(수동): `node tests/zones-live-compare.mjs` · SQL: `node tests/alert13-sql.pglite.mjs <cloud 폴더>`(backup_dump·복원 왕복·security/harden-2026-11.sql), `node tests/alert2-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql fixtures`, `node tests/alert3-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql fixtures`, `node tests/alert5-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql alert5.sql fixtures` (@electric-sql/pglite)
