@@ -1,4 +1,5 @@
-// trade-alert 2.11.0 (alert15): 복수매매 차단 알림 — 손실 청산 뒤 REVENGE_COOLDOWN_MIN(15)분 안 진입 '[복수매매 의심]', US 손절한 날 다른 종목 진입(버튼 '미리 정한 가격'/'강해 보여서'), 하루 손실 DAILY_LOSS_STREAK_MAX(3)회 '오늘은 여기까지'+이후 진입 경고, 손실 직후 위험 증가 강한 경고(revenge.mjs). 기록 = Supabase revenge_alerts(alert15.sql, 없으면 텔레그램만). 판정 로직 변경 없음.
+// trade-alert 2.12.0 (alert16): 매일 복기 알림 판정을 앱 v106과 맞춤 — 계획 손익비가 기록돼 있으면 기준 미달이어도 빈 칸 아님(미기록만), 앱에서 ×로 숨긴 거래(t.v92Hide) 제외(remind.mjs · alert11.sql review_gaps 'hide'). 손실 한도·백업·존·복수매매 로직 변경 없음.
+// (이전) 2.11.0 (alert15): 복수매매 차단 알림 — 손실 청산 뒤 REVENGE_COOLDOWN_MIN(15)분 안 진입 '[복수매매 의심]', US 손절한 날 다른 종목 진입(버튼 '미리 정한 가격'/'강해 보여서'), 하루 손실 DAILY_LOSS_STREAK_MAX(3)회 '오늘은 여기까지'+이후 진입 경고, 손실 직후 위험 증가 강한 경고(revenge.mjs). 기록 = Supabase revenge_alerts(alert15.sql, 없으면 텔레그램만). 판정 로직 변경 없음.
 // (이전) 2.10.0 (alert14): flow-chart 존 터치 알림 — BB+FVG(가까운 2개)·OB 백도식(방향별 1개)에 가격이 닿으면 텔레그램 1회(zones.mjs·zonewatch.mjs). 기본 꺼짐(.env ZONE_ALERT=1 또는 텔레그램 /zones on). 판정 로직 변경 없음.
 // (이전) 2.9.0 (alert13): 서버 일일 백업(backup.mjs, alert13.sql).
 // (이전) 2.6.0 (alert9): 텔레그램 즉시 복기 — HL 청산 때 [규칙 준수][규칙 위반][나중에] 버튼, 답은 Supabase quick_reviews(alert9.sql) → 앱 v37 반영. .env QUICK_REVIEW=0이면 끔. 판정 로직 변경 없음.
@@ -41,7 +42,7 @@ import * as rv from './revenge.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.11.0';
+export const VERSION='2.12.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
