@@ -184,4 +184,9 @@ module.exports = {
     A.near('xyz.p', 0.1332, 0.0005); A.eq('xyz.base', 111440); A.eq('xyz.base2', 55720); A.has('xyz.txt', '포지션 +0.13%');
     const t = o.type || {}; if (!(t.n >= 15 && t.avg < 16 && t.max < 50)) A.fail('type ' + JSON.stringify(t)); A.has('type.saved', '가격 반응 확인 후 진입 ABC def');
     /* v106 일지 빈 칸 */ A.eq('gaps.list', ['gB']); A.eq('gaps.rrBad.bad', true); A.eq('gaps.x', 1); A.eq('gaps.after', { shown: false, hide: true }); A.eq('gaps.saved', true); A.has('gaps.box', 'bad'); A.has('gaps.box', '미달'); } },
+  /* v107 HL 계좌 총액: v104 캐시를 거쳐도 잔고 갱신 성공(통합 계정 USDC total), 미실현 변화 따라감, dex 이중 합산 없음, 갱신 실패 시 '⚠ N분 전 값', v107Debug 차이 0 */
+  t107: { skipGeneric: ['err'], check(A, o) { A.eq('first.eq', 18000); A.eq('first.err', null); A.eq('first.mode', 'unifiedAccount'); A.eq('first.basis', 50700); A.has('first.tile', '50,700.00');
+    A.eq('second.eq', 18250); A.eq('second.err', null); A.has('second.tile', '50,950.00'); A.eq('absNet', 1);
+    A.eq('dbg.HL정의총액', 50950); A.eq('dbg.앱표시총액', 50950); A.eq('dbg.차이', 0); A.eq('dbg.스테이킹_참고', 800);
+    A.eq('stale.err', 'HL 500'); A.has('stale.tile', '⚠ 거래계좌 10분 전 값'); A.eq('recovered.err', null); if (/⚠ 거래계좌/.test((o.recovered || {}).tile || '')) A.fail('recovered.tile still warns'); } },
 };
