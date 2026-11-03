@@ -202,5 +202,13 @@ module.exports = {
     A.eq('risk.dlg0.m', null); A.eq('risk.afterSpot.dlg', '포지션 위험 2.88%'); A.eq('risk.afterSpot.redo', 1); A.eq('risk.afterClose', { dlg: '포지션 위험 2.89%', redo: 2 });
     A.eq('risk.computing.basis', 52010.92); A.eq('risk.computing.pct', 1.03); A.eq('risk.computing.codes', []); A.eq('risk.computing.fallback', true);
     A.eq('risk.closed.basis', 51863); A.eq('risk.closed.pct', 1.04); A.eq('risk.closed.codes', []); A.eq('risk.closed.fallback', false);
-    A.eq('risk.zero.basis', 18240); A.eq('risk.noAddr.basis', 18240); } },
+    A.eq('risk.zero.basis', 18240); A.eq('risk.noAddr.basis', 18240);
+    /* 자동 감지 오감지 · 무시 */
+    for (const w of ['dis1440', 'dis390']) { A.eq(w + '.before.chips', ['risk', 'v99revenge', 'v99riskup']); A.eq(w + '.before.x', 3); A.eq(w + '.before.proc', '규칙 위반');
+      A.eq(w + '.afterRisk.chips', ['v99revenge', 'v99riskup']); A.eq(w + '.afterRisk.hid', '숨긴 감지 1개'); A.eq(w + '.afterRisk.ds', ['risk']); A.eq(w + '.afterRisk.score', 70);
+      A.eq(w + '.afterAll', { chips: [], x: 0, hid: '숨긴 감지 3개', ds: ['risk', 'v99revenge', 'v99riskup'], proc: '미평가', tags: [], v99: [], score: 70, det: [], pre: [], dlgOpen: true });
+      A.eq(w + '.stored', ['risk', 'v99revenge', 'v99riskup']); A.eq(w + '.reload.hid', '숨긴 감지 3개'); A.eq(w + '.reload.proc', '미평가');
+      A.eq(w + '.saved', { proc: '규칙 위반', tags: ['과도한 위험 배정'], ds: ['risk', 'v99revenge', 'v99riskup'] });
+      A.eq(w + '.unFound', true); A.eq(w + '.restored.chips', ['risk', 'v99revenge', 'v99riskup']); A.eq(w + '.restored.ds', null); A.eq(w + '.restored.proc', '규칙 위반');
+      A.eq(w + '.restored.pre', ['계획 외 진입', '과도한 위험 배정']); A.eq(w + '.stored2', 'none'); A.eq(w + '.dialogs', []); } } },
 };
