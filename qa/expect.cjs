@@ -182,5 +182,6 @@ module.exports = {
     if (!(Math.abs(b.midDragDy) <= 2)) A.fail('box.midDragDy ' + b.midDragDy); A.eq('box.stopAfter', 2280);
     A.eq('touch.lab0', '0'); A.eq('touch.lab1', '1'); A.eq('touch.lab2', '0');
     A.near('xyz.p', 0.1332, 0.0005); A.eq('xyz.base', 111440); A.eq('xyz.base2', 55720); A.has('xyz.txt', '포지션 +0.13%');
-    const t = o.type || {}; if (!(t.n >= 15 && t.avg < 16 && t.max < 50)) A.fail('type ' + JSON.stringify(t)); A.has('type.saved', '가격 반응 확인 후 진입 ABC def'); } },
+    const t = o.type || {}; if (!(t.n >= 15 && t.avg < 16 && t.max < 50)) A.fail('type ' + JSON.stringify(t)); A.has('type.saved', '가격 반응 확인 후 진입 ABC def');
+    /* v106 일지 빈 칸 */ A.eq('gaps.list', ['gB']); A.eq('gaps.rrBad.bad', true); A.eq('gaps.x', 1); A.eq('gaps.after', { shown: false, hide: true }); A.eq('gaps.saved', true); A.has('gaps.box', 'bad'); A.has('gaps.box', '미달'); } },
 };

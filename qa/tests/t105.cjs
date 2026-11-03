@@ -127,4 +127,21 @@ const op=(page,sel)=>page.evaluate(sel=>{const e=document.querySelector(sel);ret
   await page.locator('#detailTitle').click();await page.waitForTimeout(2500);
   R.type.saved=await page.evaluate(async()=>{const s=await v83Read();return (s.trades.find(x=>x.id==='k0').entryNote||'');});
   await ctx.close();}
+ /* (5) v106 일지 빈 칸: 손익비 기준 미달만 걸린 거래는 목록에서 빠짐, 미기록은 남음, × 숨기기 */
+ {const ctx=await browser.newContext({viewport:{width:1440,height:900},bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul'});await ctx.addInitScript(init,['0x'+'1'.repeat(40),'x']);const page=await ctx.newPage();page.on('pageerror',e=>R.errors.push(e.message));
+  await page.goto(URL0);await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});
+  await page.evaluate(async()=>{const D=Date.now()-86400e3;const ev=(id,ts,sh,px)=>{const d=new Date(ts).toISOString();return {id,date:d.slice(0,10),time:d.slice(11,19),timestamp:ts,shares:sh,price:px,fee:0.1,seq:ts/1000};};
+   const mk=(id,name,x)=>normaliseTrade({schema:5,currency:CURRENCY,market:'HL',id,at:D,name,direction:'long',date:new Date(D).toISOString().slice(0,10),stop:98,stop0:null,initialRisk:null,riskR:1,setup:'눌림',leverage:5,marginMode:'cross',process:'unreviewed',review:'',violations:[],
+    entryNote:'근거',stopNote:'이유',react:true,tfIn:'htf',tfOut:'htf',entries:[ev(id+'e',D,10,100)],fills:[ev(id+'f',D+3600e3,10,101)],funding:[],images:[],...x});
+   state.settings.v92From='2026-10-01';state.trades=[mk('gA','xyz:GOLD',{stop0:98,riskPlan:{target:103.62}}),mk('gB','xyz:XYZ100',{stop0:null,stop:null})];await persist();setPage('dashboard');renderAll();});
+  await page.waitForTimeout(600);
+  const G={};G.list=await page.evaluate(()=>[...document.querySelectorAll('#v92Dash li button[data-v63-open]')].map(b=>b.dataset.v63Open));
+  G.rrBad=await page.evaluate(()=>{const c=v92Checks(state.trades.find(t=>t.id==='gA')).find(x=>x.k==='rr');return {ok:c.ok,bad:!!c.bad,miss:c.miss};});
+  G.x=await page.evaluate(()=>document.querySelectorAll('#v92Dash .v106-x').length);
+  await page.click('#v92Dash .v106-x[data-v106-hide="gB"]');await page.waitForTimeout(800);
+  G.after=await page.evaluate(()=>({shown:!!document.querySelector('#v92Dash')&&!document.querySelector('#v92Dash').hidden,hide:state.trades.find(t=>t.id==='gB').v92Hide===true}));
+  G.saved=await page.evaluate(async()=>{const s=await v83Read();return !!(s.trades.find(t=>t.id==='gB')||{}).v92Hide;});
+  await page.evaluate(()=>openTrade('gA','review'));await page.waitForTimeout(1200);
+  G.box=await page.evaluate(()=>{const li=[...document.querySelectorAll('#v92Box .v92-list li')].find(l=>/손익비/.test(l.textContent));return li?li.className+':'+li.textContent:'';});
+  R.gaps=G;await ctx.close();}
  console.log(JSON.stringify(R));await browser.close();srv.close();})().catch(e=>{console.error(e);process.exit(1);});
