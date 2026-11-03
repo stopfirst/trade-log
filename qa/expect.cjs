@@ -67,7 +67,7 @@ module.exports = {
   /* v75~v79 + v91 거래 상세: 순서·HL 스탑 동기화·목표 수정·메모·포지션 %·계획 vs 실제(분석 탭 접힘 펼쳐서) */
   t91: { check(A) { for (const w of W) { A.eq(w + '.sync.stop', 1.2346); A.eq(w + '.sync.ir', 987.654); A.eq(w + '.order2', ['v76-sec v76-review', 'v76-sec v76-manage', 'v75-more', 'deleteTrade']); A.eq(w + '.lev', true);
     A.eq(w + '.v77stop.tg', 150); A.eq(w + '.v77stop.tile', '150'); A.eq(w + '.hold.saved', '보유 테스트');
-    A.has(w + '.v91.txt', '포지션 +153.8% · 증거금(3×) +461.4%'); A.eq(w + '.v91.n', 1); A.has(w + '.v79.t', '계획의 12%'); A.has(w + '.v79.dx', '계획보다 일찍 익절'); A.has(w + '.v79.v', '12%만 실현'); } } },
+    A.has(w + '.v91.txt', '포지션 +1.5% · 증거금(3×) +4.6%'); /* v105: 분모 = 진입 금액 4,012(전엔 진입 수량 40 → +153.8%) */ A.eq(w + '.v91.n', 1); A.has(w + '.v79.t', '계획의 12%'); A.has(w + '.v79.dx', '계획보다 일찍 익절'); A.has(w + '.v79.v', '12%만 실현'); } } },
   /* v91 복기·분석 구조 덤프 · 곡선 폭 · 넘침 0 */
   tdump: { check(A) { for (const w of W) { A.eq(w + '.open.open', true); A.eq(w + '.open.over', 0); A.ok(w + '.open.curveW'); A.has(w + '.dump.analysis', '핵심 지표'); A.has(w + '.v91.txt', '포지션 +153.8%'); A.has(w + '.v79.t', '계획의 12%'); } } },
   /* v94 첫 로딩: CSP 그대로 로딩, 첫 그리기 때 분석·새 기록 미리보기·캘린더 기준 달을 한가할 때로 미룸 → 결과는 일반 renderAll과 같음, 바로 화면 이동·새 기록 열기 시 먼저 처리 */
@@ -176,4 +176,11 @@ module.exports = {
     for (const k of ['first', 'open']) if (!(o.chart && o.chart[k] >= 0 && o.chart[k] <= 1500)) A.fail('chart.' + k + ' ' + (o.chart && o.chart[k]) + 'ms');
     if (!(o.chart && o.chart.r429 >= 0 && o.chart.r429 <= 1500)) A.fail('chart.r429 ' + (o.chart && o.chart.r429)); A.has('chart.note', '속도 제한'); A.eq('chart.stillSvg', true);
     if (!(o.chart && o.chart.reload >= 0 && o.chart.reload <= 1500)) A.fail('chart.reload'); A.eq('chart.reloadReq', 0); } },
+  /* v105 손익비 상자: 끈 뒤 10초 외부 갱신에도 좌표 불변·끄는 중 다시 그리기 무시·HL SL 유지, 라벨 호버/탭 때만, xyz 포지션 %, 타이핑 지연 */
+  t105: { check(A, o) { const b = o.box || {}; A.eq('box.lab0', '0'); A.eq('box.lab1', '1'); A.eq('box.lab2', '0'); A.eq('box.tpMoved', 30); A.eq('box.slShift', 0); A.eq('box.enShift', 0);
+    if (!(b.after10 <= 1)) A.fail('box.after10 ' + b.after10 + 'px'); if (!(Math.abs(b.slRelease) <= 2)) A.fail('box.slRelease ' + b.slRelease); if (!(b.slOthers <= 1)) A.fail('box.slOthers ' + b.slOthers);
+    if (!(Math.abs(b.midDragDy) <= 2)) A.fail('box.midDragDy ' + b.midDragDy); A.eq('box.stopAfter', 2280);
+    A.eq('touch.lab0', '0'); A.eq('touch.lab1', '1'); A.eq('touch.lab2', '0');
+    A.near('xyz.p', 0.1332, 0.0005); A.eq('xyz.base', 111440); A.eq('xyz.base2', 55720); A.has('xyz.txt', '포지션 +0.13%');
+    const t = o.type || {}; if (!(t.n >= 15 && t.avg < 16 && t.max < 50)) A.fail('type ' + JSON.stringify(t)); A.has('type.saved', '가격 반응 확인 후 진입 ABC def'); } },
 };
