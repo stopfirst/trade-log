@@ -193,4 +193,14 @@ module.exports = {
   t108: { check(A) { for (const w of W) { A.eq(w + '.list', ['gB']); A.eq(w + '.src.vis', true); A.eq(w + '.src.hasVer', true); A.has(w + '.src.txt', '이 기기에 저장된 HL 일지 기준'); A.eq(w + '.cloud0', false);
     A.eq(w + '.cl.shown', true); A.has(w + '.cl.txt', '버전 7'); A.eq(w + '.cl.urls', ['select=revision,updated_at']); A.eq(w + '.cl.afterSame', false); A.eq(w + '.cl.again', true);
     A.eq(w + '.page', 'settings'); A.eq(w + '.dbg', { journal: 'HL', local: 5, cloud: 7, gaps: ['gB'], hidden: ['gC'] }); } } },
+  /* v109 차트 그리기 자석(끔→약→강 순환·기기 저장, 강 = 가장 가까운 O·H·L·C·봉 가운데, 약 = 12px 안만, 끔 = 그대로, Ctrl 반전, 끌기 3종, 모바일 탭) · 위험 % 분모(현물 조회 전 보류·계산 중 지금 계좌·마감 현물 포함·상세 다시 그림) */
+  t109: { check(A, o) { for (const w of W) { A.eq(w + '.btn0.txt', '자석 끔'); A.eq(w + '.cyc', ['weak', 'strong', 'off'].map((m, i) => ({ mode: m, eff: m, txt: '자석 ' + ['약', '강', '끔'][i], pressed: String(m !== 'off'), inTools: true, vis: true, store: m })));
+    A.eq(w + '.strong', { a: true, b: true, aIsHigh: true, dpxA: 40, hint: true }); A.eq(w + '.weak', { farRaw: true, farNotSnap: true, nearSnap: true, nearDpx: true }); A.eq(w + '.off', { a: true, b: true, bNotSnap: true });
+    A.eq(w + '.dragTrend', { found: true, snap: true }); A.eq(w + '.dragBox', { found: true, snap: true, slOnly: true }); A.eq(w + '.dragRect', { found: true, snap: true }); A.eq(w + '.store', 'strong'); }
+    A.eq('w1440.ctrlBtn.txt', '자석 강 (Ctrl)'); A.eq('w1440.ctrl', { a: true, b: true, btnAfter: '자석 끔' }); A.eq('w1440.dot', true);
+    A.eq('risk.oldWay', 2.95); A.eq('risk.pending', { basis: null, pct: null, risk: null, codes: [], spot: 'pending', fallback: false, hold: true, detail: null });
+    A.eq('risk.dlg0.m', null); A.eq('risk.afterSpot.dlg', '포지션 위험 2.88%'); A.eq('risk.afterSpot.redo', 1); A.eq('risk.afterClose', { dlg: '포지션 위험 2.89%', redo: 2 });
+    A.eq('risk.computing.basis', 52010.92); A.eq('risk.computing.pct', 1.03); A.eq('risk.computing.codes', []); A.eq('risk.computing.fallback', true);
+    A.eq('risk.closed.basis', 51863); A.eq('risk.closed.pct', 1.04); A.eq('risk.closed.codes', []); A.eq('risk.closed.fallback', false);
+    A.eq('risk.zero.basis', 18240); A.eq('risk.noAddr.basis', 18240); } },
 };
