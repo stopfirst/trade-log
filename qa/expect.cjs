@@ -69,7 +69,7 @@ module.exports = {
     A.eq(w + '.v77stop.tg', 150); A.eq(w + '.v77stop.tile', '150'); A.eq(w + '.hold.saved', '보유 테스트');
     A.has(w + '.v91.txt', '포지션 +1.5% · 증거금(3×) +4.6%'); /* v105: 분모 = 진입 금액 4,012(전엔 진입 수량 40 → +153.8%) */ A.eq(w + '.v91.n', 1); A.has(w + '.v79.t', '계획의 12%'); A.has(w + '.v79.dx', '계획보다 일찍 익절'); A.has(w + '.v79.v', '12%만 실현'); } } },
   /* v91 복기·분석 구조 덤프 · 곡선 폭 · 넘침 0 */
-  tdump: { check(A) { for (const w of W) { A.eq(w + '.open.open', true); A.eq(w + '.open.over', 0); A.ok(w + '.open.curveW'); A.has(w + '.dump.analysis', '핵심 지표'); A.has(w + '.v91.txt', '포지션 +153.8%'); A.has(w + '.v79.t', '계획의 12%'); } } },
+  tdump: { check(A) { for (const w of W) { A.eq(w + '.open.open', true); A.eq(w + '.open.over', 0); A.ok(w + '.open.curveW'); A.has(w + '.dump.analysis', '핵심 지표'); A.has(w + '.v91.txt', '포지션 +1.5%'); A.has(w + '.v79.t', '계획의 12%'); } } },
   /* v94 첫 로딩: CSP 그대로 로딩, 첫 그리기 때 분석·새 기록 미리보기·캘린더 기준 달을 한가할 때로 미룸 → 결과는 일반 renderAll과 같음, 바로 화면 이동·새 기록 열기 시 먼저 처리 */
   t94: { check(A, o) { for (const k of ['hl', 'hl390', 'us']) { A.eq(k + '.n', 300); A.eq(k + '.at.pend', ['ana', 'cal', 'size']); A.eq(k + '.at.dash', true); A.eq(k + '.at.v63', false);
     A.eq(k + '.after.flushed', 'idle'); A.eq(k + '.after.cal', '2026-09'); A.eq(k + '.after.latest', '2026-09'); A.eq(k + '.after.v63', true); A.eq(k + '.after.v71', true); A.eq(k + '.after.page', 'dashboard');
