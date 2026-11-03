@@ -116,7 +116,7 @@ module.exports = {
       P('detail', { gap: '직전 손실 후 15분', b: ['복수매매 의심', '위험 키움'], why: 0, auto: ['복수매매 의심', '위험 키움'] });
       P('ana.cost', ['복수매매 의심', '위험 키움', '3연패 후 진입']); P('ana.pat', ['표시 없음:8', '복수매매 의심:3', '3연패 후 진입:1', '위험 키움:2']);
       P('m10', { open: true, month: '2026년 10월', flagged: '3건', total: '−90.00', without: '−120.00', meta: '10월 표시 3건 · 위반 3건',
-        rows: { revenge: ['복수매매 의심', '2', '−50.00', '50%'], maxloss: ['3연패 후 진입', '1', '+80.00', '100%'], riskup: ['위험 키움', '2', '−20.00', '50%'] }, why: null, prev: false, next: true, empty: null });
+        rows: { revenge: ['복수매매 의심', '2', '−50.00', '50%'], maxloss: ['3연패 후 진입', '1', '+80.00', '100%'], riskup: ['위험 키움', '2', '−20.00', '50%'], v111order: ['주문 실수', '0', '—', '—'] /* v111: HL 월간 표 '주문 실수' 줄 */ }, why: null, prev: false, next: true, empty: null });
       P('m9.month', '2026년 9월'); P('m9.flagged', '1건'); P('m9.total', '−60.00'); P('m9.without', '−50.00'); P('m9.rows.revenge', ['복수매매 의심', '1', '−10.00', '0%']); P('m9.prev', true); P('m9.next', false); P('mBack', '2026년 10월');
       P('set0', { cool: '', max: '', ph: '기본 15', vis: true });
       P('set1', { cool: 20, max: 2, dbg: { S2: ['revenge'], F3: ['maxloss'], G: ['revenge'], B: ['revenge', 'riskup'], C: ['revenge', 'maxloss'], D: ['maxloss', 'riskup'] } });
@@ -205,7 +205,7 @@ module.exports = {
     A.eq('s5.a.0.e', 20); A.eq('s5.b', [{ id: 'auto:hyperliquid:a8a32d43f025ad68:7000000:long', dir: 'long', st: 'OPEN', held: true, e: 20, f: 0, note: 'kPEPE 롱 근거', chart: ['k1'] }]);
     A.eq('s5.c', [{ id: 'auto:hyperliquid:a8a32d43f025ad68:7000000:long', dir: 'long', st: 'CLOSED', held: false, e: 20, f: 15, note: 'kPEPE 롱 근거', chart: ['k1'] }, { id: 'auto:hyperliquid:a8a32d43f025ad68:7000034:short', dir: 'short', st: 'CLOSED', held: false, e: 24, f: 21, note: '', chart: [] }]);
     A.eq('s5.gapSeen', 1); A.has('s5.flip.txt', '같은 주문으로 청산된 직전 롱'); A.eq('s5.flip.vis', true); A.eq('s5.opened', 'auto:hyperliquid:a8a32d43f025ad68:7000000:long'); A.has('s5.back', '숏으로 뒤집힘');
-    A.eq('s5.tag', true); A.eq('s5.tagLong', false); A.eq('s5.once', { n1: 2, n2: 0, entryNote: '예전 근거', stopNote: '지금 글', chart: ['o1'], flag: ['z1'] }); A.eq('s5.mob', { note: 'kPEPE 롱 근거', chart: ['k1'], st: 'CLOSED' });
+    A.eq('s5.tag', false); /* v111: 같은 주문 반전 거래는 '뒤집힘' 대신 '주문 실수' 배지(t111) */ A.eq('s5.tagLong', false); A.eq('s5.once', { n1: 2, n2: 0, entryNote: '예전 근거', stopNote: '지금 글', chart: ['o1'], flag: ['z1'] }); A.eq('s5.mob', { note: 'kPEPE 롱 근거', chart: ['k1'], st: 'CLOSED' });
     A.eq('s6.save2', true); A.eq('s6.stored', { hold: 'A창 글', fills: 2, sh: 11, chart: ['m1', 'p1'] }); A.eq('s6.typingBlur', false); A.eq('s6.pcMem', { hold: 'A창 글', fills: 2 });
     A.ok('s7.list'); A.eq('s7.opts', ['review']); A.eq('s7.after', '되살릴 사후 메모'); A.ok('s7.snaps'); A.eq('s7.box.replace', true); A.eq('s7.box.auto', true);
     A.eq('s8.pushed', true); A.eq('s8.cloud', '자동 저장 확인'); A.eq('s8.pc', '자동 저장 확인'); A.has('s8.headPc.txt', '동기화됨'); A.has('s8.headMob.txt', '동기화됨'); A.eq('s8.headMob.vis', true);
@@ -228,4 +228,23 @@ module.exports = {
       A.eq(w + '.saved', { proc: '규칙 위반', tags: ['과도한 위험 배정'], ds: ['risk', 'v99revenge', 'v99riskup'] });
       A.eq(w + '.unFound', true); A.eq(w + '.restored.chips', ['risk', 'v99revenge', 'v99riskup']); A.eq(w + '.restored.ds', null); A.eq(w + '.restored.proc', '규칙 위반');
       A.eq(w + '.restored.pre', ['계획 외 진입', '과도한 위험 배정']); A.eq(w + '.stored2', 'none'); A.eq(w + '.dialogs', []); } } },
+  /* v111: 주문 실수(kPEPE 10-30 22:05:13 KST 한 주문 반전 = 실제 11-03 22:05 건 · ETH 4분59초 창 · BTC 5분1초 아님 · 서버 flip_alerts 병합 · × 숨김/다시 보기 · 월간) · 타이핑 중 미룸 · 자동 높이 · 복기 필요 기준 */
+  t111: { check(A) {
+    A.eq('m.trades', [{ dir: 'long', st: 'CLOSED' }, { dir: 'short', st: 'CLOSED' }]);
+    A.eq('m.model', [{ coin: 'ETH', dir: 'short', kind: 'window', src: 'app', gap: 299, prevSize: 2, newSize: 2, oid: '91003', tid: '21', time: '13:04:59' }, { coin: 'kPEPE', dir: 'short', kind: 'order', src: 'app', gap: 0, prevSize: 4456063, newSize: 10020607, oid: '880004', tid: '7000034', time: '13:05:13' }]);
+    A.eq('m.tagShort', { mis: 1, flip: 0 }); A.eq('m.tagLong', { mis: 0, flip: 0 }); A.eq('m.tagE2', { mis: 1, flip: 0 }); A.eq('m.tagB2', { mis: 0, flip: 0 });
+    A.eq('m.pull', true); A.eq('m.model2.0.src', 'app+server'); A.eq('m.flipReads', 1); A.eq('m.listMis', true); A.eq('m.writes', []);
+    A.eq('m.det', { mis: true, desc: '주문 실수한 주문으로 롱 4,456,063 청산 + 숏 10,020,607 진입 · 10/30 22:05:13 KST · reduce-only 아님', boxes: 1, hid: false, over: false });
+    A.eq('m.afterX.det.mis', false); A.eq('m.afterX.det.hid', true); A.eq('m.afterX.dis', ['v111order']); A.eq('m.afterX.tag', { mis: 0, flip: 1 }); A.eq('m.saved', ['v111order']);
+    A.eq('m.monthHidden.n', 1); A.eq('m.restored.det.mis', true); A.eq('m.restored.dis', null);
+    A.eq('m.month', { row: ['주문 실수한 주문 반전 1 · 5분 안 1', '2', '−57.35', '50%'], n: 2, closed: 2, usd: -57.35, win: 50, meta: '10월 표시 3건 · 위반 3건 · 주문 실수 2건' }); A.eq('m.expectUsd', -57.35);
+    A.eq('t.during', { same: true, focus: true, flush: 0, detail: 2, render: 1, sync: 1, syncRet: false, queued: ['flush', 'light:wB1', 'mirror', 'renderAll', 'renderDetail', 'sync'] });
+    A.eq('t.after', { queued: [], redrawn: true, focus: true, val: '입력 중 다시 그리기 끝', saved: '입력 중 다시 그리기 끝', flushed: true });
+    for (const w of ['a.pc', 'mob.auto']) for (const k of ['entry', 'review']) { A.eq(w + '.' + k + '.scroll', false); A.eq(w + '.' + k + '.tall', true); A.eq(w + '.' + k + '.auto', true); }
+    A.eq('a.grow', { more: true, scroll: false }); A.eq('a.read', { len: 147, end: true });
+    const no = { need: false, api: false, tg: false, v18: false };
+    A.eq('r.r_none', { need: true, api: false, tg: false, v18: true }); A.eq('r.r_entryOnly', { need: true, api: false, tg: false, v18: true });
+    for (const k of ['process', 'grade', 'emo', 'exitNote', 'postEval', 'review', 'open']) A.eq('r.r_' + k, no);
+    A.eq('r.r_quick', { need: false, api: false, tg: true, v18: false }); A.eq('r.pendingIds', ['r_entryOnly', 'r_none']);
+    A.eq('mob.det', { mis: true, over: false, doc: false }); A.eq('mob.afterTap', { dis: ['v111order'], hid: true }); A.eq('dialogs', 0); } },
 };
