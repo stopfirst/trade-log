@@ -189,4 +189,8 @@ module.exports = {
     A.eq('second.eq', 18250); A.eq('second.err', null); A.has('second.tile', '50,950.00'); A.eq('absNet', 1);
     A.eq('dbg.HL정의총액', 50950); A.eq('dbg.앱표시총액', 50950); A.eq('dbg.차이', 0); A.eq('dbg.스테이킹_참고', 800);
     A.eq('stale.err', 'HL 500'); A.has('stale.tile', '⚠ 거래계좌 10분 전 값'); A.eq('recovered.err', null); if (/⚠ 거래계좌/.test((o.recovered || {}).tile || '')) A.fail('recovered.tile still warns'); } },
+  /* v108 일지 빈 칸: 1440·390 같은 판정, 카드에 '이 기기 일지 기준 · 앱 버전'(모바일에서도 보임), 클라우드 새 저장본 안내(revision만 조회), 설정 열기 */
+  t108: { check(A) { for (const w of W) { A.eq(w + '.list', ['gB']); A.eq(w + '.src.vis', true); A.eq(w + '.src.hasVer', true); A.has(w + '.src.txt', '이 기기에 저장된 HL 일지 기준'); A.eq(w + '.cloud0', false);
+    A.eq(w + '.cl.shown', true); A.has(w + '.cl.txt', '버전 7'); A.eq(w + '.cl.urls', ['select=revision,updated_at']); A.eq(w + '.cl.afterSame', false); A.eq(w + '.cl.again', true);
+    A.eq(w + '.page', 'settings'); A.eq(w + '.dbg', { journal: 'HL', local: 5, cloud: 7, gaps: ['gB'], hidden: ['gC'] }); } } },
 };
