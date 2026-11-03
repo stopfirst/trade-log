@@ -264,4 +264,21 @@ module.exports = {
     A.eq('s.panel', { hold: true, reached: false }); A.eq('s.pre', ['하루·이번 주·이번 달 손실 한도: HL 현물 계산 중이라 판정 보류 — 받으면 다시 계산해요.']);
     A.eq('s.limitOverrideHidden', true); A.eq('s.widget', { badge: '한도 계산 중', day: false }); A.eq('s.spot', { items: 1, st: 'held' });
     A.eq('s.after.hold', false); A.eq('s.after.hit', false); A.eq('s.after.pct', -1.5); A.eq('s.after.spot', 1000); A.eq('s.after.value', 2000); A.eq('s.after.panelHold', false); A.eq('s.after.txt', '전일 마감 2,000.00 USDC (현물 포함)'); } },
+  /* v113 거래 기록 목록 경량화(화면 폭에 맞는 목록 하나 · 처음 표 100/카드 50 · 끝 근처 자동/더 보기, 건수는 전체) + 동기화·HL 요청 멈춤 방지(시간 제한·실패 칩 재시도) */
+  t113: { check(A) {
+    const row = (rows, cards, more, count) => ({ rows, cards, visRows: rows, visCards: cards, more, count });
+    A.eq('L.n', 300); A.eq('L.first', row(100, 0, true, '300건')); A.eq('L.order', true); A.eq('L.countAll', true); A.eq('L.same0', []); A.eq('L.same1', []);
+    A.eq('L.more1', row(200, 0, true, '300건')); A.eq('L.v99.ok', true); A.ok('L.v99.want'); A.eq('L.keep', row(200, 0, true, '300건')); A.eq('L.del', row(200, 0, true, '299건'));
+    A.eq('L.scroll', row(299, 0, false, '299건')); A.eq('L.auto', true); A.eq('L.search', row(74, 0, false, '74건')); A.eq('L.btcAll', 74); A.eq('L.clear', row(100, 0, true, '299건'));
+    A.eq('L.toMob', row(0, 100, true, '299건')); A.eq('L.toPc', row(100, 0, true, '299건'));
+    A.eq('M.first', row(0, 50, true, '300건')); A.eq('M.more', row(0, 100, true, '300건')); A.eq('M.v99', true); A.eq('M.toPc', row(100, 0, true, '300건')); A.eq('M.back', row(0, 100, true, '300건'));
+    A.eq('N.first', 'pushed'); A.eq('N.ok0', true); A.has('N.busyChip', '받는 중 '); A.eq('N.failChip', '받기 실패 · 다시 시도'); A.eq('N.failBusy', false); A.has('N.err1', '시간 초과');
+    A.eq('N.page', 'dashboard'); A.eq('N.retryChip', true); A.eq('N.retryTap', 1);
+    A.eq('N.dead', { r: false, busy: false, st: 'fail', wd: 1 }); A.eq('N.deadChip', '받기 실패 · 다시 시도');
+    A.eq('N.lock', { r: 'same', skip: 1, fast: true }); A.eq('N.q', { r: 'same', to: 1 });
+    A.eq('N.offChip', '오프라인'); A.eq('N.offSync', false); A.eq('N.onChip', true);
+    A.eq('N.vis0.busy', true); A.eq('N.vis.busy', false); A.eq('N.vis.visAbort', 1); A.eq('N.vis.ok', true);
+    A.has('N.slowChip', '받는 중 '); A.eq('N.slow.ok', true); A.eq('N.slow.other', true);
+    A.eq('H.to', true); A.eq('H.spotBusy', false); A.eq('H.inflight', 0); A.eq('H.queue', 0); A.eq('H.next', true); A.eq('H.spotOk', true);
+    A.eq('H.v62busy0', true); A.eq('H.v62busy', false); A.eq('H.v62ms', true); A.eq('H.pend0', true); A.eq('H.stale', true); A.eq('H.reset', true); } },
 };
