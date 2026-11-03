@@ -14,16 +14,19 @@ const as=(user,q,params=[])=>db.transaction(async tx=>{await tx.exec(user?`set l
 const T1=newToken(),T2=newToken();await as(U1,'select public.kw_register_token($1)',[hash(T1)]);await as(U2,'select public.kw_register_token($1)',[hash(T2)]);
 const tr=(o)=>({id:o.name,name:o.name,market:'HL',direction:'long',entries:[{id:'e',date:o.d,time:'10:00:00',price:100,shares:1,fee:0.1}],fills:o.f||[],stop0:95,riskPlan:{target:112,stop:95},
  entryNote:o.en??'전고점 반응',stopNote:o.sn??'',holdNote:'비밀 메모',react:o.react??true,tfIn:'ltf',tfOut:'4h',images:[{data:'x'}],chartNotes:[{kind:'note',text:'메모'},{kind:'rr',side:'long',tp:115}],...(o.x||{})});
-const payload={settings:{v92From:'2026-11-01',v92MinRR:2,account:1000},trades:[tr({name:'BTC',d:'2026-11-02'}),tr({name:'OLD',d:'2026-08-01'}),tr({name:'ETH',d:'2026-11-02',en:'  ',react:'yes'}),'junk']};
+const payload={settings:{v92From:'2026-11-01',v92MinRR:2,account:1000},trades:[tr({name:'BTC',d:'2026-11-02'}),tr({name:'OLD',d:'2026-08-01'}),tr({name:'ETH',d:'2026-11-02',en:'  ',react:'yes'}),tr({name:'HID',d:'2026-11-02',sn:'',x:{v92Hide:true}}),'junk']};
 await db.query(`insert into public.journal_cloud(user_id,scope,payload,revision) values($1,'HL',$2::jsonb,1),($3,'HL',$4::jsonb,1)`,[U1,JSON.stringify(payload),U2,JSON.stringify({trades:[tr({name:'OTHER',d:'2026-11-02'})]})]).catch(async e=>{console.log('insert shape',e.message);process.exit(1);});
+await db.query(`insert into public.journal_cloud(user_id,scope,payload,revision) values($1,'US',$2::jsonb,1)`,[U1,JSON.stringify({settings:{v92MinRR:2},trades:[tr({name:'LOWRR',d:'2026-11-02',sn:'이유',x:{tfOut:'ltf',riskPlan:{target:106,stop:95},chartNotes:[]}})]})]);
 const call=(t,d)=>as(null,'select public.review_gaps($1,$2::date) r',[t,d]).then(x=>x[0].r);
 let r=await call(T1,'2026-11-02');ok(r.ok&&r.version===11,'anon + 토큰 호출 · version 11');
-const H=r.journal.HL;ok(H.trades.length===2&&H.trades.map(t=>t.name).join()==='BTC,ETH','40일 전 거래·잘못된 항목 제외, 자기 일지만');
+const H=r.journal.HL;ok(H.trades.length===3&&H.trades.map(t=>t.name).join()==='BTC,ETH,HID','40일 전 거래·잘못된 항목 제외, 자기 일지만');
+ok(H.trades[2].hide===true&&H.trades[0].hide===null&&Object.prototype.hasOwnProperty.call(H.trades[0],'hide')&&rm.hasHideField(r.journal),'2.12.0 hide = t.v92Hide(없으면 null 키) — 앱 v106 × 숨김');
 ok(H.from==='2026-11-01'&&H.minRR===2,'설정 v92From·v92MinRR 전달');
 const b=H.trades[0];ok(b.entryNote===true&&b.stopNote===false&&b.react===true&&b.tfIn==='ltf'&&b.target===112&&b.rrTp===115,'불리언·TF·목표·R 도구 목표');
 ok(!JSON.stringify(r).includes('비밀')&&!JSON.stringify(r).includes('전고점')&&!JSON.stringify(r).includes('images'),'메모 본문·사진·차트 메모는 안 나감');
 ok(H.trades[1].entryNote===false&&H.trades[1].react===false,'공백 메모 = 없음, 불리언 아닌 react = false');
-const rows=rm.pick(r.journal,'2026-11-02');ok(rows.length===2&&rows[0].gaps.map(g=>g.k).join()==='stop,tf','서버 pick과 연결: 스탑 이유·LTF→HTF');
+const rows=rm.pick({HL:r.journal.HL},'2026-11-02');ok(rows.length===2&&rows.map(x=>x.name).join()==='BTC,ETH'&&rows[0].gaps.map(g=>g.k).join()==='stop,tf','서버 pick과 연결: 스탑 이유·LTF→HTF · 숨긴 HID 제외');
+const lr=rm.pick(r.journal,'2026-11-02').find(x=>x.name==='LOWRR');ok(lr&&lr.ok&&r.journal.US.trades[0].target===106&&rm.planRR(r.journal.US.trades[0]).toFixed(2)==='1.20','2.12.0 손익비 1:1.20(기준 2 미달)이 기록돼 있으면 빈 칸 아님(앱 v106)');
 let bad=false;try{await call(newToken(),'2026-11-02');}catch(e){bad=/invalid collector token/.test(e.message);}ok(bad,'모르는 토큰 거부');
 ok((await call(T1,'2019-01-01')).error==='bad_since','이상한 날짜 거부');
 ok((await call(T2,'2026-11-02')).journal.HL.trades[0].name==='OTHER','다른 사용자 토큰 = 그 사용자 일지만');

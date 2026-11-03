@@ -1,8 +1,8 @@
--- Trade Journal alert11: 매일 복기 알림용 일지 빈 칸 조회 (trade-alert 2.8.0 · 앱 v92).
+-- Trade Journal alert11: 매일 복기 알림용 일지 빈 칸 조회 (trade-alert 2.8.0 · 앱 v92; 2.12.0 · 앱 v106: 거래마다 'hide' = t.v92Hide 추가).
 -- Run in Supabase SQL Editor AFTER cloud.sql and kiwoom-collector.sql. Safe to run again (create or replace only; no table, no data change).
 -- review_gaps(token, since) : read-only. Returns, for the token owner's US/HL journals, the trades with any entry/fill on or after
 --   (since − 40 days), reduced to what the reminder needs: name, direction, entry/fill dates·prices·shares, stop0, target,
---   plan0.rr, and whether entry reason / stop reason are written, plus react / tfIn / tfOut and settings v92From / v92MinRR.
+--   plan0.rr, and whether entry reason / stop reason are written, plus react / tfIn / tfOut, hide (app v106 × = t.v92Hide) and settings v92From / v92MinRR.
 --   No note text, no images, no chart drawings leave the database (only the long/short R-tool target price).
 -- Publishable key + collector token "kwc_..." (same kw_auth check and shared 60 calls/minute limit). No service_role key.
 -- Undo: drop function public.review_gaps(text, date);
@@ -24,7 +24,7 @@ begin
          from jsonb_array_elements(case when jsonb_typeof(t->'entries')='array' then t->'entries' else '[]'::jsonb end) e where jsonb_typeof(e)='object'), '[]'::jsonb),
       'fills', coalesce((select jsonb_agg(jsonb_build_object('date', f->'date', 'time', f->'time', 'shares', f->'shares', 'seq', f->'seq'))
          from jsonb_array_elements(case when jsonb_typeof(t->'fills')='array' then t->'fills' else '[]'::jsonb end) f where jsonb_typeof(f)='object'), '[]'::jsonb),
-      'stop0', t->'stop0', 'target', t->'riskPlan'->'target', 'planRR', t->'plan0'->'rr',
+      'stop0', t->'stop0', 'target', t->'riskPlan'->'target', 'planRR', t->'plan0'->'rr', 'hide', t->'v92Hide',
       'rrTp', (select x->'tp' from jsonb_array_elements(case when jsonb_typeof(t->'chartNotes')='array' then t->'chartNotes' else '[]'::jsonb end) x
                where jsonb_typeof(x)='object' and x->>'kind'='rr' and (x->>'side'='short') = (t->>'direction'='short') limit 1),
       'entryNote', length(btrim(coalesce(t->>'entryNote',''))) > 0, 'stopNote', length(btrim(coalesce(t->>'stopNote',''))) > 0,

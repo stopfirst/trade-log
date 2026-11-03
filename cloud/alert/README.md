@@ -1,4 +1,10 @@
-# 매매일지 손실한도 판정 v1.6 (trade-alert 2.11.0 · alert15)
+# 매매일지 손실한도 판정 v1.6 (trade-alert 2.12.0 · alert16)
+
+## 2.12.0 — 매일 복기 알림 = 앱 v106 '일지 빈 칸'과 같은 판정(손실 한도·백업·존·복수매매 변경 없음 · .env 추가값 없음)
+- 손익비: 계획 손익비(plan0.rr 또는 최초 손절·목표로 계산)가 **기록돼 있으면 기준(v92MinRR) 미달이어도 빈 칸 아님**. 빈 칸은 손익비 '미기록'일 때만.
+  (기준 미달 표시는 앱 거래 상세 '진입 전 체크' 카드에 그대로 남음. 'LTF 진입인데 HTF 청산' ⚠️는 앱과 같이 그대로 빈 칸.)
+- 앱 대시보드·복기 빈 칸 목록에서 **×로 숨긴 거래(t.v92Hide)는 알림에서도 뺌**(건수에도 안 셈). 앱에서 '다시 보기'하면 다음 날 알림부터 다시 나옴.
+- Supabase: **alert11.sql 다시 실행**(review_gaps가 거래마다 `hide` = t.v92Hide를 더 줌, 읽기 전용·데이터 변경 없음). 예전 SQL 그대로면 손익비 판정은 바뀌지만 숨긴 거래는 계속 나오고, 로그에 'alert11.sql이 예전 판' 경고 1회.
 
 ## 2.11.0 — 복수매매 차단 알림(판정·백업·존 로직 변경 없음 · 기본 켜짐 · 기록용 SQL alert15.sql)
 손실 직후 감정 진입을 텔레그램으로 바로 경고합니다. 주문을 막거나 취소하지 않습니다(알림만). HL·미국주식 각각 따로 봅니다.
@@ -189,6 +195,7 @@ alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_
 앱 설정의 손실 한도(하루·주·달 %)는 앱 자체 표시용이고, 서버 판정은 `.env`(기본 3/6/10)를 씁니다. 앱 설정 → 계좌·위험에 서버 값이 그대로 보입니다.
 
 ## 테스트(개발)
+2.12.0: `node --test tests/*.test.mjs` (remind.test.mjs 손익비 미달·숨김 포함) · SQL `node tests/alert11-sql.pglite.mjs <cloud.sql> <kiwoom-collector.sql> <alert11.sql>`.
 2.11.0: `node --test tests/*.test.mjs` 163개 (revenge.test.mjs 15) · SQL `node tests/alert15-sql.pglite.mjs <cloud.sql> <kiwoom-collector.sql> <alert15.sql>` 30개.
 `node --test tests/*.test.mjs`(존: zones.test.mjs = tests/fixtures/flow-chart 원본과 동일성, zonewatch.test.mjs = 터치·중복·재시작·정리·명령) · 라이브 비교(수동): `node tests/zones-live-compare.mjs` · SQL: `node tests/alert13-sql.pglite.mjs <cloud 폴더>`(backup_dump·복원 왕복·security/harden-2026-11.sql), `node tests/alert2-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql fixtures`, `node tests/alert3-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql fixtures`, `node tests/alert5-sql.pglite.mjs cloud.sql kiwoom-collector.sql hl-collector.sql balance-snapshot.sql alert2.sql alert3.sql alert5.sql fixtures` (@electric-sql/pglite)
 
