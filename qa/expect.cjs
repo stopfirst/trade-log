@@ -193,6 +193,23 @@ module.exports = {
   t108: { check(A) { for (const w of W) { A.eq(w + '.list', ['gB']); A.eq(w + '.src.vis', true); A.eq(w + '.src.hasVer', true); A.has(w + '.src.txt', '이 기기에 저장된 HL 일지 기준'); A.eq(w + '.cloud0', false);
     A.eq(w + '.cl.shown', true); A.has(w + '.cl.txt', '버전 7'); A.eq(w + '.cl.urls', ['select=revision,updated_at']); A.eq(w + '.cl.afterSame', false); A.eq(w + '.cl.again', true);
     A.eq(w + '.page', 'settings'); A.eq(w + '.dbg', { journal: 'HL', local: 5, cloud: 7, gaps: ['gB'], hidden: ['gC'] }); } } },
+  /* v110 PC·모바일 자동 동기화(모의 클라우드 · 두 컨텍스트 1440/390): 첫 병합 · 다른 칸 둘 다 · 같은 칸 최신 + 진 값 사본 '충돌 1건' → 진 값으로 바꾸기 양쪽 반영 · 그림 양쪽(V100 경로) ·
+     입력 중 칸·포커스 유지(진 값 사본) · kPEPE 체결 지연·순서 뒤바뀜(POSITION_GAP 보류)에도 롱 메모·그림 유지 → 숏 '뒤집힘' 링크 · 예전 사본 1회 되살림 · v83 두 창 칸 병합 · 로컬 기록 되살리기 · 디바운스 자동 저장 · 포커스 자동 받기 */
+  t110: { check(A) { A.eq('s0.mobTrades', ['gA', 'gB', 'gC']); A.eq('s0.cas0', [0, 1]);
+    const both = ['PC 진입 근거', '모바일 스탑 이유']; A.eq('s1.pc', both); A.eq('s1.mob', both); A.eq('s1.saved', both); A.eq('s1.cloud', both);
+    A.eq('s2.pc', '모바일 청산'); A.eq('s2.mob', '모바일 청산'); A.eq('s2.pcChip', { txt: '충돌 1건', vis: true }); A.eq('s2.mobChip', { txt: '충돌 1건', vis: true });
+    A.eq('s2.conf', [{ tradeId: 'gB', field: 'exitNote', kept: '모바일 청산', lost: 'PC 청산' }]); A.eq('s2.pop.vis', true); A.has('s2.pop.txt', 'PC 청산');
+    A.eq('s2.useLocal', 'PC 청산'); A.eq('s2.pcLeft', 0); A.eq('s2.mobAfter', 'PC 청산'); A.eq('s2.mobLeft', 0);
+    A.eq('s3.pcDraw', { v100: 1, saved: ['p1'] }); A.eq('s3.mobDraw', { v100: 1, saved: ['m1'] }); A.eq('s3.pc', ['m1', 'p1']); A.eq('s3.mob', ['m1', 'p1']); A.eq('s3.cloud', ['m1', 'p1']);
+    const typed = 'PC 진입 근거 + 모바일 입력 중'; A.eq('s4.typing', { val: typed, focus: true, state: typed }); A.eq('s4.mob', typed + ' 끝'); A.eq('s4.pc', typed + ' 끝'); A.eq('s4.cloud', typed + ' 끝'); A.eq('s4.conf', ['PC 새 근거']);
+    A.eq('s5.a.0.e', 20); A.eq('s5.b', [{ id: 'auto:hyperliquid:a8a32d43f025ad68:7000000:long', dir: 'long', st: 'OPEN', held: true, e: 20, f: 0, note: 'kPEPE 롱 근거', chart: ['k1'] }]);
+    A.eq('s5.c', [{ id: 'auto:hyperliquid:a8a32d43f025ad68:7000000:long', dir: 'long', st: 'CLOSED', held: false, e: 20, f: 15, note: 'kPEPE 롱 근거', chart: ['k1'] }, { id: 'auto:hyperliquid:a8a32d43f025ad68:7000034:short', dir: 'short', st: 'CLOSED', held: false, e: 24, f: 21, note: '', chart: [] }]);
+    A.eq('s5.gapSeen', 1); A.has('s5.flip.txt', '같은 주문으로 청산된 직전 롱'); A.eq('s5.flip.vis', true); A.eq('s5.opened', 'auto:hyperliquid:a8a32d43f025ad68:7000000:long'); A.has('s5.back', '숏으로 뒤집힘');
+    A.eq('s5.tag', true); A.eq('s5.tagLong', false); A.eq('s5.once', { n1: 2, n2: 0, entryNote: '예전 근거', stopNote: '지금 글', chart: ['o1'], flag: ['z1'] }); A.eq('s5.mob', { note: 'kPEPE 롱 근거', chart: ['k1'], st: 'CLOSED' });
+    A.eq('s6.save2', true); A.eq('s6.stored', { hold: 'A창 글', fills: 2, sh: 11, chart: ['m1', 'p1'] }); A.eq('s6.typingBlur', false); A.eq('s6.pcMem', { hold: 'A창 글', fills: 2 });
+    A.ok('s7.list'); A.eq('s7.opts', ['review']); A.eq('s7.after', '되살릴 사후 메모'); A.ok('s7.snaps'); A.eq('s7.box.replace', true); A.eq('s7.box.auto', true);
+    A.eq('s8.pushed', true); A.eq('s8.cloud', '자동 저장 확인'); A.eq('s8.pc', '자동 저장 확인'); A.has('s8.headPc.txt', '동기화됨'); A.has('s8.headMob.txt', '동기화됨'); A.eq('s8.headMob.vis', true);
+    A.eq('dbg.pc.ready', true); A.eq('dbg.pc.lastErr', ''); A.eq('dbg.mob.ready', true); A.eq('dbg.mob.lastErr', ''); A.eq('cas.bad', 0); } },
   /* v109 차트 그리기 자석(끔→약→강 순환·기기 저장, 강 = 가장 가까운 O·H·L·C·봉 가운데, 약 = 12px 안만, 끔 = 그대로, Ctrl 반전, 끌기 3종, 모바일 탭) · 위험 % 분모(현물 조회 전 보류·계산 중 지금 계좌·마감 현물 포함·상세 다시 그림) */
   t109: { check(A, o) { for (const w of W) { A.eq(w + '.btn0.txt', '자석 끔'); A.eq(w + '.cyc', ['weak', 'strong', 'off'].map((m, i) => ({ mode: m, eff: m, txt: '자석 ' + ['약', '강', '끔'][i], pressed: String(m !== 'off'), inTools: true, vis: true, store: m })));
     A.eq(w + '.strong', { a: true, b: true, aIsHigh: true, dpxA: 40, hint: true }); A.eq(w + '.weak', { farRaw: true, farNotSnap: true, nearSnap: true, nearDpx: true }); A.eq(w + '.off', { a: true, b: true, bNotSnap: true });

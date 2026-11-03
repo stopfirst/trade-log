@@ -3,7 +3,8 @@
    (1) 1440·390 같은 데이터 → 같은 빈 칸 목록(손익비 미달만 = 제외, × 숨김 = 제외, 미기록 = 남음)
    (2) 카드에 '이 기기에 저장된 HL 일지 기준 · 앱 vNNN'이 두 폭 모두 화면에 보임(모바일 헤더 버전은 숨김이라)
    (3) 클라우드 로그인 + 클라우드 revision 7 > 이 기기 5 → '아직 안 불러온 저장본 · 버전 7' 안내, 요청은 revision·updated_at 만(본문 payload 없음), 이 기기 7이면 안내 사라짐
-   (4) [설정 열기] → 설정 화면. 카드 가로 넘침 없음 */
+   (4) [설정 열기] → 설정 화면. 카드 가로 넘침 없음
+   v110: 자동 동기화가 켜져 있으면 이 안내 대신 자동 동기화(t110). 여기서는 자동 동기화를 끈 상태로 예전 안내를 확인 */
 const {chromium}=require('../lib/pw.cjs');const fs=require('fs'),http=require('http');
 const [,,htmlPath,outDir,tag]=process.argv;fs.mkdirSync(outDir,{recursive:true});
 const html=fs.readFileSync(htmlPath);
@@ -62,7 +63,7 @@ const init=([A,scen])=>{
   G.src=await page.evaluate(()=>{const e=document.querySelector('#v92Dash .v108-src');if(!e)return null;const r=e.getBoundingClientRect();return {txt:e.textContent,vis:r.width>0&&r.height>0,hasVer:e.textContent.includes(APP_VER)};});
   G.cloud0=await page.evaluate(()=>!!document.querySelector('#v92Dash .v108-cloud'));
   /* (3) 클라우드 안내 */
-  G.cl=await page.evaluate(async()=>{const P='https://abcdefghijklmnop.supabase.co';cloudConfig={url:P,key:'sb_publishable_'+'x'.repeat(20)};cloudSession={project:P,user:{id:'u-1'},access_token:'tok',expires_at:Math.floor(Date.now()/1000)+3600};
+  G.cl=await page.evaluate(async()=>{const P='https://abcdefghijklmnop.supabase.co';if(typeof V110!=='undefined')V110.auto=false;/* v110: 자동 동기화 끔 상태에서 예전 안내 확인 */cloudConfig={url:P,key:'sb_publishable_'+'x'.repeat(20)};cloudSession={project:P,user:{id:'u-1'},access_token:'tok',expires_at:Math.floor(Date.now()/1000)+3600};
    const urls=[];const f0=window.fetch;window.fetch=async(u,o)=>{const s=String(u&&u.url||u);if(s.includes('/rest/v1/journal_cloud')){urls.push(s);return new Response(JSON.stringify([{revision:7,updated_at:'2026-11-03T12:10:00Z'}]),{status:200,headers:{'Content-Type':'application/json'}});}return f0(u,o);};
    localStorage.setItem(cloudRevisionKey(),'5');await v108Check(true);await new Promise(r=>setTimeout(r,200));
    const c=document.querySelector('#v92Dash .v108-cloud');const out={shown:!!c,txt:c?c.textContent:'',urls:urls.map(u=>u.split('?')[1].split('&')[0])};
