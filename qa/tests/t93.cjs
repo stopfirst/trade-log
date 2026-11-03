@@ -77,6 +77,8 @@ const wait=async(page,fn,arg,ms=6000)=>{const t0=Date.now();while(Date.now()-t0<
  // (5) 끊김 → 폴백·백오프
  await page.evaluate(()=>{window.__wsBlock=true;window.__s0=window.__c.status;window.__ws0=window.__ws.length;window.__kill();});
  await page.waitForTimeout(1200);
+ /* v112: 재연결 지연이 0.8~1.2초 무작위라 1.2초 시점엔 타이머가 막 끝나 다음 시도 중일 수 있음 → 폴백 조회 + 다음 재연결 타이머가 같이 보일 때까지 최대 3초 더 기다림(판정 그대로) */
+ for(let i=0;i<30;i++){if(await page.evaluate(()=>window.__c.status>window.__s0&&!!V93.timer&&!V93.live))break;await page.waitForTimeout(100);}
  R.down=await page.evaluate(()=>({live:V93.live,on:document.getElementById('v93Live').classList.contains('on'),polled:window.__c.status>window.__s0,timer:!!V93.timer}));
  R.v89down=await page.evaluate(async()=>{const before=window.__c.info.userFillsByTime||0;V89.at=0;await v89Ensure(V89.from);return {calls:(window.__c.info.userFillsByTime||0)-before};});
  await page.waitForTimeout(5200);

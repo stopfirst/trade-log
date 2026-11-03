@@ -5,7 +5,7 @@
 const W = ['w1440', 'w390'];
 module.exports = {
   /* v43/v56 손익비 도구 → 스탑·1R 자동 채움, 사용자가 고친 값 유지 */
-  t56: { check(A) { A.eq('done', true); A.eq('manual', { stop0: 99.6, ir: 28 }); A.eq('rr.stop', 98.8); A.eq('rr.stop0', 98.8); A.eq('rr.ir', 60); A.near('rr.plan.rr', 2.5, 1e-6);
+  t56: { check(A) { A.eq('done', true); A.eq('a', { stop0: 99.2, ir: 44, auto: true }); A.eq('manual', { stop0: 99.2, ir: 44 }); /* v112: 추적 손절(손으로 현재 스탑 변경)은 최초 손절을 안 바꿈 — 캐시 경쟁 없이 결정적 */ A.eq('rr.stop', 98.8); A.eq('rr.stop0', 98.8); A.eq('rr.ir', 60); A.near('rr.plan.rr', 2.5, 1e-6);
     A.eq('userEdit.stop0', 98.5); A.eq('rr2', { stop: 98.9, stop0: 98.5 }); A.eq('first', [100, 30, 'long']); } },
   /* v57 현물 포함 계좌 총액 카드 (현물 모의 가격) */
   t57: { check(A) { A.near('basis', 1796.14, 1e-6); A.has('card', '1,796.14 USDC'); A.has('card', '현물 UBTC 0.01'); } },
@@ -71,12 +71,12 @@ module.exports = {
   /* v91 복기·분석 구조 덤프 · 곡선 폭 · 넘침 0 */
   tdump: { check(A) { for (const w of W) { A.eq(w + '.open.open', true); A.eq(w + '.open.over', 0); A.ok(w + '.open.curveW'); A.has(w + '.dump.analysis', '핵심 지표'); A.has(w + '.v91.txt', '포지션 +1.5%'); A.has(w + '.v79.t', '계획의 12%'); } } },
   /* v94 첫 로딩: CSP 그대로 로딩, 첫 그리기 때 분석·새 기록 미리보기·캘린더 기준 달을 한가할 때로 미룸 → 결과는 일반 renderAll과 같음, 바로 화면 이동·새 기록 열기 시 먼저 처리 */
-  t94: { check(A, o) { for (const k of ['hl', 'hl390', 'us']) { A.eq(k + '.n', 300); A.eq(k + '.at.pend', ['ana', 'cal', 'size']); A.eq(k + '.at.dash', true); A.eq(k + '.at.v63', false);
+  t94: { check(A, o) { for (const k of ['hl', 'hl390', 'us']) { A.eq(k + '.n', 300); A.eq(k + '.at.pend', ['ana', 'cal']); /* v112: 닫힌 새 기록 창 미리보기는 renderAll 안에서 건너뜀(열 때 openNew가 계산 → imm.newTrade.qty) */ A.eq(k + '.at.dash', true); A.eq(k + '.at.v63', false);
     A.eq(k + '.after.flushed', 'idle'); A.eq(k + '.after.cal', '2026-09'); A.eq(k + '.after.latest', '2026-09'); A.eq(k + '.after.v63', true); A.eq(k + '.after.v71', true); A.eq(k + '.after.page', 'dashboard');
     A.eq(k + '.same.ana', true); A.eq(k + '.same.wk', true); A.eq(k + '.same.size', true); A.eq(k + '.csp', []); if (!(o[k] && o[k].flushWait >= 0)) A.fail(k + '.flushWait: 미룬 일이 5초 안에 처리되지 않음'); }
     for (const k of ['hl', 'us']) { A.eq(k + '.imm.analysis.act', { pend: false, flushed: 'setPage', v63: true, v71: true, page: 'analysis' }); A.eq(k + '.imm.weekly.act', { pend: false, flushed: 'setPage', v63: true, page: 'weekly' });
       A.eq(k + '.imm.calendar.act', { pend: false, flushed: 'setPage', cal: '2026-09', page: 'calendar' }); A.eq(k + '.imm.newTrade.act', { pend: false, flushed: 'openNew', open: true, qty: true });
-      for (const nm of ['analysis', 'weekly', 'calendar', 'newTrade']) A.eq(k + '.imm.' + nm + '.at', ['ana', 'cal', 'size']); }
+      for (const nm of ['analysis', 'weekly', 'calendar', 'newTrade']) A.eq(k + '.imm.' + nm + '.at', ['ana', 'cal']); }
     A.eq('console', []); } },
   /* v95 투자 휴식 권고: 3거래일 연속 실현 손실 → 대시보드 맨 위 배너(무거래일 건너뜀·플러스/0원 끊김·4연속·× 닫기 유지·새 손실일 재표시), HL·US × 1440·390 */
   t95: { check(A) { for (const k of ['HL1440', 'HL390', 'US1440', 'US390']) { const T = k.startsWith('HL') ? '10/31' : '10/30', TD = k.startsWith('HL') ? '2026-10-31' : '2026-10-30';
@@ -247,4 +247,21 @@ module.exports = {
     for (const k of ['process', 'grade', 'emo', 'exitNote', 'postEval', 'review', 'open']) A.eq('r.r_' + k, no);
     A.eq('r.r_quick', { need: false, api: false, tg: true, v18: false }); A.eq('r.pendingIds', ['r_entryOnly', 'r_none']);
     A.eq('mob.det', { mis: true, over: false, doc: false }); A.eq('mob.afterTap', { dis: ['v111order'], hid: true }); A.eq('dialogs', 0); } },
+  t112: { check(A) {
+    A.eq('m.daily', { keys: ['2026-11-01', '2026-11-02', '2026-11-03'], conf: 0 });
+    A.eq('m.nested', { d1: ['PC 잘한 점', '폰 실수', 3000], d2: '폰 11-02', wFocus: ['손절', 'PC 집중', '폰 집중'], w45: 'PC W45', conf: 0 });
+    A.eq('m.sameField', { memo: '폰 메모', conf: [['dailyReviews.hl.2026-11-01.memo', '폰 메모', 'PC 메모', '__top']], label: '일간 복기 11-01 · 메모' });
+    A.eq('m.execEdit', { price: 101.5, note: '폰 메모', conf: 0 }); A.eq('m.execEditRev', { price: 101.5, note: '폰 메모' }); A.eq('m.execDelete', { n: 1, review: '폰 복기' });
+    A.eq('m.execBoth', { price: 102, conf: [['entries', 101]] }); A.eq('m.fillReview', { n: 2, comp: 'followed' });
+    A.eq('m.arrays', { dis: ['limit', 'risk', 'v111order'], vio: ['물타기', '손절 미준수'], pre: ['FOMO', '조급', '차분'], conf: 0 }); A.eq('m.arraysNoBase', ['a', 'b']);
+    A.eq('m.goals', ['2026-W44', '2026-W45', '2026-W46']); A.eq('m.delCache', ['a']); A.eq('m.canon', true); A.eq('m.strip', true);
+    A.eq('i.first', 'pushed'); A.eq('i.detail.ta', true); A.eq('i.detail.card', true); A.eq('i.detail.mfe', true); A.eq('i.detail.v63x', true);
+    A.eq('i.edit', 'same'); A.eq('i.poll', 'same'); A.eq('i.after.cas', 0); A.eq('i.after.rev', 0); A.eq('i.after.heads', 1); A.eq('i.after.fulls', 0); A.eq('i.after.fast', true); A.eq('i.after.clean', true); A.ok('i.after.cached');
+    A.eq('i.real', { r: 'pushed', cas: 1, cloud: '실제 편집', v63x: false });
+    A.eq('d.set', true); A.eq('d.ret', false); A.eq('d.after.baseReview', ''); A.eq('d.after.local', '안 올린 이 기기 글');
+    A.eq('e.a', 'pushed'); A.eq('e.b', 'pushed'); A.eq('e.cloud', { a: 'A탭 글', b: 'B탭 글' }); A.eq('e.tabBase', true);
+    A.eq('s.hold.day', true); A.eq('s.hold.hit', false); A.eq('s.hold.pct', null); A.eq('s.hold.mode', 'close'); A.eq('s.hold.why', 'spot'); A.has('s.hold.txt', '현물 계산 중');
+    A.eq('s.panel', { hold: true, reached: false }); A.eq('s.pre', ['하루·이번 주·이번 달 손실 한도: HL 현물 계산 중이라 판정 보류 — 받으면 다시 계산해요.']);
+    A.eq('s.limitOverrideHidden', true); A.eq('s.widget', { badge: '한도 계산 중', day: false }); A.eq('s.spot', { items: 1, st: 'held' });
+    A.eq('s.after.hold', false); A.eq('s.after.hit', false); A.eq('s.after.pct', -1.5); A.eq('s.after.spot', 1000); A.eq('s.after.value', 2000); A.eq('s.after.panelHold', false); A.eq('s.after.txt', '전일 마감 2,000.00 USDC (현물 포함)'); } },
 };

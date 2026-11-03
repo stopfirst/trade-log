@@ -33,7 +33,7 @@ const chk=()=>{const W=document.documentElement.clientWidth,bad=[];const dlg=doc
  await page.goto(URL0+'?journal=hyperliquid');await page.waitForTimeout(2200);await page.evaluate(seed);await page.waitForTimeout(200);
  await page.goto(URL0+'?journal=hyperliquid');await page.waitForTimeout(2200);await page.evaluate(seed);await page.waitForTimeout(200);
  const r=await page.evaluate(async()=>{const out={};const t=state.trades.find(x=>x.id==='big');out.done=calcTrade(t).done;out.ids=state.trades.map(x=>[x.id,calcTrade(x).done]);out.hasFill=typeof v56Fill;out.pw=String(persist).slice(0,60);
-  t.fills=[];t.stop0=null;t.initialRisk=null;delete t.stop0Auto;t.stop=99.2;await persist();out.a={stop0:t.stop0,ir:t.initialRisk,auto:t.stop0Auto};
+  t.fills=[];t.stop0=null;t.initialRisk=null;delete t.stop0Auto;t.stop=99.2;touch(t);try{v72Clear();}catch{}/* v112: 체결을 지운 뒤 계산 캐시를 비워 진행 중으로 판정(이전엔 캐시가 남아 첫 저장에서 자동 최초 손절이 안 채워지는 경우만 통과 — 부하 중 흔들림) */await persist();out.a={stop0:t.stop0,ir:t.initialRisk,auto:t.stop0Auto};
   t.stopHistory=t.stopHistory||[];t.stopHistory.push({at:Date.now(),from:99.2,to:99.6});t.stop=99.6;await persist();out.manual={stop0:t.stop0,ir:t.initialRisk};
   const x={side:t.direction==='short'?'short':'long',sl:98.8,tp:103};await v43Apply(t,x);out.rr={stop:t.stop,stop0:t.stop0,ir:t.initialRisk,plan:t.riskPlan&&{rr:t.riskPlan.rr,draft:t.riskPlan.draft}};
   t.stop0=98.5;await persist();out.userEdit={stop0:t.stop0,auto:t.stop0Auto};
