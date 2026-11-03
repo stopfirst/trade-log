@@ -126,4 +126,42 @@ const seed=()=>{
  /* (e) 주소 없음(현물 정보 못 받는 환경) → 예전처럼 마감 USDC */
  await page.evaluate(()=>{window.__v67=undefined;V57.spot=null;hlcStatus.address='';});k.noAddr=await read();
  rep.risk=k;await ctx.close();}
+
+ // ===== 자동 감지 '오감지 · 무시': 칩 × → 그 거래 그 감지만 숨김(t.v109Dismiss), 집계에서 제외, 저장·새로고침 유지, 다시 보기 =====
+ for(const W of [1440,390]){const ctx=await browser.newContext({viewport:{width:W,height:900},bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul',hasTouch:W<500});await ctx.addInitScript(init);const page=await ctx.newPage();
+ page.on('pageerror',e=>rep.errors.push(e.message));const dlgs=[];page.on('dialog',d=>{dlgs.push(d.type());d.dismiss().catch(()=>{});});
+ const ready=async()=>{await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});await page.waitForTimeout(700);};
+ await page.goto(URL0+'?journal=hyperliquid');await ready();
+ await page.evaluate(async()=>{const now=Date.now(),D=now-6*3600e3;const ev=(id,ts,sh,px,fill)=>{const d=new Date(ts).toISOString();return {id,date:d.slice(0,10),time:d.slice(11,19),timestamp:ts,shares:sh,price:px,fee:0.1,seq:ts/1000,...(fill?{fillId:fill,sourceKey:'hyperliquid:abc:'+fill,planKey:'other',planned:'',actual:'',compliance:'unreviewed'}:{})};};
+  const mk=o=>normaliseTrade({schema:5,currency:CURRENCY,market:MARKET,id:o.id,at:o.e[0][0],name:o.name,direction:'long',date:new Date(o.e[0][0]).toISOString().slice(0,10),stop:o.stop,stop0:o.stop,initialRisk:o.R,riskR:1,setup:'미분류',leverage:5,marginMode:'cross',process:'unreviewed',review:'',violations:[],entries:o.e.map((x,i)=>ev(o.id+'e'+i,...x)),fills:(o.f||[]).map((x,i)=>ev(o.id+'f'+i,...x)),funding:[],images:[]});
+  Object.assign(state.settings,{account:10000,riskMax:2.5,openMax:6,v99Cool:15});
+  state.trades=[mk({id:'L',name:'ETH',e:[[D,10,100]],f:[[D+3600e3,10,99,'201']],stop:99,R:10}),mk({id:'X',name:'SOL',e:[[D+3600e3+5*60e3,30,100]],stop:90,R:300})];
+  await persist();setPage('dashboard');renderAll();});
+ await page.waitForTimeout(500);
+ const S=()=>page.evaluate(()=>{const t=state.trades.find(x=>x.id==='X'),box=document.querySelector('#tradeDialog #v37Auto');
+  return {chips:box?[...box.querySelectorAll('.v37-chip')].map(c=>c.dataset.v37Code):null,x:box?box.querySelectorAll('[data-v109-dis]').length:0,hid:(box&&box.querySelector('.v109-hid small')||{}).textContent||null,
+   ds:t.v109Dismiss||null,proc:processOf(t),tags:v46Tags(t),v99:(v99Debug().find(i=>i.id==='X')||{flags:[]}).flags,score:v63Score(t).score,det:v37Detect(t).map(x=>x.code),
+   pre:[...document.querySelectorAll('#reviewForm input[name="violation"]:checked')].map(i=>i.value),dlgOpen:$('tradeDialog').open};});
+ const k={};
+ await page.evaluate(()=>openTrade('X','review'));await page.waitForTimeout(1600);
+ k.before=await S();
+ const xClick=async code=>{const b=await page.evaluate(c=>{const e=document.querySelector(`#tradeDialog #v37Auto [data-v109-dis="${c}"]`);if(!e)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};},code);
+  if(!b)return false;if(W<500)await page.touchscreen.tap(b.x,b.y);else await page.mouse.click(b.x,b.y);await page.waitForTimeout(700);return true;};
+ k.c1=await xClick('risk');k.afterRisk=await S();
+ k.c2=await xClick('v99revenge');k.c3=await xClick('v99riskup');k.afterAll=await S();
+ await page.waitForTimeout(1500);
+ k.stored=await page.evaluate(async()=>{const s=await v83Read();const t=s&&(s.trades||[]).find(x=>x.id==='X');return t?t.v109Dismiss||null:null;});
+ await page.reload();await ready();await page.evaluate(()=>openTrade('X','review'));await page.waitForTimeout(1600);
+ k.reload=await S();
+ k.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1);
+ await page.locator('#tradeDialog #v37Auto').screenshot({path:outDir+'/t109-dis-'+W+'.png'}).catch(()=>{});
+ /* 사용자가 저장한 '규칙 위반' 평가는 그대로 */
+ k.saved=await page.evaluate(async()=>{const t=state.trades.find(x=>x.id==='X');t.process='violation';t.violations=['과도한 위험 배정'];touch(t);await persist();return {proc:processOf(t),tags:v46Tags(t),ds:t.v109Dismiss};});
+ await page.evaluate(async()=>{const t=state.trades.find(x=>x.id==='X');t.process='unreviewed';t.violations=[];touch(t);await persist();$('tradeDialog').close();openTrade('X','review');});await page.waitForTimeout(1500);
+ /* 다시 보기 */
+ {const b=await page.evaluate(()=>{const e=document.querySelector('#tradeDialog [data-v109-un]');if(!e)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};});
+  if(b){if(W<500)await page.touchscreen.tap(b.x,b.y);else await page.mouse.click(b.x,b.y);}await page.waitForTimeout(1500);k.unFound=!!b;}
+ k.restored=await S();
+ k.stored2=await page.evaluate(async()=>{const s=await v83Read();const t=s&&(s.trades||[]).find(x=>x.id==='X');return t?(t.v109Dismiss===undefined?'none':t.v109Dismiss):null;});
+ k.dialogs=dlgs;rep['dis'+W]=k;await ctx.close();}
  console.log(JSON.stringify(rep));await browser.close();srv.close();})().catch(e=>{console.error(e);process.exit(1);});
