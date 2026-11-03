@@ -170,4 +170,10 @@ module.exports = {
     A.eq('rr.manual.stop0', 2318); A.eq('rr.manual.src', null);
     A.eq('rr.user.stop0', 2320); A.eq('rr.user.target', 2290); A.eq('rr.user.src', null); A.eq('rr.hl.stop0', 2316); A.eq('rr.hl.src', null); A.eq('rr.hl.target', 2298.8);
     A.eq('rr.reload.es.stop0', 2318); A.eq('rr.reload.es.r1', 27.039); A.eq('rr.reload.eu.target', 2290); A.eq('rr.reload.eh.stop0', 2316); } },
+  /* v104 HL 요청 한도: 탭 2개 분당 가중치(v103 실측 ≈632), 숨은 탭 0, 계속 429면 재시도 폭주 없음, 차트 첫 표시·IndexedDB 봉 캐시·429 중 이전 봉+안내 */
+  t104: { check(A, o) { if (!(o.dash && o.dash.perMin <= 150)) A.fail('dash.perMin ' + (o.dash && o.dash.perMin) + ' > 150'); A.eq('hidden.n', 0);
+    if (!(o.r429 && o.r429.n <= 12)) A.fail('r429.n ' + (o.r429 && o.r429.n) + ' > 12'); if (!(o.r429 && o.r429.cool >= 2)) A.fail('r429.cool < 2');
+    for (const k of ['first', 'open']) if (!(o.chart && o.chart[k] >= 0 && o.chart[k] <= 1500)) A.fail('chart.' + k + ' ' + (o.chart && o.chart[k]) + 'ms');
+    if (!(o.chart && o.chart.r429 >= 0 && o.chart.r429 <= 1500)) A.fail('chart.r429 ' + (o.chart && o.chart.r429)); A.has('chart.note', '속도 제한'); A.eq('chart.stillSvg', true);
+    if (!(o.chart && o.chart.reload >= 0 && o.chart.reload <= 1500)) A.fail('chart.reload'); A.eq('chart.reloadReq', 0); } },
 };
