@@ -292,6 +292,16 @@ module.exports = {
     A.eq('W.hl', { pend: 1, busy0: true, busy: false, left: 0, done: true }); A.eq('W.leak.got', true); A.eq('W.leak.inflight', 0);
     A.eq('W.spot', { busy: false, balKick: 1, stale: true }); A.eq('W.lead', { leader: true, steal: 1 }); A.eq('W.warn', { secret: false, hidden: true });
     A.eq('B', { prev: true, closed: true, hasVer: true, boot: true, row: true }); } },
+  t117: { check(A) {
+    A.eq('W', { on: true, worker: true, dbg: true });
+    A.eq('P', { w1: true, same: true, all: true, co: true, wput: true });
+    A.eq('S', { pushed: true, canon: 0, text: true, v63x: true, ident: true, n: true, base: true, same: true, run: true });
+    A.eq('M', { both: true, pushed: true, cloud: true, pull: true, adopt: true });
+    A.eq('L.hit', true); A.eq('L.hit2', true); A.eq('L.changed', true);
+    A.eq('G', { area: true, def: true, ran: true, empty: true, text: true });
+    A.eq('K.hFocus', true); A.eq('K.hOk', true); A.eq('K.wsOk', true); A.eq('K.pOk', true); A.eq('K.pLive', true); A.eq('K.pFocus', true); A.eq('K.busyAfterMove', true); A.eq('K.userAct', false); A.eq('K.deferred', true);
+    A.eq('R.canon0', true); A.eq('R.runs', true); A.eq('R.persist', true); A.eq('R.sliceOk', true); A.eq('R.ltOk', true); A.eq('R.text', true);
+    A.eq('F', { on: false, ok: true, r: 'pushed', cloud: true, cas: true }); } },
   t116: { check(A) {
     A.eq('T', { delay: true, st: 'ok', hlcBusy: false, addr: true, hlb: true, leader: true, hlTO: true, hung: 1, rescued: true, abort: true, diag: { sec: true, lag: true, secret: false }, chip: true, sec: true });
     A.eq('L.found', true); A.eq('L.loopOk', true); A.eq('L.still', true); A.eq('L.auto', true); A.eq('L.closed', true); A.eq('L.user', true);
