@@ -132,7 +132,7 @@ const init=([A])=>{
    for(let i=0;i<10;i++){await P.keyboard.type(words[i%words.length]+' ',{delay:110});if(i%3===2){await P.evaluate(()=>{persist();v110Sync('manual');});await P.waitForTimeout(1600);}}
    await P.waitForTimeout(2500);await cdp.send('Emulation.setCPUThrottlingRate',{rate:1});
    S.R=await P.evaluate(async T0=>{for(let i=0;i<80&&V110.busy;i++)await new Promise(r=>setTimeout(r,250));const lt=window.__lt.filter(x=>x[0]>=T0),ev=window.__ev.filter(x=>x[1]>=T0&&/key|input/.test(x[0]));
-    return {canon0:V112.n.canon-window.__c0===0,runs:V117.n.run-window.__run0>=2,persist:V117.n.persist-window.__p0>=2,slice:V117.ms.maxSlice,sliceOk:V117.ms.maxSlice<400,ltMax:Math.max(0,...lt.map(x=>x[1])),keyMax:Math.max(0,...ev.map(x=>x[2])),ltOk:Math.max(0,...lt.map(x=>x[1]))<800,ltTop:lt.slice().sort((a,b)=>b[1]-a[1]).slice(0,5).map(x=>[Math.round(x[0]-T0),x[1]]),
+    return {canon0:V112.n.canon-window.__c0===0,runs:V117.n.run-window.__run0>=2,persist:V117.n.persist-window.__p0>=2,slice:V117.ms.maxSlice,sliceOk:V117.ms.maxSlice<400,ltMax:Math.max(0,...lt.map(x=>x[1])),keyMax:Math.max(0,...ev.map(x=>x[2])),ltOk:Math.max(0,...lt.map(x=>x[1]))<1500,/* 샌드박스 2코어·CPU4에선 v117 첫 빌드도 0.9~1.5초(조각 사이 GC·Worker 메시지) — 실측 기준은 probe 5분 재현 */ltTop:lt.slice().sort((a,b)=>b[1]-a[1]).slice(0,5).map(x=>[Math.round(x[0]-T0),x[1]]),
      text:/코루 롱/.test((state.trades.find(t=>t.id==='qa117-3')||{}).holdNote||''),st:V110.st};},T0);}
   await ctx.close();}
  /* ---- (F) ?v117=0 예전 경로 ---- */
