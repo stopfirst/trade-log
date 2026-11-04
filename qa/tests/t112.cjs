@@ -149,7 +149,7 @@ const init=([A])=>{
  S.e.b=await P2.evaluate(async()=>{for(let i=0;i<100&&V110.busy;i++)await new Promise(r=>setTimeout(r,100));V110.lastPush=0;return await v110Sync('edit');});
  await idle(P2);
  const ct=id=>C.payload.trades.find(t=>t.id===id)||{};
- S.e.cloud={a:ct('q3').holdNote,b:ct('q4').exitNote};S.e.tabBase=await P2.evaluate(()=>v112Debug().tabBase>=1);
+ S.e.cloud={a:ct('q3').holdNote,b:ct('q4').exitNote};S.e.tabBase=await P2.evaluate(()=>v112Debug().tabBase>=1||/* v117: 탭마다 메모리 기준(V117.base)으로 병합 — 다른 탭이 IndexedDB 기준을 바꿔도 이 탭이 마지막으로 맞춘 기준을 씀 */(typeof v117Ready==='function'&&v117Ready()&&!!V117.base&&V117.n.pull>=1));
  await P2.close();
  /* ---- (s) HL 손실 한도: 현물 미수신 보류 ---- */
  const ctxS=await mkCtx(1440,'spot');const Q=await open(ctxS,'SPOT');

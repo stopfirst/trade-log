@@ -79,7 +79,7 @@ const init=([A])=>{
  S.m.tagShort=await tags(shortId);S.m.tagLong=await tags(longId);S.m.tagE2=await tags('wE2');S.m.tagB2=await tags('wB2');
  /* 서버 flip_alerts(서버 2.13.0 형식) 같은 oid·tid */
  C.flipRows=[{ref:'fl:hl:kPEPE:'+flip.oid,kind:'order',symbol:'kPEPE',dex:null,prev_dir:'long',new_dir:'short',prev_size:'4456063',new_size:'10020607',px:String(flip.px),at:new Date(flip.time).toISOString(),oid:String(flip.oid),tid:String(flip.tid),close_oid:null,close_tid:null,close_at:null,gap_sec:'0',reduce_only:false,reduce_only_source:'fills'}];
- S.m.pull=await P.evaluate(()=>v111Test.pull(true));S.m.model2=(await model()).filter(x=>x.coin==='kPEPE');S.m.flipReads=C.flipReads;
+ const fr0=C.flipReads;S.m.pull=await P.evaluate(()=>v111Test.pull(true));S.m.model2=(await model()).filter(x=>x.coin==='kPEPE');S.m.flipReads=C.flipReads-fr0;/* 이 pull의 읽기만(느린 환경의 주기 읽기 제외) */
  /* 거래 목록 화면 배지 */
  await P.evaluate(()=>{setPage('records');renderAll();});await P.waitForTimeout(500);
  S.m.listMis=await P.evaluate(()=>document.querySelectorAll('#page-records .v111-mistag').length>0);
@@ -107,12 +107,14 @@ const init=([A])=>{
  S.t={};
  await P.evaluate(()=>{setPage('dashboard');openTrade('wB1','review');});await P.waitForTimeout(900);
  const L=P.locator('#tradeDialog [data-v71-area="entryNote"]');await L.scrollIntoViewIfNeeded();await L.click();
- await P.evaluate(()=>{window.__ta=document.querySelector('#tradeDialog [data-v71-area="entryNote"]');window.__f0=V100.n.flush;window.__d0={...v111Debug().n};});
+ await P.evaluate(()=>{window.__ta=document.querySelector('#tradeDialog [data-v71-area="entryNote"]');window.__f0=V100.n.flush;window.__d0={...v111Debug().n};window.__v0=window.V117?{...V117.n}:{};});
  await P.keyboard.type('입력 중 다시 그리기 ',{delay:20});
- S.t.during=await P.evaluate(async()=>{renderDetail();renderAll();v63PaintDetail();v100Flush();const s=await v110Sync('poll');const d=v111Debug();
-  const ta=document.querySelector('#tradeDialog [data-v71-area="entryNote"]');return {same:ta===window.__ta,focus:document.activeElement===window.__ta,flush:V100.n.flush-window.__f0,detail:d.n.detail-window.__d0.detail,render:d.n.render-window.__d0.render,sync:d.n.sync-window.__d0.sync,syncRet:s,queued:d.queued.sort()};});
+ S.t.during=await P.evaluate(async()=>{/* v117: 상세가 열려 있고 긴 글 칸에 쓰는 중이면 v111 대기열 대신 V117.bgPend(15초 조용할 때)로 미룸 → 둘 다 셈 */const dv=k=>window.V117?(V117.n[k]||0)-(window.__v0[k]||0):0;renderDetail();renderAll();v63PaintDetail();v100Flush();const s=await v110Sync('poll');const d=v111Debug();
+  const ta=document.querySelector('#tradeDialog [data-v71-area="entryNote"]');return {same:ta===window.__ta,focus:document.activeElement===window.__ta,flush:V100.n.flush-window.__f0,detail:d.n.detail-window.__d0.detail+dv('d_det')+dv('d_det63'),render:d.n.render-window.__d0.render+dv('d_ra'),sync:d.n.sync-window.__d0.sync,syncRet:s,queued:[...new Set([...d.queued,...(window.V117?Object.keys(V117.bgPend).filter(k=>k==='det'||k==='det63'||k==='ra').map(k=>({det:'renderDetail',det63:'renderDetail',ra:'renderAll'}[k])):[])/* spot·hlc·bal 등 v117 뒤 화면 미룸은 이 검사 대상 아님 */,...(dv('flushDefer')>0?['flush']:[])])].sort()};});
  await P.keyboard.type('끝',{delay:20});
  await P.waitForTimeout(3500);
+ /* v117: 마지막 키 뒤 15초 조용하면 미룬 상세·전체 다시 그리기 */
+ await P.waitForFunction(()=>!window.V117||!Object.keys(V117.bgPend).filter(k=>k==='det'||k==='det63').length,null,{timeout:25000}).catch(()=>{});await P.waitForTimeout(300);
  S.t.after=await P.evaluate(async()=>{const d=v111Debug();const ta=document.querySelector('#tradeDialog [data-v71-area="entryNote"]');const s=await v83Read();
   return {queued:d.queued,redrawn:ta!==window.__ta,focus:document.activeElement===ta,val:ta.value,saved:(s.trades.find(t=>t.id==='wB1')||{}).entryNote,flushed:V100.n.flush>window.__f0};});
  await P.evaluate(()=>document.activeElement.blur());await P.evaluate(()=>{const d=$('tradeDialog');if(d.open)d.close();});
