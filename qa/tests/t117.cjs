@@ -81,8 +81,8 @@ const init=([A])=>{
   /* (S) */
   await login(P);await P.waitForFunction(()=>!V110.busy,null,{timeout:30000}).catch(()=>{});
   const s1=await P.evaluate(async()=>{for(let i=0;i<60&&V110.busy;i++)await new Promise(r=>setTimeout(r,250));state.trades[1].v63x={mfe:1,mae:2};state.trades[0].holdNote='S1';await persist();const c0=V112.n.canon;const r=await v110Sync('manual');return {r,canon:V112.n.canon-c0,run:V117.n.run};});
-  await P.waitForFunction(()=>!V110.busy,null,{timeout:30000}).catch(()=>{});const ct=cloudT('qa117-0'),c1=cloudT('qa117-1');const b1=await idbBase(P);
-  const s2=await P.evaluate(async()=>{/* 빠른 CI: 앞 올리기 뒤 자동 동기화가 돌고 있으면 v110Sync는 false(이미 도는 중) → 끝난 뒤 확인 */for(let i=0;i<120&&V110.busy;i++)await new Promise(r=>setTimeout(r,250));const r=await v110Sync('manual');return {r};});
+  await P.waitForFunction(()=>!V110.busy,null,{timeout:30000}).catch(()=>{});const ct=cloudT('qa117-0'),c1=cloudT('qa117-1');let b1=await idbBase(P);/* 빠른 CI: 기준 사본 기록(Worker·조각)이 늦게 끝날 수 있음 → 최대 15초 기다림 */for(let i=0;i<60&&!(b1&&b1.rev===C.rev);i++){await P.waitForTimeout(250);b1=await idbBase(P);}
+  const s2=await P.evaluate(async()=>{/* 빠른 CI: 앞 올리기 뒤 자동 동기화가 돌고 있으면 v110Sync는 false(이미 도는 중) → 끝난 뒤 확인 */let r;for(let k=0;k<3;k++){for(let i=0;i<120&&V110.busy;i++)await new Promise(r=>setTimeout(r,250));r=await v110Sync('manual');if(r!==false)break;}return {r};});
   S.S={pushed:s1.r==='pushed',canon:s1.canon,text:!!ct&&ct.holdNote==='S1',v63x:!!c1&&!('v63x' in c1),ident:!!(C.payload&&C.payload.cloudIdentity),n:C.payload&&C.payload.trades.length===260,base:!!b1&&b1.rev===C.rev&&b1.h==='S1'&&!b1.id&&!b1.v63x,same:s2.r==='same',run:s1.run>=1};
   /* (M) 다른 기기 변경 + 이 기기 입력 → 받아 병합 */
   {const t5=cloudT('qa117-5');t5.review='폰 메모 QA';t5.updatedAt=Date.now();C.payload.updatedAt=Date.now();C.rev++;}
