@@ -292,6 +292,10 @@ module.exports = {
     A.eq('W.hl', { pend: 1, busy0: true, busy: false, left: 0, done: true }); A.eq('W.leak.got', true); A.eq('W.leak.inflight', 0);
     A.eq('W.spot', { busy: false, balKick: 1, stale: true }); A.eq('W.lead', { leader: true, steal: 1 }); A.eq('W.warn', { secret: false, hidden: true });
     A.eq('B', { prev: true, closed: true, hasVer: true, boot: true, row: true }); } },
+  t116: { check(A) {
+    A.eq('T', { delay: true, st: 'ok', hlcBusy: false, addr: true, hlb: true, leader: true, hlTO: true, hung: 1, rescued: true, abort: true, diag: { sec: true, lag: true, secret: false }, chip: true, sec: true });
+    A.eq('L.found', true); A.eq('L.loopOk', true); A.eq('L.still', true); A.eq('L.auto', true); A.eq('L.closed', true); A.eq('L.user', true);
+    A.eq('S', { burst: true, mid: true, skip: true, last: true }); } },
   t115: { check(A) {
     A.eq('G', { st: 'ok', hlcBusy: false, addr: true, hlb: true, hlN: true, leader: true, steal: true, tokenTO: true, syncTO: true, warn: true, bar: true, fresh: true, diag: { sec: true, lock: true, rev: true, secret: false }, over: false, sec: true, tok: true });
     A.eq('H', { leader: false, steal: 0, peer: true, pLeader: true });
