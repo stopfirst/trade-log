@@ -197,9 +197,10 @@ module.exports = {
      입력 중 칸·포커스 유지(진 값 사본) · kPEPE 체결 지연·순서 뒤바뀜(POSITION_GAP 보류)에도 롱 메모·그림 유지 → 숏 '뒤집힘' 링크 · 예전 사본 1회 되살림 · v83 두 창 칸 병합 · 로컬 기록 되살리기 · 디바운스 자동 저장 · 포커스 자동 받기 */
   t110: { check(A) { A.eq('s0.mobTrades', ['gA', 'gB', 'gC']); A.eq('s0.cas0', [0, 1]);
     const both = ['PC 진입 근거', '모바일 스탑 이유']; A.eq('s1.pc', both); A.eq('s1.mob', both); A.eq('s1.saved', both); A.eq('s1.cloud', both);
-    A.eq('s2.pc', '모바일 청산'); A.eq('s2.mob', '모바일 청산'); A.eq('s2.pcChip', { txt: '충돌 1건', vis: true }); A.eq('s2.mobChip', { txt: '충돌 1건', vis: true });
-    A.eq('s2.conf', [{ tradeId: 'gB', field: 'exitNote', kept: '모바일 청산', lost: 'PC 청산' }]); A.eq('s2.pop.vis', true); A.has('s2.pop.txt', 'PC 청산');
-    A.eq('s2.useLocal', 'PC 청산'); A.eq('s2.pcLeft', 0); A.eq('s2.mobAfter', 'PC 청산'); A.eq('s2.mobLeft', 0);
+    /* v119: 같은 칸 충돌은 PC 값(모바일이 더 최근이어도) */
+    A.eq('s2.pc', 'PC 청산'); A.eq('s2.mob', 'PC 청산'); A.eq('s2.pcChip', { txt: '충돌 1건', vis: true }); A.eq('s2.mobChip', { txt: '충돌 1건', vis: true });
+    A.eq('s2.conf', [{ tradeId: 'gB', field: 'exitNote', kept: 'PC 청산', lost: '모바일 청산' }]); A.eq('s2.pop.vis', true); A.has('s2.pop.txt', '모바일 청산'); A.has('s2.pop.txt', 'PC에서 고친 값을 남겼어요');
+    A.eq('s2.useLocal', '모바일 청산'); A.eq('s2.pcLeft', 0); A.eq('s2.mobAfter', '모바일 청산'); A.eq('s2.mobLeft', 0);
     A.eq('s3.pcDraw', { v100: 1, saved: ['p1'] }); A.eq('s3.mobDraw', { v100: 1, saved: ['m1'] }); A.eq('s3.pc', ['m1', 'p1']); A.eq('s3.mob', ['m1', 'p1']); A.eq('s3.cloud', ['m1', 'p1']);
     const typed = 'PC 진입 근거 + 모바일 입력 중'; A.eq('s4.typing', { val: typed, focus: true, state: typed }); A.eq('s4.mob', typed + ' 끝'); A.eq('s4.pc', typed + ' 끝'); A.eq('s4.cloud', typed + ' 끝'); A.eq('s4.conf', ['PC 새 근거']);
     A.eq('s5.a.0.e', 20); A.eq('s5.b', [{ id: 'auto:hyperliquid:a8a32d43f025ad68:7000000:long', dir: 'long', st: 'OPEN', held: true, e: 20, f: 0, note: 'kPEPE 롱 근거', chart: ['k1'] }]);
@@ -326,4 +327,24 @@ module.exports = {
     A.eq(w + '.calToday.n', '2'); A.eq(w + '.calToday.net', '-250.00'); A.has(w + '.calToday.bal', '전일 대비 −750.00 USDC (−2.5%) · 이체 −250.00 뺌');
     A.eq(w + '.calNone.has', false); A.has(w + '.calTok', '다른 주소에서 받음+100 PURR ≈ +20.00');
     A.eq(w + '.defer', { opened: true, during: 0, pend: true, after: 1 }); A.eq(w + '.off', -1000); } } },
+  /* v119 동기화 충돌 PC 우선: PC vs 모바일 → PC 값, 같은 종류·기기 모름·'최신 수정' 설정 → 최신, 입력 중 칸은 이 기기, 자동 칸(appliedAt·HL 스탑·자동 1R) 충돌 없음, 쌓인 자동 칸 충돌 숨김(데이터 유지), 안내·우선 기기 설정 */
+  t119: { check(A) {
+    A.eq('dev', { pc: 'pc', mob: 'mobile' });
+    A.eq('A.pcWins', { v: 'PC 값', c: [['exitNote', 'PC 값', '폰 값', 'pc', 'pc', 'mobile']], e: { exitNote: 'pc' } });
+    A.eq('A.sameKind', { v: 'PC2 값', c: [['exitNote', 'PC2 값', 'PC 값', 'latest', 'pc', 'pc']] }); A.eq('A.unknown', { v: '옛 값', rule: 'latest' }); A.eq('A.latestPref', { v: '폰 값', rule: 'latest' });
+    A.eq('A.onMobile', { v: 'PC 값', c: [['exitNote', 'PC 값', '폰 값', 'pc', 'pc', 'mobile']], e: { exitNote: 'pc' } });
+    A.eq('A.typing', { v: '폰 입력 중', c: [['exitNote', '폰 입력 중', 'PC 값', 'typing', 'mobile', 'pc']] });
+    A.eq('A.auto', { n: 0, applied: 30, stop: 98.5, auto: [true, true, true] }); A.eq('A.manualR', { v: 33, c: [['initialRisk', 33, 15, 'pc', 'pc', 'mobile']] });
+    A.eq('A.stamp', { n: 1, e: { exitNote: 'pc' }, needPersist: true }); A.eq('A.noBase', { v: 'PC 값', rule: 'pc' }); A.eq('A.tab', '창2');
+    A.eq('B.open', ['x3']); A.eq('B.data', 4); A.eq('B.chip', '충돌 1건');
+    A.eq('B.pop.vis', true); A.eq('B.pop.help', 'PC에서 고친 값을 남겼어요. 진 값은 여기 보관돼요.'); A.eq('B.pop.items', 1); A.eq('B.pop.pressed', ['true', 'false']); A.eq('B.pop.over', false);
+    A.has('B.pop.txt', '남긴 값(PC · 이 기기)'); A.has('B.pop.txt', '진 값(모바일 · 다른 기기)'); A.has('B.pop.txt', 'PC 우선');
+    A.eq('B.toLatest', { pref: 'latest', help: '최근에 고친 쪽 값을 남겼어요. 진 값은 여기 보관돼요.', pressed: ['false', 'true'] });
+    A.eq('B.afterOk', { open: 0, data: ['x1', 'x2', 'x4'] });
+    A.eq('B.settings.dev', '이 기기: PC'); A.eq('B.toPc.pref', 'pc'); A.eq('B.toPc.pressed', ['true', 'false']); A.has('B.toPc.box', 'PC에서 고친 값을 남기고'); A.eq('B.toPc.over', false); A.eq('B.dialogs', []);
+    A.eq('C.r', ['pushed', 'pushed', 'same']); A.eq('C.pc', 'PC 청산'); A.eq('C.mob', 'PC 청산'); A.eq('C.cloud', 'PC 청산'); A.eq('C.stamp', { exitNote: 'pc' });
+    A.eq('C.conf', [{ field: 'exitNote', kept: 'PC 청산', lost: '모바일 청산', rule: 'pc', keptDev: 'pc', lostDev: 'mobile' }]);
+    A.eq('C.confMob', [{ field: 'exitNote', kept: 'PC 청산', keptSide: 'other', keptDev: 'pc' }]); A.eq('C.raw', 0); A.eq('C.rawPc', 0); A.eq('C.chipMob', '충돌 1건');
+    A.eq('C.gA', { pc: 98.7, mob: 98.7, pcApplied: 222, mobApplied: 222 });
+    A.eq('C.popMob.help', 'PC에서 고친 값을 남겼어요. 진 값은 여기 보관돼요.'); A.has('C.popMob.txt', '남긴 값(PC · 다른 기기)'); A.eq('C.popMob.over', false); } },
 };
