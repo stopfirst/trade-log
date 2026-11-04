@@ -281,4 +281,15 @@ module.exports = {
     A.has('N.slowChip', '받는 중 '); A.eq('N.slow.ok', true); A.eq('N.slow.other', true);
     A.eq('H.to', true); A.eq('H.spotBusy', false); A.eq('H.inflight', 0); A.eq('H.queue', 0); A.eq('H.next', true); A.eq('H.spotOk', true);
     A.eq('H.v62busy0', true); A.eq('H.v62busy', false); A.eq('H.v62ms', true); A.eq('H.pend0', true); A.eq('H.stale', true); A.eq('H.reset', true); } },
+  t114: { check(A, L) {
+    if (!(L.F && L.F.ms < 600)) A.fail('F.ms 펀딩 검토 600ms 넘음: ' + (L.F && L.F.ms));
+    A.eq('F.rows', 200); A.eq('F.errors', []); A.eq('F.status', 'MATCH'); A.eq('F.cand', 180); A.eq('F.frN', true);
+    A.eq('D.open', { vis: true, page: 'dashboard', over: false, docScroll: false }); A.eq('D.has', []);
+    A.eq('D.copy.secret', false); A.eq('D.copy.addr', false); A.eq('D.copy.warn', true); A.eq('D.copy.hidden', true); A.eq('D.closed', true); A.eq('D.ver', true); A.eq('D.btn', true);
+    A.has('D.busyChip', '받는 중 '); A.eq('D.busyPanel.vis', true); A.eq('D.busyPanel.page', 'dashboard'); A.eq('D.busyPanel.stage', true); A.eq('D.busyPanel.busy', true);
+    A.eq('D.released', { busy: false, chip: '받기 실패 · 다시 시도', fix: true });
+    A.eq('W.busy0', true); A.eq('W.sync', { busy: false, st: 'fail', fix: true });
+    A.eq('W.hl', { pend: 1, busy0: true, busy: false, left: 0, done: true }); A.eq('W.leak.got', true); A.eq('W.leak.inflight', 0);
+    A.eq('W.spot', { busy: false, balKick: 1, stale: true }); A.eq('W.lead', { leader: true, steal: 1 }); A.eq('W.warn', { secret: false, hidden: true });
+    A.eq('B', { prev: true, closed: true, hasVer: true, boot: true, row: true }); } },
 };
