@@ -292,4 +292,10 @@ module.exports = {
     A.eq('W.hl', { pend: 1, busy0: true, busy: false, left: 0, done: true }); A.eq('W.leak.got', true); A.eq('W.leak.inflight', 0);
     A.eq('W.spot', { busy: false, balKick: 1, stale: true }); A.eq('W.lead', { leader: true, steal: 1 }); A.eq('W.warn', { secret: false, hidden: true });
     A.eq('B', { prev: true, closed: true, hasVer: true, boot: true, row: true }); } },
+  t115: { check(A) {
+    A.eq('G', { st: 'ok', hlcBusy: false, addr: true, hlb: true, hlN: true, leader: true, steal: true, tokenTO: true, syncTO: true, warn: true, bar: true, fresh: true, diag: { sec: true, lock: true, rev: true, secret: false }, over: false, sec: true, tok: true });
+    A.eq('H', { leader: false, steal: 0, peer: true, pLeader: true });
+    A.eq('I', { ok: true, ms: true, save: true, hang: true, co: true, busy: false, after: { qa: 2, hang: false, save: true } });
+    A.eq('S', { safe: true, bar: true, hl: 0, sync: false, over: false, diag: true, url: 'ok', cloud: 0 });
+    A.eq('R', { n1: 1, v1: '왜 샀나 QA', n2: 0, v2: '', skip: true }); A.eq('C', { box: true, st: true, toastTop: true, over: false }); A.eq('A', { bar: true, btn: true, hid: true }); } },
 };

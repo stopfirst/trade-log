@@ -75,7 +75,7 @@ const init=([A])=>{
   /* D1 정상 상태에서 칩 → 패널 */
   await P.click('#v110Sync .v110-st');await P.waitForTimeout(300);
   S.D.open=await P.evaluate(()=>{const b=$('v114Diag');const c=b&&b.querySelector('.v114-card');return {vis:!!(b&&!b.hidden&&b.getClientRects().length),page:currentPage,txt:b?b.textContent:'',over:c?c.scrollWidth>c.clientWidth+1:true,docScroll:document.documentElement.scrollWidth>innerWidth+1};});
-  S.D.has=['앱 버전','v114','동기화','HL 요청','잔고·현물','실시간 체결','메인 스레드','부팅 단계','펀딩 검토 계산','자동 복구'].filter(k=>!S.D.open.txt.includes(k));
+  S.D.has=['앱 버전','동기화','HL 요청','잔고·현물','실시간 체결','메인 스레드','부팅 단계','펀딩 검토 계산','자동 복구'].filter(k=>!S.D.open.txt.includes(k));
   S.D.txtLen=S.D.open.txt.length;delete S.D.open.txt;
   await P.screenshot({path:path.join(outDir,'diag-390.png')}).catch(e=>{R.shotErr=e.message;});
   await P.evaluate(()=>{console.warn('qa114 경고 access_token=SECRETWARN114 apikey=sb_publishable_zzzzzzzzzzzz 0x'+'4'.repeat(40));});
