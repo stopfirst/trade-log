@@ -88,7 +88,8 @@ const init=([A])=>{
    /* 짧은 몰림 15번(0초 간격)은 그대로 다 그림 */
    const b0=V114.ra.n;for(let i=0;i<15;i++){await new Promise(r=>setTimeout(r,0));renderAll();}const burst=V114.ra.n-b0;await new Promise(r=>setTimeout(r,3500));
    /* 0.1초마다 5초 = 50번(초당 10번 이어짐) → 묶음 */
-   const n0=V114.ra.n,s0=V116R.skip,t0=performance.now();while(performance.now()-t0<5000){renderAll();await new Promise(r=>setTimeout(r,100));}const mid=V114.ra.n-n0;await new Promise(r=>setTimeout(r,800));
-   return {burst:burst===15,mid:mid<=36,skip:V116R.skip-s0>=10,last:V114.ra.n-n0>mid};});
+   const n0=V114.ra.n,s0=V116R.skip,t0=performance.now();let lastSkip=false;while(performance.now()-t0<5000){const k0=V116R.skip;renderAll();lastSkip=V116R.skip>k0;await new Promise(r=>setTimeout(r,100));}const mid=V114.ra.n-n0,pend=V116R.pend;await new Promise(r=>setTimeout(r,800));
+   /* v118: '끝나면 마지막 1번'은 마지막 호출이 묶였을 때(예약이 남아 있을 때)만 해당 — 마지막 호출이 바로 그려졌으면(묶음 예약이 그 전에 이미 돎) 더 그릴 게 없음. v117에서도 이 위상 차이로 흔들림 */
+   return {burst:burst===15,mid:mid<=36,skip:V116R.skip-s0>=10,last:(lastSkip||pend)?V114.ra.n-n0>mid:true};});
   await ctx.close();}
  Object.assign(R,S);console.log(JSON.stringify(R));await browser.close();srv.close();})().catch(e=>{console.log(JSON.stringify({...(globalThis.__S||{}),errors:['FATAL '+(e&&e.stack||e)]}));process.exit(1);});

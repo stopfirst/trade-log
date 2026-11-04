@@ -312,4 +312,18 @@ module.exports = {
     A.eq('I', { ok: true, ms: true, save: true, hang: true, co: true, busy: false, after: { qa: 2, hang: false, save: true } });
     A.eq('S', { safe: true, bar: true, hl: 0, sync: false, over: false, diag: true, url: 'ok', cloud: 0 });
     A.eq('R', { n1: 1, v1: '왜 샀나 QA', n2: 0, v2: '', skip: true }); A.eq('C', { box: true, st: true, toastTop: true, over: false }); A.eq('A', { bar: true, btn: true, hid: true }); } },
+  /* v118 HL 이체·입출금: 원장 쪽 넘김·중복 제거·증분, 전체 변동(대시보드·캘린더)에서 자금 이동 빼기, 날짜 상세 '이체·입출금' 줄, 상세 열림 중 다시 그리기 미룸 */
+  t118: { check(A) { for (const w of W) {
+    A.eq(w + '.load.calls1.0', 0); A.eq(w + '.load.events', 6); A.eq(w + '.load.moves', 5); A.eq(w + '.load.subs', { '0x2222222222222222222222222222222222222222': 'Scalping' });
+    A.eq(w + '.inc.calls', 1); A.eq(w + '.inc.positive', true); A.eq(w + '.inc.events', 6);
+    A.eq(w + '.flow.d29', { net: 20, usdc: 0, tok: 20, n: 1 }); A.eq(w + '.flow.d30', { net: 500, usdc: 500, tok: 0, n: 2 }); A.eq(w + '.flow.today', { net: -250, usdc: -250, tok: 0, n: 2 }); A.eq(w + '.flow.beforeCov', null);
+    A.eq(w + '.dash.change', -750); A.eq(w + '.dash.pct', -2.5); A.eq(w + '.dash.raw', -1000);
+    A.has(w + '.dash.text', '−750.00 USDC · −2.50%'); A.has(w + '.dash.text', '이체·입출금−250.00 USDC 뺌'); A.has(w + '.dash.title', '= −1,000.00 USDC'); A.has(w + '.dash.title', "하위계정 'Scalping'으로 보냄 −200.00 USDC");
+    A.has(w + '.dash.aria', '전체 변동 −2.50%'); A.has(w + '.dash.limTip', '마감 뒤 이체·입출금 −250.00 USDC(2건)'); A.has(w + '.dash.limTip', '10/30 UTC 마감 30,000.00 USDC');
+    A.eq(w + '.cal.has', true); A.eq(w + '.cal.after', true);
+    A.eq(w + '.cal.rows', [['05:00', "하위계정 'Scalping'으로 보냄", '−500.00 USDC', 'out'], ['06:00', '입금', '+1,000.00 USDC', 'in'], ['07:00', '계좌 안 이동 (현물 → 무기한)', '300.00 USDC', 'int']]);
+    A.has(w + '.cal.text', '+500.00 USDC2건 · 계좌 안 이동 1건'); A.has(w + '.cal.bal', '전일 대비 +500.00 USDC (+1.72%) · 이체 +500.00 뺌'); A.has(w + '.cal.bal', '트레이딩+500.00 USDC · +1.72%'); A.eq(w + '.cal.diffAttr', '500.00');
+    A.eq(w + '.calToday.n', '2'); A.eq(w + '.calToday.net', '-250.00'); A.has(w + '.calToday.bal', '전일 대비 −750.00 USDC (−2.5%) · 이체 −250.00 뺌');
+    A.eq(w + '.calNone.has', false); A.has(w + '.calTok', '다른 주소에서 받음+100 PURR ≈ +20.00');
+    A.eq(w + '.defer', { opened: true, during: 0, pend: true, after: 1 }); A.eq(w + '.off', -1000); } } },
 };
