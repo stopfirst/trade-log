@@ -105,3 +105,9 @@ test('--remind-dry: 미리 보기·뺀 단타 목록, 보내지 않음 · 단타
  const s=out.join('\n');assert.equal(calls[0][0],'review_gaps');assert.equal(calls[0][1].p_since,'2026-10-31');
  assert.match(s,/미리 보기 · 2026-10-31 · 단타 제외 켜짐 · alert18\.sql 확인됨 · 기준 30분/);assert.match(s,/뺀 단타: HL ETH 롱 · 보유 29분 · R 0\.5/);assert.match(s,/뺀 단타: HL DOGE 롱 · 보유 20분/);
  assert.match(s,/남은 단타\(예외\): HL SOL · 10분 · −1R 넘긴 손실/);assert.match(s,/단타 2건 제외/);assert.match(s,/\(보내지 않았습니다\)/);assert.match(s,/이 날은 알림을 보내지 않습니다\(대상 거래 없음\)/);});
+test('앱 v122: 한 거래 안 왕복 여러 번이면 가장 긴 왕복 기준(0:00→0:20 + 1:30→1:50 = 20분 단타, 하나라도 40분이면 스윙) · 진입 전 청산·포지션 남음은 판정 안 함',()=>{
+ const two=(b2)=>mk('M','X','00:00','00:20',100,101,{entries:[ev('a','00:00',100),ev('b','01:30',100)],fills:[ev('c','00:20',101),ev('d',b2,101)]});
+ let r=byId(J([two('01:50')]));assert.equal(r.M.scalp,true);assert.equal(r.M.hold,20*60000);
+ r=byId(J([two('02:10')]));assert.equal(r.M.scalp,false);assert.equal(r.M.hold,40*60000);
+ assert.equal(sc.segments(two('01:50'),true).length,2);
+ assert.equal(sc.holdMs(mk('P','X','00:00','00:10',100,101,{fills:[{...ev('f','00:10',101),shares:1}]}),true),null);});

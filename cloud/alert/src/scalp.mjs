@@ -1,5 +1,6 @@
-// trade-alert 2.14.0 — 단타 판정 (앱 v121-scalp와 같은 기준). 매일 복기 알림(remind.mjs)에서 예외 없는 단타를 빈 칸 알림에서 뺌.
-// 단타 = 끝난 거래(앱 calcTrade done)의 첫 진입 체결 ~ 마지막 청산 체결 < 기준 분.
+// trade-alert 2.14.0 — 단타 판정 (앱 v121-scalp + v122-scalpfix와 같은 기준). 매일 복기 알림(remind.mjs)에서 예외 없는 단타를 빈 칸 알림에서 뺌.
+// 단타 = 끝난 거래(앱 calcTrade done)에서 포지션이 0→0으로 열고 닫힌 왕복마다 보유(첫 진입~그 왕복 청산)를 재고, 가장 긴 왕복 < 기준 분(앱 v122).
+//   수집 거래는 왕복 1번 = 첫 진입~마지막 청산. 시각 없는 체결·진입 전 청산·포지션 남음 = 판정 안 함.
 //   기준 분 = 앱 설정 settings.v121Min(review_gaps v12 = alert18.sql이 줌) → 없으면 .env SCALP_MIN(기본 30). SCALP_MIN=0 = 끔(2.13.0까지와 같은 동작).
 //   시각 = 앱 v99Ms: 체결 timestamp, 없으면 HL = UTC 날짜·시각, 미국 = 미국 동부 벽시계. 진행 중 거래·시각 모르는 거래는 판정 안 함(스윙 취급).
 // 예외(단타여도 알림에 남음) = 앱 v121Exc:
@@ -34,9 +35,19 @@ export function etMs(date,tm){const g=Date.parse(date+'T'+tm+'Z');if(!Number.isF
 export function evMs(e,hl){if(!e)return null;if(Number.isSafeInteger(e.timestamp))return e.timestamp;if(!dateOK(e.date))return null;
  let tm=timeOK(e.time)?String(e.time):'00:00:00'; // 앱 그대로: 시각이 비면(null·'') 시각 모름 → nullif(tm.length===5)tm+=':00';
  if(hl){const x=Date.parse(e.date+'T'+tm+'Z');return Number.isFinite(x)?x:null;}return etMs(e.date,tm);}
-/** 보유 시간(첫 진입 ~ 마지막 청산, 앱 v121HoldMs) */
-export function holdMs(t,hl){let E=null,X=null;for(const e of t.entries||[]){const m=evMs(e,hl);if(m!==null&&(E===null||m<E))E=m;}for(const f of t.fills||[]){const m=evMs(f,hl);if(m!==null&&(X===null||m>X))X=m;}
- if(E===null||X===null||X<E)return null;return X-E;}
+/** 앱 v122Ms: timestamp → 없으면 날짜 + 시각(HH:MM[:SS])이 있어야 함(시각 없으면 null) */
+const segMs=(e,hl)=>{if(!e)return null;if(Number.isSafeInteger(e.timestamp))return e.timestamp;if(!dateOK(e.date))return null;
+ if(!/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(String(e.time||'')))return null;return evMs(e,hl);};
+/** 앱 v122Segs: 포지션이 0에서 열려 0으로 닫힌 구간(왕복)들 [{a,b,ms}] — 판정 못 하면 null(시각 없음·진입 전 청산·포지션 남음·순서 이상) */
+export function segments(t,hl){try{
+ const ev=[...sorted(t.entries).map(e=>({...e,k:'in'})),...sorted(t.fills,10000).map(e=>({...e,k:'out'}))].sort(sortEv);if(!ev.length)return null;
+ let qty=0,tin=0,start=null;const segs=[];
+ for(const e of ev){const ms=segMs(e,hl);if(ms===null)return null;const q=num(e.shares)||0;if(!(q>0))return null;const tol=Number.EPSILON*Math.max(1,q,tin)*64;
+  if(e.k==='in'){if(Math.abs(qty)<=tol||start===null){start=ms;qty=0;}qty+=q;tin+=q;}
+  else{if(start===null)return null;qty-=q;if(Math.abs(qty)<=tol||qty<0){segs.push({a:start,b:ms,ms:ms-start});start=null;qty=0;}}}
+ if(start!==null||!segs.length||segs.some(s=>!(s.ms>=0)))return null;return segs;}catch{return null;}}
+/** 보유 시간 = 가장 긴 왕복(앱 v122 v121HoldMs). 수집 거래는 왕복 1번이라 첫 진입~마지막 청산과 같음. */
+export function holdMs(t,hl){const s=segments(t,hl);return s?Math.max(...s.map(x=>x.ms)):null;}
 /** 앱 calcTrade 요약: valid·done·손익(수수료 차감, HL 펀딩 합 더함)·R. 끝난 거래의 이동평균 실현 합 = 현금 흐름 합이라 같은 값. */
 export function calc(t,hl){const sign=hl&&t.direction==='short'?-1:1;let qty=0,avg=0,pnl=0,totalIn=0,sold=0,valid=true;
  const ev=[...sorted(t.entries).map(e=>({...e,k:'in'})),...sorted(t.fills,10000).map(e=>({...e,k:'out'}))].sort(sortEv);
