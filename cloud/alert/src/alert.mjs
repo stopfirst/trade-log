@@ -1,4 +1,5 @@
-// trade-alert 2.14.0 (alert18): 매일 복기 알림에서 단타 제외(앱 v121·v122와 같은 판정) — 끝난 거래의 가장 긴 0→0 왕복 보유 < 앱 설정 단타 기준(없으면 .env SCALP_MIN, 기본 30분)이면 빈 칸 알림에서 빼고 '단타 n건 제외' 한 줄. 규칙 위반·복수매매·손익비 미달·위험 초과·실현 R < −1은 남김(scalp.mjs). 판정 데이터 = review_gaps v12(alert18.sql, 없으면 예전처럼). SCALP_MIN=0 = 끔. 손실 한도·백업·존·복수매매·방향 전환 로직 변경 없음.
+// trade-alert 2.15.0 (alert19): 복수매매 '오늘은 여기까지'를 같은 날 '연속' 손실 청산 DAILY_LOSS_STREAK_MAX(3)회로 — 청산 순서대로 손실 +1 · 이익 청산(순손익 > 0) 0으로 · 순손익 0은 유지(revenge.mjs streakReach). 도달 뒤 그날 진입 위반 경고·서버 단타 예외 'n연패 후 진입'도 같은 함수. DAILY_LOSS_STREAK_MODE=count = 2.14.0 횟수 방식. 메시지 '손실 청산 3회' → '연속 손실 3회'. 손실 한도·쿨다운·갈아타기·위험 증가·방향 전환·백업 로직 변경 없음. SQL 없음.
+// (이전) 2.14.0 (alert18): 매일 복기 알림에서 단타 제외(앱 v121·v122와 같은 판정) — 끝난 거래의 가장 긴 0→0 왕복 보유 < 앱 설정 단타 기준(없으면 .env SCALP_MIN, 기본 30분)이면 빈 칸 알림에서 빼고 '단타 n건 제외' 한 줄. 규칙 위반·복수매매·손익비 미달·위험 초과·실현 R < −1은 남김(scalp.mjs). 판정 데이터 = review_gaps v12(alert18.sql, 없으면 예전처럼). SCALP_MIN=0 = 끔. 손실 한도·백업·존·복수매매·방향 전환 로직 변경 없음.
 // (이전) 2.13.0 (alert17): HL 포지션 방향 전환(롱↔숏) 감지 경고 '[방향 전환 의심]' — 한 주문으로 부호 반전(reduce-only 아닌 반대 주문) 또는 청산 뒤 FLIP_WINDOW_MIN(5)분 안 반대 진입(flip.mjs). 기록 = Supabase flip_alerts(alert17.sql, 없으면 텔레그램만). 손실 한도·복수매매 등 다른 로직 변경 없음.
 // (이전) 2.12.0 (alert16): 매일 복기 알림 판정을 앱 v106과 맞춤 — 계획 손익비가 기록돼 있으면 기준 미달이어도 빈 칸 아님(미기록만), 앱에서 ×로 숨긴 거래(t.v92Hide) 제외(remind.mjs · alert11.sql review_gaps 'hide'). 손실 한도·백업·존·복수매매 로직 변경 없음.
 // (이전) 2.11.0 (alert15): 복수매매 차단 알림 — 손실 청산 뒤 REVENGE_COOLDOWN_MIN(15)분 안 진입 '[복수매매 의심]', US 손절한 날 다른 종목 진입(버튼 '미리 정한 가격'/'강해 보여서'), 하루 손실 DAILY_LOSS_STREAK_MAX(3)회 '오늘은 여기까지'+이후 진입 경고, 손실 직후 위험 증가 강한 경고(revenge.mjs). 기록 = Supabase revenge_alerts(alert15.sql, 없으면 텔레그램만). 판정 로직 변경 없음.
@@ -48,7 +49,7 @@ import * as fl from './flip.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.14.0';
+export const VERSION='2.15.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -428,7 +429,7 @@ export class Alerter{
   await this.init();const c=this.cfg;
   this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월(÷ 기간 시작 직전 마감)·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:'')+` · 텔레그램 즉시 복기 ${c.quickReview?'켜짐(HL 청산, alert9.sql 필요)':'꺼짐(QUICK_REVIEW=0)'}`+` · 매일 복기 알림 ${c.remind.enabled?c.remind.atText+' KST(alert11.sql 필요)':'꺼짐(REVIEW_REMIND=0)'}`);
   const rc=c.revenge;
-  this.log('INFO',`복수매매 차단 알림 ${rc.enabled?'켜짐':'꺼짐(REVENGE_ALERT=0)'}`+(rc.enabled?` · 쿨다운 ${rc.cooldownMin||'끔'}분 · 하루 손실 ${rc.streakMax?rc.streakMax+'회':'끔'} · US 갈아타기 ${rc.usSwitch?'켬':'끔'} · 위험 증가 ${rc.riskUp?'켬':'끔'} · 기록 alert15.sql`:''));
+  this.log('INFO',`복수매매 차단 알림 ${rc.enabled?'켜짐':'꺼짐(REVENGE_ALERT=0)'}`+(rc.enabled?` · 쿨다운 ${rc.cooldownMin||'끔'}분 · 오늘은 여기까지 ${rc.streakMax?rv.streakWord(rc.streakMode)+' '+rc.streakMax+'회'+(rc.streakMode==='count'?'(횟수, DAILY_LOSS_STREAK_MODE=count)':'(이익 청산이면 리셋)'):'끔'} · US 갈아타기 ${rc.usSwitch?'켬':'끔'} · 위험 증가 ${rc.riskUp?'켬':'끔'} · 기록 alert15.sql`:''));
   {const sp=c.scalp;this.log(sp.bad?'WARN':'INFO',`매일 복기 알림 단타 제외 ${c.remind.enabled?(sp.enabled?`켜짐 · 앱 설정 단타 기준(없으면 ${sp.min}분) 미만 끝난 거래는 규칙 위반·−1R 넘긴 손실 아니면 뺌 · alert18.sql 필요`:'꺼짐(SCALP_MIN=0)'):'(복기 알림 꺼짐)'}${sp.bad?` · SCALP_MIN='${sp.raw}' 형식 오류 → 30분`:''}`);}
   this.log('INFO',`방향 전환 감지 ${c.flip.enabled?`켜짐 · 한 주문 반전 + 청산 뒤 ${c.flip.windowMin?c.flip.windowMin+'분 안 반대 진입':'반대 진입 규칙 끔'} · 기록 alert17.sql`:'꺼짐(FLIP_ALERT=0)'}`);
   const zc=c.zones;
@@ -577,7 +578,7 @@ export async function main(argv=process.argv.slice(2),env=process.env){
    {const r=cfg.revenge;let q='';if(r.enabled){try{await new SupabaseRpc(cfg).call('revenge_push',{p_token:cfg.token,p_payload:{items:[]}});q=' · alert15.sql 확인됨';}catch(e){q=/ALERT15/.test(String(e.message))?' · alert15.sql 없음(텔레그램만, 기록은 서버에만)':' · 기록 확인 실패';}}
     {const f=cfg.flip;let q='';if(f.enabled){try{await new SupabaseRpc(cfg).call('flip_push',{p_token:cfg.token,p_payload:{items:[]}});q=' · alert17.sql 확인됨';}catch(e){q=/ALERT17/.test(String(e.message))?' · alert17.sql 없음(텔레그램만, 기록은 서버에만)':' · 기록 확인 실패';}}
      console.log(`방향 전환 감지: ${f.enabled?`켜짐 · 청산 뒤 반대 진입 ${f.windowMin}분${q}`:'꺼짐 (FLIP_ALERT=0)'} (지난 체결로 보기: --flip-dry)`);}
-    console.log(`복수매매 차단 알림: ${r.enabled?`켜짐 · 쿨다운 ${r.cooldownMin}분 · 하루 손실 ${r.streakMax}회${q}`:'꺼짐 (REVENGE_ALERT=0)'} (지난 체결로 보기: --revenge-dry)`);}
+    console.log(`복수매매 차단 알림: ${r.enabled?`켜짐 · 쿨다운 ${r.cooldownMin}분 · 오늘은 여기까지 ${r.streakMax?rv.streakWord(r.streakMode)+' '+r.streakMax+'회':'끔'}${q}`:'꺼짐 (REVENGE_ALERT=0)'} (지난 체결로 보기: --revenge-dry)`);}
    return 0;}
   catch(e){log('ERROR','테스트 전송 실패: '+String(e.message));return 1;}
  }

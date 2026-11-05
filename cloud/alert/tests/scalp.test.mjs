@@ -11,7 +11,7 @@ const mk=(id,name,a,b,p0,p1,x={})=>({id,name,market:'HL',direction:'long',date:'
  entryNote:false,stopNote:false,react:false,tfIn:null,tfOut:null,...x});
 const five=()=>[mk('L31','BTC','00:00','00:31',100,99.5),mk('S29','ETH','01:00','01:29',100,102.5),mk('SBIG','SOL','01:40','01:50',100,92.5),mk('L1','DOGE','02:10','02:30',100,99),mk('REV','AVAX','02:35','02:45',100,101.5)];
 const J=(trades,set={})=>({HL:{from:'2026-10-25',minRR:2,v121Min:null,v99Cool:null,v99MaxLoss:null,riskMax:null,openMax:null,account:null,...set,trades}});
-const byId=(j,min=30)=>{const m=sc.model(j.HL,true,min),o={};for(const [t,r] of m)o[t.id]=r;return o;};
+const byId=(j,min=30,opt)=>{const m=sc.model(j.HL,true,min,opt),o={};for(const [t,r] of m)o[t.id]=r;return o;};
 const ENV30=sc.scalpConfig({});
 
 test('설정: SCALP_MIN 빈칸 30 · 0 끔 · 1~1440 정수 · 이상한 값 30(bad) · 앱 v121Min 우선 · .env 0이면 앱 값 있어도 끔',()=>{
@@ -23,7 +23,8 @@ test('앱 v121 QA 5건과 같은 판정: 단타 S29·SBIG·L1·REV, 빠짐 S29·
  const r=byId(J(five()));
  assert.deepEqual(Object.keys(r).filter(k=>r[k].scalp).sort(),['L1','REV','S29','SBIG']);assert.equal(r.L31.scalp,false);
  assert.deepEqual(Object.keys(r).filter(k=>r[k].scalp&&!r[k].exc.length).sort(),['L1','S29']);
- assert.deepEqual(r.SBIG.exc,['−1R 넘긴 손실 (-1.5R)']);assert.deepEqual(r.REV.exc,['복수매매 의심','3연패 후 진입']);assert.equal(r.REV.revenge,true); // 앱 expect t121과 글자까지 같음
+ assert.deepEqual(r.SBIG.exc,['−1R 넘긴 손실 (-1.5R)']);assert.deepEqual(r.REV.exc,['복수매매 의심']);assert.equal(r.REV.revenge,true); // 2.15.0: REV 전 = 손(L31)-이(S29)-손-손 → 연속 2회 → '3연패' 아님
+ assert.deepEqual(byId(J(five()),30,{streakMode:'count'}).REV.exc,['복수매매 의심','3연패 후 진입'],'count 모드 = 2.14.0·앱 v121~v123 t121과 글자까지 같음');
  assert.equal(r.SBIG.R,-1.5);assert.equal(r.L31.R,-0.1);assert.equal(r.S29.pnl,5);
  assert.equal(Math.round(r.S29.hold/60000),29);assert.equal(Math.round(r.L31.hold/60000),31);
  const s=Object.values(r).filter(x=>x.scalp);assert.equal(s.reduce((a,x)=>a+x.pnl,0),-9);assert.equal(s.reduce((a,x)=>a+x.hold,0)/s.length/60000,17.25); // 앱 세션 카드 −9.00 · 평균 17분
@@ -43,9 +44,10 @@ test('예외: 저장한 위반·청산 위반 표시·서버 중단 중 진입·
  // 손실 −2 + 수수료 0.5×2 + 펀딩 −8 = −11 → −1.1R
  const f=one({entries:[{...ev('e','01:00',100),fee:0.5}],fills:[{...ev('f','01:10',99),fee:0.5}],funding:-8});assert.equal(f.R,-1.1);assert.match(f.exc[0],/−1R 넘긴 손실 \(-1\.1R\)/);
  assert.deepEqual(one({initialRisk:null,fills:[ev('f','01:10',50)]}).exc,[]);
- const t=five();t[4].dismiss=['v99revenge'];let r=byId(J(t));assert.deepEqual(r.REV.exc,['3연패 후 진입']);t[4].dismiss=['v99revenge','v99maxloss'];r=byId(J(t));assert.deepEqual(r.REV.exc,[]);});
+ const t=five(),C={streakMode:'count'};t[4].dismiss=['v99revenge'];let r=byId(J(t),30,C);assert.deepEqual(r.REV.exc,['3연패 후 진입']);assert.deepEqual(byId(J(t)).REV.exc,[],'2.15.0 연속 기준: 복수매매 숨기면 남는 예외 없음');t[4].dismiss=['v99revenge','v99maxloss'];r=byId(J(t),30,C);assert.deepEqual(r.REV.exc,[]);});
 test('복수매매·연패 설정: v99Cool 3분이면 5분 뒤 진입은 복수매매 아님 · v99MaxLoss 1이면 같은 날 손실 뒤 진입 = 1연패 후 진입',()=>{
- let r=byId(J(five(),{v99Cool:3}));assert.deepEqual(r.REV.exc,['3연패 후 진입']);r=byId(J(five(),{v99Cool:3,v99MaxLoss:0}));assert.deepEqual(r.REV.exc,[]);
+ let r=byId(J(five(),{v99Cool:3}),30,{streakMode:'count'});assert.deepEqual(r.REV.exc,['3연패 후 진입']);r=byId(J(five(),{v99Cool:3,v99MaxLoss:0}),30,{streakMode:'count'});assert.deepEqual(r.REV.exc,[]);
+ assert.deepEqual(byId(J(five(),{v99Cool:3})).REV.exc,[],'2.15.0 연속: 손-이-손-손 → 3연패 아님');assert.deepEqual(byId(J(five(),{v99Cool:3,v99MaxLoss:2})).REV.exc,['2연패 후 진입'],'마지막 두 손실(SBIG·L1)은 연속 2');
  r=byId(J(five(),{v99Cool:0,v99MaxLoss:1}));assert.ok(r.REV.exc.includes('1연패 후 진입'));});
 test('판정 안 함: 진행 중(청산 안 끝남) · 시각 없는 체결(timestamp도 없음)은 시각 모름 → 판정 안 함(앱 v99Ms와 같음) · 잘못된 체결(가격 없음) 거래',()=>{
  const r=byId(J([mk('OPEN','A','01:00','01:05',100,101,{fills:[{...ev('f','01:05',101),shares:1}]}),mk('BAD','B','01:00','01:05',100,101,{fills:[{...ev('f','01:05',null)}]})]));
@@ -64,7 +66,8 @@ test('pick/text: 단타 2건 제외 한 줄 · 예외 단타는 사유와 함께
  assert.deepEqual(r.map(x=>x.name),['BTC','SOL','AVAX']);assert.equal(ns,2);assert.equal(r[0].scalp,undefined);assert.deepEqual(r[1].scalp.exc,['−1R 넘긴 손실 (-1.5R)']);
  const txt=rm.text(r,'2026-10-31',{scalpSkip:ns,scalpMin:30});
  assert.match(txt,/^📝 복기 시간 · 10\/31\(토\) 거래 3건\n단타 2건 제외 · 보유 30분 미만 \(규칙 위반·−1R 넘긴 손실은 남김\)\n일지 빈 칸 3건/);
- assert.match(txt,/HL SOL 롱 — .*\[단타 10분 · 예외: −1R 넘긴 손실 \(-1\.5R\)\]/);assert.match(txt,/HL AVAX 롱 — .*\[단타 10분 · 예외: 복수매매 의심, 3연패 후 진입\]/);assert.ok(!/ETH|DOGE/.test(txt));
+ assert.match(txt,/HL SOL 롱 — .*\[단타 10분 · 예외: −1R 넘긴 손실 \(-1\.5R\)\]/);assert.match(txt,/HL AVAX 롱 — .*\[단타 10분 · 예외: 복수매매 의심\]/);
+ const tc=rm.text(rm.pick(J(five()),'2026-10-31',{scalp:sc.scalpConfig({DAILY_LOSS_STREAK_MODE:'count'})}),'2026-10-31');assert.match(tc,/HL AVAX 롱 — .*\[단타 10분 · 예외: 복수매매 의심, 3연패 후 진입\]/,'DAILY_LOSS_STREAK_MODE=count = 2.14.0 문구');assert.ok(!/ETH|DOGE/.test(txt));
  const t0=rm.text(rm.pick(J(five()),'2026-10-31',{scalp:sc.scalpConfig({SCALP_MIN:'0'})}),'2026-10-31');assert.match(t0,/거래 5건\n일지 빈 칸 5건/);assert.ok(!/단타/.test(t0));});
 test('앱 설정 v121Min(20)이 .env 30보다 우선 → S29·L1도 남음 · 숨김(×)이 단타보다 먼저',()=>{
  let ns=0;const r=rm.pick(J(five(),{v121Min:20}),'2026-10-31',{scalp:ENV30,onScalp:()=>ns++});assert.equal(ns,0);assert.equal(r.length,5);
@@ -94,7 +97,7 @@ test('Reminder: 단타 제외 메시지 · 단타만 있는 날 안 보냄(로�
  const R4=new rm.Reminder({rpc,token:'k',cfg:rm.remindConfig({}),state:()=>({sent:{},outbox:[]}),log:()=>{}});assert.match(await R4.afterCheck(at('2026-11-01','09:31')),/거래 5건/); // scalp 안 넘기면(예전 호출) 끔
 });
 test('--remind-dry: 미리 보기·뺀 단타 목록, 보내지 않음 · 단타만 있는 날 "보내지 않습니다" · 채팅 ID 없어도 됨',async()=>{
- const {remindDry,VERSION}=await import('../src/alert.mjs');assert.equal(VERSION,'2.14.0');
+ const {remindDry,VERSION}=await import('../src/alert.mjs');assert.equal(VERSION,'2.15.0');
  const env={SUPABASE_URL:'https://abcdefgh.supabase.co',SUPABASE_KEY:'sb_publishable_'+'k'.repeat(24),KW_COLLECTOR_TOKEN:'kwc_'+'A'.repeat(43),TELEGRAM_BOT_TOKEN:'123456789:AAH'+'x'.repeat(32)};
  const out=[],orig=console.log;let calls=[];const rpc=j=>({call:async(n,b)=>{calls.push([n,b]);return {ok:true,journal:j};}});
  console.log=(...a)=>out.push(a.join(' '));
