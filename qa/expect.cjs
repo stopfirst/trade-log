@@ -347,4 +347,14 @@ module.exports = {
     A.eq('C.confMob', [{ field: 'exitNote', kept: 'PC 청산', keptSide: 'other', keptDev: 'pc' }]); A.eq('C.raw', 0); A.eq('C.rawPc', 0); A.eq('C.chipMob', '충돌 1건');
     A.eq('C.gA', { pc: 98.7, mob: 98.7, pcApplied: 222, mobApplied: 222 });
     A.eq('C.popMob.help', 'PC에서 고친 값을 남겼어요. 진 값은 여기 보관돼요.'); A.has('C.popMob.txt', '남긴 값(PC · 다른 기기)'); A.eq('C.popMob.over', false); } },
+  /* v120 상세(복기) 닫으면 열기 직전 목록 위치: 거래 기록(더 보기 펼친 뒤·PC 표 상자/모바일 창)·Esc·늦은 렌더·사용자 스크롤은 그대로·같은 조건 다시 그리기 표 상자 유지·
+     카드 상세 목록 다시 열기·복기 탭·캘린더 날짜 상세·상세 안에서 탭 옮기면 복원 안 함 (PC 1440 · 모바일 390) */
+  t120: { check(A) { const ALL = { page: true, win: true, inner: true, top: true };
+    for (const w of W) { for (const k of ['R', 'E', 'L', 'W', 'C']) { A.eq(w + '.' + k + '.opened', true); A.eq(w + '.' + k + '.same', ALL); }
+      A.eq(w + '.R.flash', true); A.eq(w + '.R.rowsKept', true); A.eq(w + '.R.scrolled', true); A.eq(w + '.E.flash', true);
+      A.eq(w + '.U.kept', true); A.eq(w + '.U.stop', 'user');
+      A.eq(w + '.D.mid', { trade: true, drill: false }); A.eq(w + '.D.reopen', true); A.eq(w + '.D.drillSame', true); A.eq(w + '.D.topSame', true);
+      A.eq(w + '.W.scrolled', true); A.eq(w + '.C.scrolled', true); A.eq(w + '.C.dayKept', true);
+      A.eq(w + '.G.page', 'settings'); A.eq(w + '.G.skip', 1); }
+    A.eq('w1440.S', { keep: true, search: 0 }); } },
 };
