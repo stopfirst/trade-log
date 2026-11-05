@@ -3,6 +3,7 @@
    1) 앱(qa/lib/pw.cjs 고정 시계 2026-10-31 12:00 KST)에 거래를 넣고 v121Info·v121Skip 결과와 저장 payload(state.settings·trades)를 받음
    2) 그 payload를 PGlite의 alert18.sql review_gaps로 통과시켜 서버 sc.model 판정
    3) 거래마다 단타 여부·빠짐 여부·예외 사유(글자 그대로)·보유 분·R 비교. HL(29/31분, −1.5R, 복수매매, 3연패, 저장 위반, 청산 위반, 손익비 미달, 위험 초과, 펀딩·수수료 −1.1R, v109 숨김, 1R 없음, 진행 중)
+      · v122 한 거래 왕복 2번(가장 긴 왕복 20분 = 단타, 40분 = 스윙)
       + 미국(동부 벽시계 29/31분, 같은 날 손절 뒤 갈아타기 '강해 보여서', 복수매매). 서버 중단 중 진입(v21)은 앱이 Supabase를 읽어야 해서 여기선 대조 안 함(alert18-sql 테스트가 SQL 쪽 검사). */
 import {createRequire} from 'node:module';import path from 'node:path';import fs from 'node:fs';import http from 'node:http';import {createHash,randomBytes} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';import * as sc from '../src/scalp.mjs';
@@ -32,7 +33,9 @@ const seedHL=()=>{const ev=(id,d,s,px,x={})=>{const ts=Date.parse(d+'T'+s+':00Z'
   mk('LOSS2','DOT',D,'05:00','05:05',100,99),mk('DIS','NEAR',D,'05:10','05:15',100,101,{v109Dismiss:['v99revenge']}),mk('REV2','APT',D,'05:20','05:25',100,101),
   mk('NO1R','ETC',D,'06:00','06:10',100,50,{initialRisk:null,riskR:null}),
   mk('OPEN','SUI',D,'07:00','07:05',100,101,{fills:[{...ev('Of',D,'07:05',101),shares:1}],sync:{positionStatus:'OPEN',executionKeys:[]}}),
-  mk('SW45','ARB',D,'08:00','08:45',100,99));
+  mk('SW45','ARB',D,'08:00','08:45',100,99),
+  mk('M2','OP',D,'09:00','09:20',100,100.5,{entries:[ev('M2a',D,'09:00',100),ev('M2b',D,'10:30',100)],fills:[ev('M2c',D,'09:20',100.5),ev('M2d',D,'10:50',100.5)]}),
+  mk('M40','INJ',D,'11:00','11:20',100,100.5,{entries:[ev('M4a',D,'11:00',100),ev('M4b',D,'12:30',100)],fills:[ev('M4c',D,'11:20',100.5),ev('M4d',D,'13:10',100.5)]}));
  V121.memo=null;renderAll();};
 const seedUS=()=>{const ev=(id,d,s,px,x={})=>({id,date:d,time:s+':00',shares:10,price:px,fee:0,seq:Number(s.replace(':','')),...x});
  const mk=(id,name,d,a,b,p0,p1,x={})=>normaliseTrade({schema:5,currency:CURRENCY,market:MARKET,id,at:Date.parse(d+'T12:00:00Z'),name,direction:'long',date:d,stop:null,stop0:null,initialRisk:20,riskR:1,setup:'미분류',process:'unreviewed',review:'',violations:[],
@@ -62,4 +65,4 @@ for(const [scope,app,isHL] of [['HL',hl,true],['US',us,false]]){const j=rg.journ
  for(const [id,a] of Object.entries(app.res)){const s=srvR[id],S={scalp:!!(s&&s.scalp),skip:!!(s&&s.scalp&&!s.exc.length),exc:s&&s.scalp?s.exc:[],hold:s?Math.round(s.hold/60000):null,R:s?s.R:null};n++;
   const same=JSON.stringify(S)===JSON.stringify(a);if(!same)fail++;console.log(same?'ok  ':'FAIL',scope,id.padEnd(6),'app',JSON.stringify(a),same?'':'\n     server '+JSON.stringify(S));}}
 if(hl.errs.length||us.errs.length)console.log('page errors',hl.errs,us.errs);
-console.log(fail?`FAIL ${fail}/${n}`:`ALL OK ${n}/${n} 거래 — 서버 판정 = 앱 v121`);process.exitCode=fail?1:0;await browser.close();process.exit(fail?1:0);
+console.log(fail?`FAIL ${fail}/${n}`:`ALL OK ${n}/${n} 거래 — 서버 판정 = 앱 v121·v122`);process.exitCode=fail?1:0;await browser.close();process.exit(fail?1:0);
