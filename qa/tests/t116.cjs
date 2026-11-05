@@ -3,7 +3,7 @@
        v115: '동기화 대기'·HL 주소 없음·잔고 없음·리더 아님(사용자 화면과 같음). v116: 동기화됨·HL 체결 반영·잔고·리더·현물 메타 시간 초과로 칸 비움, 구조 횟수>0, 진단 'v116 · 타이머' 절.
        AbortSignal.timeout(300)도 3초 안에 끝남.
    (L) 분석 '계획 vs 실제 · 청산 진단' 묶음을 펼친 채로 → renderAll이 끝없이 다시 불리지 않음(5초 동안 실제 그리기 ≤ 3), 사람이 다시 펼치면 1번.
-   (S) 짧은 몰림(renderAll 15번 연달아)은 15번 다 그림 · 입력 없이 0.1초마다 5초(초당 10번 이어짐) → 2초 뒤부터 0.5초에 1번으로 묶임(실제 ≤ 36), 묶음 기록, 끝나면 마지막 1번. */
+   (S) 짧은 몰림(renderAll 15번 연달아)은 15번 다 그림 · 입력 없이 0.1초마다 5초(초당 10번 이어짐) → 2초 뒤부터 0.5초에 1번으로 묶임(실제 ≤ 36), 묶음 기록, 끝나면 마지막 1번(마지막 호출 뒤 실제 그리기 있음, v120 판정 고침). */
 process.env.QA_REAL_CLOCK='1';
 const {chromium}=require('../lib/pw.cjs');const fs=require('fs'),http=require('http'),path=require('path');
 const [,,htmlPath,outDir,tag]=process.argv;fs.mkdirSync(outDir,{recursive:true});
@@ -88,8 +88,9 @@ const init=([A])=>{
    /* 짧은 몰림 15번(0초 간격)은 그대로 다 그림 */
    const b0=V114.ra.n;for(let i=0;i<15;i++){await new Promise(r=>setTimeout(r,0));renderAll();}const burst=V114.ra.n-b0;await new Promise(r=>setTimeout(r,3500));
    /* 0.1초마다 5초 = 50번(초당 10번 이어짐) → 묶음 */
-   const n0=V114.ra.n,s0=V116R.skip,t0=performance.now();let lastSkip=false;while(performance.now()-t0<5000){const k0=V116R.skip;renderAll();lastSkip=V116R.skip>k0;await new Promise(r=>setTimeout(r,100));}const mid=V114.ra.n-n0,pend=V116R.pend;await new Promise(r=>setTimeout(r,800));
+   const n0=V114.ra.n,s0=V116R.skip,t0=performance.now();let lastSkip=false,lastAt=0;while(performance.now()-t0<5000){const k0=V116R.skip;lastAt=performance.now();renderAll();lastSkip=V116R.skip>k0;await new Promise(r=>setTimeout(r,100));}const mid=V114.ra.n-n0,pend=V116R.pend;/* v120: 고정 0.8초 대신 묶음 예약이 끝날 때까지(최대 3초) — 느린 CI에서 예약(≤0.5초)+그리기가 0.8초를 넘겨 흔들리던 것 */{const w0=performance.now();while(V116R.pend&&performance.now()-w0<3000)await new Promise(r=>setTimeout(r,50));}await new Promise(r=>setTimeout(r,300));
    /* v118: '끝나면 마지막 1번'은 마지막 호출이 묶였을 때(예약이 남아 있을 때)만 해당 — 마지막 호출이 바로 그려졌으면(묶음 예약이 그 전에 이미 돎) 더 그릴 게 없음. v117에서도 이 위상 차이로 흔들림 */
-   return {burst:burst===15,mid:mid<=36,skip:V116R.skip-s0>=10,last:(lastSkip||pend)?V114.ra.n-n0>mid:true};});
+   /* v120: '마지막 호출 뒤 한 번은 그림' = 마지막 호출 시각 이후에 실제 그리기가 있었는지(lastRun). 예전 판정은 마지막 호출이 묶였는데 그 예약이 0.1초 쉬는 사이 이미 돌아 mid에 들어간 경우를 실패로 셌음(로컬 부하 4개 동시 실행에서 v119도 2/4 실패로 재현) */
+   return {burst:burst===15,mid:mid<=36,skip:V116R.skip-s0>=10,last:lastSkip?(V116R.lastRun>=lastAt&&!V116R.pend):true};});
   await ctx.close();}
  Object.assign(R,S);console.log(JSON.stringify(R));await browser.close();srv.close();})().catch(e=>{console.log(JSON.stringify({...(globalThis.__S||{}),errors:['FATAL '+(e&&e.stack||e)]}));process.exit(1);});
