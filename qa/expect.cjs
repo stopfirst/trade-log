@@ -394,4 +394,31 @@ module.exports = {
       A.eq(w + '.calFix', { has: true, inDetail: true, n: '7건', net: '+54.50', exc: 2, order: ['v17Bal', 'v118Day', 'v121Cal'] }); A.eq(w + '.calFixN', true);
       A.eq(w + '.calChk', { docScroll: false, bad: [] });
       A.has(w + '.badge', '왕복 2번 · 가장 긴 왕복 20분'); } } },
+  /* v123 HL 하위계정 탄창: subAccounts 발견·탄창 체결/펀딩 직접 수집 → 스냅샷 합침(주계정 거래 ID 그대로, 같은 tid·같은 펀딩 키 충돌 없음), 분모 = 주계정 + 탄창 마감(portfolio 기록점),
+     주↔탄창 이체 내부 이동(합산 계산에서만, 캘린더는 예전대로), 오늘 탄창 카드(잔고·목표·사용률·상태·오늘 실현·장중 재충전·금고에서 거래), 배지, 1R > 탄창 잔고 칩,
+     설정(탄창/안 씀/제외·% 저장·잘못된 값 거부), 미설정 안내, 끄기, 웹소켓 추가 구독·탄창 체결(중복 없음) (PC 1440 · 모바일 390) */
+  t123: { check(A, o) {
+    for (const w of W) {
+      A.eq(w + '.seed.listed', true); A.eq(w + '.seed.pulled', 4); A.eq(w + '.seed.list', ['Scalping', '1R-1', '1R-2']);
+      A.eq(w + '.seed.mainIds', ['auto:hyperliquid:a8a32d43f025ad68:770001:long', 'auto:hyperliquid:a8a32d43f025ad68:777:long']); A.eq(w + '.seed.mainIds', o[w] && o[w].seed && o[w].seed.plainIds); /* 주계정 거래 ID = 탄창 없이 만든 것과 같음 */
+      A.eq(w + '.seed.subTrades', ['BTC:OPEN', 'xyz:SPCX:CLOSED']); A.eq(w + '.seed.keys', ['777', 'sub44444444:777']);
+      A.eq(w + '.seed.fundKeys', 2); A.eq(w + '.seed.assigned', 2); A.eq(w + '.seed.q', 0); A.eq(w + '.seed.unassigned', 0); A.eq(w + '.seed.n', 4); A.eq(w + '.seed.close', 180); A.eq(w + '.seed.bal', 180);
+      A.eq(w + '.denom.value', 10180); A.eq(w + '.denom.mode', 'close'); A.eq(w + '.denom.v123', 180); A.eq(w + '.denom.basis', 10180); A.eq(w + '.denom.limAcct', 10180);
+      A.has(w + '.denom.text', '10,180.00 USDC (탄창 포함)'); A.has(w + '.denom.tip', '+ 탄창(거래용 하위계정) 마감 180.00 USDC'); A.has(w + '.denom.tip', '마감 뒤 이체·입출금 +1,000.00 USDC(1건)');
+      A.eq(w + '.dash', { denom: 10180, from: 10180, change: -1000, pct: -9.8232, v123: true });
+      A.eq(w + '.flow.out', { net: 850, n: 3 }); A.eq(w + '.flow.comb', { net: 1000, n: 1 }); A.eq(w + '.flow.kinds', ["탄창 '1R-1'으로 보냄", "탄창 '1R-1'으로 보냄"]);
+      A.eq(w + '.card', { has: true, beforeLimits: true, bal: '180.00 USDC', target: '203.60 USDC', used: '11.6%', state: '사용 중', pnl: '−21.10', refill: '장중 재충전 1건', vault: '금고에서 거래 1건', setup: false, head: '1R-1', bar: '11.6' });
+      A.eq(w + '.dbg.on', true); A.eq(w + '.dbg.sel', ['0x4444444444444444444444444444444444444444']); A.eq(w + '.dbg.ex', ['0x2b4f2042354fadf45922a6e7593b79adf0beeea9']); A.eq(w + '.dbg.pct', 2); A.eq(w + '.dbg.trades', 2);
+      A.eq(w + '.dbg.cardState', 'use'); A.eq(w + '.dbg.refill', 1); A.eq(w + '.dbg.vault', 1);
+      A.eq(w + '.badge', { 'ETH@main@2026-10-30': '', 'BTC@main@2026-10-31': '금고', 'xyz:SPCX@sub@2026-10-31': '1R-1', 'BTC@sub@2026-10-31': '1R-1' });
+      A.eq(w + '.detect.label', '1R > 탄창 잔고'); A.has(w + '.detect.detail', '초기 1R 250.00 > 탄창 잔고 180.00'); A.ok(w + '.detect.codes'); if (!(o[w] && o[w].detect && o[w].detect.codes.includes('v123mag') && !o[w].detect.small.includes('v123mag'))) A.fail(w + '.detect: 1R 250은 v123mag, 1R 100은 없음 기대');
+      A.eq(w + '.set', { has: true, inAccount: true, rows: [['Scalping', 'ex'], ['1R-1', 'use'], ['1R-2', 'none']], help: true });
+      A.eq(w + '.modes.ex', { subs: '0x4444444444444444444444444444444444444444', ex: '0x2b4f2042354fadf45922a6e7593b79adf0beeea9,0x5555555555555555555555555555555555555555' });
+      A.eq(w + '.modes.use', { subs: '0x4444444444444444444444444444444444444444,0x5555555555555555555555555555555555555555', ex: '0x2b4f2042354fadf45922a6e7593b79adf0beeea9' });
+      A.eq(w + '.modes.none', { subs: '0x4444444444444444444444444444444444444444', ex: '0x2b4f2042354fadf45922a6e7593b79adf0beeea9' });
+      A.eq(w + '.modes.scalpNone', { subs: '0x4444444444444444444444444444444444444444', ex: '' }); A.eq(w + '.modes.scalpEx', { subs: '0x4444444444444444444444444444444444444444', ex: '0x2b4f2042354fadf45922a6e7593b79adf0beeea9' });
+      A.eq(w + '.modes.pct', 1.5); A.eq(w + '.modes.pctModel', { target: 152.7, state: 'full', over: 27.3 }); A.eq(w + '.modes.pctCleared', false); A.eq(w + '.modes.pctBack', 2); A.eq(w + '.modes.pctBad', false);
+      A.eq(w + '.unset.setup', true); A.has(w + '.unset.text', '고를 수 있는 하위계정 2개'); A.eq(w + '.unset.denom', 10000); A.eq(w + '.unset.basis', 10000);
+      A.eq(w + '.off', { denom: 10000, basis: 10000, change: -850, badge: false, card: false }); }
+    A.eq('w1440.ws', { subs: ['0x1111111111111111111111111111111111111111', '0x4444444444444444444444444444444444444444'], ws: ['0x4444444444444444444444444444444444444444'], added: 1, dup: true, mainMem: false }); } },
 };
