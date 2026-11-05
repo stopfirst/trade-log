@@ -357,4 +357,25 @@ module.exports = {
       A.eq(w + '.W.scrolled', true); A.eq(w + '.C.scrolled', true); A.eq(w + '.C.dayKept', true);
       A.eq(w + '.G.page', 'settings'); A.eq(w + '.G.skip', 1); }
     A.eq('w1440.S', { keep: true, search: 0 }); } },
+  /* v121 단타 분리: 보유 30분 미만 종료 거래 = 단타 → 일지 빈 칸·복기 필요 제외(29분 S29·20분 L1), 31분 L31은 남음, 단타라도 −1R 넘긴 손실(SBIG)·복수매매(REV)는 남음,
+     복기 '오늘'·캘린더 단타 세션 집계(4건·50%·−9.00·17분·복수매매 1건·예외 2건)·세션 메모 저장·입력 중 다시 그리기 유지·새로고침 유지·지우면 키 삭제,
+     목록·상세 배지, 분석 단타/스윙 접힘(핵심 지표 그대로), 기준 20·35분·잘못된 값 거부·빈칸 기본, 동기화 병합·충돌 라벨·v119 표시·가져오기 (PC 1440 · 모바일 390) */
+  t121: { check(A) {
+    for (const w of W) {
+      A.eq(w + '.base', { min: 30, scalps: ['L1', 'REV', 'S29', 'SBIG'], skipped: ['L1', 'S29'], exc: { S29: [], SBIG: ['−1R 넘긴 손실 (-1.5R)'], L1: [], REV: ['복수매매 의심', '3연패 후 진입'] }, hold: { S29: 29, SBIG: 10, L1: 20, REV: 10 }, rev: ['REV'], gaps: ['L31', 'REV', 'SBIG'], need: ['L31', 'REV', 'SBIG'] });
+      A.eq(w + '.dash.vis', true); A.eq(w + '.dash.head', '일지 빈 칸 3건'); A.has(w + '.dash.skip', '단타 2건은 빼고'); A.eq(w + '.dash.badged', ['REV', 'SBIG']); A.eq(w + '.dash.ver', true);
+      A.eq(w + '.today', { has: true, vis: true, beforeDaily: true, n: '4건', win: '50%', net: '−9.00', hold: '17분', rev: '1건', exc: ['REV', 'SBIG'], excHead: '빈 칸 목록에 남은 단타 2건', memo: true, gapsRev: true });
+      A.eq(w + '.memo.saved', '첫 30분만 · 손절 뒤 재진입 1번'); A.eq(w + '.memo.st', '저장됨'); A.eq(w + '.memo.focus', 'v121MemoToday');
+      A.eq(w + '.typing', { same: true, val: '첫 30분만 · 손절 뒤 재진입 1번!', focus: true }); A.eq(w + '.memo2', '첫 30분만 · 손절 뒤 재진입 1번!');
+      A.eq(w + '.cal', { has: true, inDetail: true, n: '4건', net: '−9.00', memo: '첫 30분만 · 손절 뒤 재진입 1번!', exc: ['REV', 'SBIG'] }); A.eq(w + '.calNone', false);
+      A.eq(w + '.rec', ['L1', 'REV', 'S29', 'SBIG']); A.eq(w + '.detail', { s29: '단타 · 29분', l31: false, sbigExc: true });
+      A.eq(w + '.ana.same', true); A.eq(w + '.ana.gone', true); A.eq(w + '.ana.closed', true); A.eq(w + '.ana.after', true);
+      A.eq(w + '.ana.rows.단타', ['4', '50%', '−9.00', '-0.22R', '0.47', '17분']); A.eq(w + '.ana.rows.스윙', ['1', '0%', '−1.00', '-0.1R', '0', '31분']);
+      A.eq(w + '.set.has', true); A.eq(w + '.m20.scalps', ['REV', 'SBIG']); A.eq(w + '.m20.gaps', ['L1', 'L31', 'REV', 'S29', 'SBIG']);
+      A.eq(w + '.m35.skipped', ['L1', 'L31', 'S29']); A.eq(w + '.m35.gaps', ['REV', 'SBIG']); A.eq(w + '.mBad', { min: 35, val: '35' });
+      A.eq(w + '.mDef.min', 30); A.eq(w + '.mDef.gaps', ['L31', 'REV', 'SBIG']); A.eq(w + '.setSaved', false); A.eq(w + '.today35', '5건');
+      A.eq(w + '.reload', { saved: '첫 30분만 · 손절 뒤 재진입 1번!', input: '첫 30분만 · 손절 뒤 재진입 1번!', min: 30, trades: 5 }); A.eq(w + '.clear', 'gone'); }
+    A.eq('w1440.merge', { both: { hl: { '2026-10-30': { memo: 'O', updatedAt: 6 }, '2026-10-31': { memo: 'M', updatedAt: 5 } } }, conf1: 0, conf2: [{ field: 'v121Scalp.hl.2026-10-31.memo', kept: 'O1', lost: 'M1' }], label: '단타 세션 메모 10-31' });
+    A.eq('w1440.stamp', { n: 1, dev: 'pc', T: 'pc' });
+    A.eq('w1440.imp', { cv: { hl: { '2026-10-29': { memo: '가져온 메모', updatedAt: 3 } } }, mg: { hl: { '2026-10-31': { memo: '지금', updatedAt: 9 }, '2026-10-29': { memo: '가져온 메모', updatedAt: 3 } } } }); } },
 };
