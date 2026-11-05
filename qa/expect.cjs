@@ -362,7 +362,7 @@ module.exports = {
      목록·상세 배지, 분석 단타/스윙 접힘(핵심 지표 그대로), 기준 20·35분·잘못된 값 거부·빈칸 기본, 동기화 병합·충돌 라벨·v119 표시·가져오기 (PC 1440 · 모바일 390) */
   t121: { check(A) {
     for (const w of W) {
-      A.eq(w + '.base', { min: 30, scalps: ['L1', 'REV', 'S29', 'SBIG'], skipped: ['L1', 'S29'], exc: { S29: [], SBIG: ['−1R 넘긴 손실 (-1.5R)'], L1: [], REV: ['복수매매 의심', '3연패 후 진입'] }, hold: { S29: 29, SBIG: 10, L1: 20, REV: 10 }, rev: ['REV'], gaps: ['L31', 'REV', 'SBIG'], need: ['L31', 'REV', 'SBIG'] });
+      A.eq(w + '.base', { min: 30, scalps: ['L1', 'REV', 'S29', 'SBIG'], skipped: ['L1', 'S29'], exc: { S29: [], SBIG: ['−1R 넘긴 손실 (-1.5R)'], L1: [], REV: ['복수매매 의심'] /* v124: L31 손·S29 이익·SBIG 손·L1 손 → 연속 2 = 연패 아님(예전 횟수 3) */ }, hold: { S29: 29, SBIG: 10, L1: 20, REV: 10 }, rev: ['REV'], gaps: ['L31', 'REV', 'SBIG'], need: ['L31', 'REV', 'SBIG'] });
       A.eq(w + '.dash.vis', true); A.eq(w + '.dash.head', '일지 빈 칸 3건'); A.has(w + '.dash.skip', '단타 2건은 빼고'); A.eq(w + '.dash.badged', ['REV', 'SBIG']); A.eq(w + '.dash.ver', true);
       A.eq(w + '.today', { has: true, vis: true, beforeDaily: true, n: '4건', win: '50%', net: '−9.00', hold: '17분', rev: '1건', exc: ['REV', 'SBIG'], excHead: '빈 칸 목록에 남은 단타 2건', memo: true, gapsRev: true });
       A.eq(w + '.memo.saved', '첫 30분만 · 손절 뒤 재진입 1번'); A.eq(w + '.memo.st', '저장됨'); A.eq(w + '.memo.focus', 'v121MemoToday');
@@ -421,4 +421,30 @@ module.exports = {
       A.eq(w + '.unset.setup', true); A.has(w + '.unset.text', '고를 수 있는 하위계정 2개'); A.eq(w + '.unset.denom', 10000); A.eq(w + '.unset.basis', 10000);
       A.eq(w + '.off', { denom: 10000, basis: 10000, change: -850, badge: false, card: false }); }
     A.eq('w1440.ws', { subs: ['0x1111111111111111111111111111111111111111', '0x4444444444444444444444444444444444444444'], ws: ['0x4444444444444444444444444444444444444444'], added: 1, dup: true, mainMem: false }); } },
+  /* v124 'N연패 후 진입' = 같은 날 연속 손실(이익 청산 0, 0원 유지): 손-이-손-손 표시 없음 · 손-손-손 표시 · 이익 뒤 리셋 · 손-0-손-손 표시 · UTC/ET 날짜 경계,
+     v124Debug 연속 값, 배지·processOf·v37Detect·월간 줄·문구, 설정(칸 이름·토글·도움말·새로고침 유지·다시 켜기·연속 2회), ?v124=0 예전 횟수 (HL·US × 1440·390) */
+  t124: { check(A) {
+    const OLD_HL = { A5: ['maxloss'], B4: ['maxloss'], B5: ['maxloss'], C5: ['maxloss'], D4: ['maxloss'] }, NEW_HL = { B4: ['maxloss'], C5: ['maxloss'], D4: ['maxloss'] };
+    for (const W of [1440, 390]) {
+      { const k = 'HL' + W, P = (p, v) => A.eq(k + '.' + p, v);
+        P('n', 20); P('on', true); P('flags', NEW_HL); P('detail', '같은 날 연속 손실 청산 3회 뒤 진입 (설정 연속 3회)');
+        P('dbg.2026-10-20', { mode: 'streak', closes: ['A1:손실:1', 'A2:이익:0', 'A3:손실:1', 'A4:손실:2', 'A5:이익:0'], entries: ['A1:0/0', 'A2:1/1', 'A3:0/1', 'A4:1/2', 'A5:2/3'] });
+        P('dbg.2026-10-21.entries', ['B1:0/0', 'B2:1/1', 'B3:2/2', 'B4:3/3!', 'B5:0/3']);
+        P('dbg.2026-10-22', { mode: 'streak', closes: ['C1:손실:1', 'C2:0:1', 'C3:손실:2', 'C4:손실:3', 'C5:이익:0'], entries: ['C1:0/0', 'C2:1/1', 'C3:1/1', 'C4:2/2', 'C5:3/3!'] });
+        P('dbg.2026-10-23.entries', ['D1:0/0', 'D2:1/1', 'D3:2/2', 'D4:3/3!']); P('dbg.2026-10-24.entries', ['D5:0/0']);
+        P('dbgVer', { v: 'v124', j: 'hyperliquid', max: 3, day: true });
+        P('rec', { B4: ['3연패 후 진입'], C5: ['3연패 후 진입'], D4: ['3연패 후 진입'] });
+        P('link', { A5: { proc: '규칙 준수', det: [] }, B4: { proc: '규칙 위반', det: ['v99maxloss'] }, B5: { proc: '규칙 준수', det: [] }, C5: { proc: '규칙 위반', det: ['v99maxloss'] }, D4: { proc: '규칙 위반', det: ['v99maxloss'] }, D5: { proc: '규칙 준수', det: [] } });
+        P('month.row', ['3연패 후 진입', '3']); P('month.hint', '같은 날 연속 손실 3회 뒤 진입'); A.has(k + '.month.note', '쿨다운 15분 · 같은 날 연속 손실 3회');
+        P('set0.lab', '같은 날 연속 손실 · 회'); P('set0.cb', { checked: true, dis: false, vis: true }); A.has(k + '.set0.help', '같은 날 연속 손실 3회(이익 청산하면 0부터) 뒤 진입하면 ‘3연패 후 진입’'); P('set0.count', null);
+        P('off', { on: false, flags: OLD_HL }); P('set1.lab', '하루 손실 청산 횟수 · 회'); P('set1.cb.checked', false); P('set1.count', true); A.has(k + '.set1.help', '같은 날 손실 청산 3회 뒤');
+        P('offReload', { on: false, count: true }); P('back', { on: true, has: false, flags: NEW_HL });
+        P('max2.max', 2); P('max2.flags', { A5: ['maxloss'], B3: ['maxloss'], B4: ['maxloss'], C4: ['maxloss'], C5: ['maxloss'], D3: ['maxloss'], D4: ['maxloss'] }); A.has(k + '.max2.help', '같은 날 연속 손실 2회');
+        P('url0', { on: false, flags: OLD_HL }); P('url0set.cb', { checked: false, dis: true, vis: true }); P('url0set.lab', '하루 손실 청산 횟수 · 회'); }
+      { const k = 'US' + W, P = (p, v) => A.eq(k + '.' + p, v);
+        P('n', 5); P('on', true); P('flags', { U4: ['maxloss'] }); P('detail', '같은 날 연속 손실 청산 3회 뒤 진입 (설정 연속 3회)');
+        P('dbg.2026-10-27', { mode: 'streak', closes: ['U1:손실:1', 'U2:손실:2', 'U3:손실:3', 'U4:이익:0'], entries: ['U1:0/0', 'U2:1/1', 'U3:2/2', 'U4:3/3!'] }); P('dbg.2026-10-28.entries', ['U5:0/0']);
+        P('dbgVer', { v: 'v124', j: 'us', max: 3, day: true }); P('rec', { U4: ['3연패 후 진입'] });
+        P('link', { U4: { proc: '규칙 위반', det: ['v99maxloss'] }, U5: { proc: '규칙 준수', det: [] } }); P('month.row', ['3연패 후 진입', '1']);
+        P('set0.cb', { checked: true, dis: false, vis: true }); P('off.on', false); P('back.on', true); P('max2.flags', { U3: ['maxloss'], U4: ['maxloss'] }); P('url0.on', false); P('url0set.cb.dis', true); } } } },
 };
