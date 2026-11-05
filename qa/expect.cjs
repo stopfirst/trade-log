@@ -378,4 +378,20 @@ module.exports = {
     A.eq('w1440.merge', { both: { hl: { '2026-10-30': { memo: 'O', updatedAt: 6 }, '2026-10-31': { memo: 'M', updatedAt: 5 } } }, conf1: 0, conf2: [{ field: 'v121Scalp.hl.2026-10-31.memo', kept: 'O1', lost: 'M1' }], label: '단타 세션 메모 10-31' });
     A.eq('w1440.stamp', { n: 1, dev: 'pc', T: 'pc' });
     A.eq('w1440.imp', { cv: { hl: { '2026-10-29': { memo: '가져온 메모', updatedAt: 3 } } }, mg: { hl: { '2026-10-31': { memo: '지금', updatedAt: 9 }, '2026-10-29': { memo: '가져온 메모', updatedAt: 3 } } } }); } },
+  /* v122 단타 판정 수정: 앱 수집 경로(HLCloud.buildSnapshot)로 만든 실데이터 형태 거래 + 수동 여러 왕복·시각 없는 거래, 캘린더 카드·v118 늦은 상자·되살림, v121Debug 이유 */
+  t122: { check(A) {
+    for (const w of W) {
+      A.eq(w + '.seed', { q: 0, n: 10 });
+      A.eq(w + '.dbg.ver', true); A.eq(w + '.dbg.dataV', true); A.eq(w + '.dbg.day', '2026-10-31'); A.eq(w + '.dbg.hasTrades', true);
+      A.eq(w + '.dbg.scalps', ['GOOGL@01:50', 'GOOGL@01:58', 'M2', 'SOXL@02:10', 'SOXL@02:20S', 'SPCX@00:10', 'SPCX@00:20']);
+      A.eq(w + '.dbg.skip', ['GOOGL@01:50', 'M2', 'SOXL@02:20S', 'SPCX@00:10', 'SPCX@00:20']);
+      A.eq(w + '.dbg.hold', { 'SPCX@00:10': 2.13, 'SPCX@00:20': 10.48, 'TSLA@00:40': 60, 'GOOGL@01:50': 6.72, 'GOOGL@01:58': 7, 'SOXL@02:10': 10, 'SOXL@02:20S': 8, M2: 20, M40: 40, MNT: null });
+      A.eq(w + '.dbg.segs', { M2: 2, M40: 2 }); A.eq(w + '.dbg.span', { M2: 110, M40: 65 });
+      A.eq(w + '.dbg.why', { 'TSLA@00:40': '보유 60분 ≥ 기준 30분 → 스윙', 'GOOGL@01:58': '보유 7분 < 기준 30분 → 단타 (예외로 빈 칸에 남음: 복수매매 의심)', M2: '왕복 2번 중 가장 긴 20분 < 기준 30분 → 단타', M40: '왕복 2번 중 가장 긴 40분 ≥ 기준 30분 → 스윙', MNT: '체결 시각 없음(날짜만) → 단타 판정 안 함(스윙 취급)' });
+      A.eq(w + '.dbg.days', 7); A.eq(w + '.dbg.legacy', ['GOOGL@01:50', 'GOOGL@01:58', 'M2', 'SOXL@02:10', 'SOXL@02:20S', 'SPCX@00:10', 'SPCX@00:20']);
+      A.eq(w + '.cal', { has: true, inDetail: true, n: '7건', net: '+54.50', exc: 2, order: ['v17Bal', 'v121Cal'] });
+      A.eq(w + '.cal118', { has: true, inDetail: true, n: '7건', net: '+54.50', exc: 2, order: ['v17Bal', 'v118Day', 'v121Cal'] });
+      A.eq(w + '.calFix', { has: true, inDetail: true, n: '7건', net: '+54.50', exc: 2, order: ['v17Bal', 'v118Day', 'v121Cal'] }); A.eq(w + '.calFixN', true);
+      A.eq(w + '.calChk', { docScroll: false, bad: [] });
+      A.has(w + '.badge', '왕복 2번 · 가장 긴 왕복 20분'); } } },
 };
