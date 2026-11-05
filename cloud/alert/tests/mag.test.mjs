@@ -211,6 +211,6 @@ test('--mag-dry(= --dry): 오늘 탄창 상태·목표·보낼 알림 미리 보
  assert.match(t,/^탄창 드라이런 \(보내지 않음 · 저장 안 함\) · HL 하루 2026-11-06/);assert.match(t,/목록: 1R-1 0x1111…1111 · 출처 앱 설정\(v123Subs\)/);
  assert.match(t,/1R-1 0x1111…1111 잔고 250\.00 USDC/);assert.match(t,/목표 201\.00 USDC = 직전 마감\(주계정\+탄창\) 10,050\.00 USDC × 2%/);
  assert.match(t,/지금 조건이면 보낼 알림 1건/);assert.match(t,/🔔 탄창 09:00 점검/);assert.match(t,/HL 오늘 한도: .* 분모 10050\.00 USDC \(주계정 \+ 탄창\)/);assert.match(t,/보내지 않았습니다/);
- assert.equal(w.alerts.length,0,'텔레그램 안 보냄');assert.equal(w.pushes.length,0,'저장 안 함');
+ assert.equal(w.alerts.length,0,'텔레그램 안 보냄');assert.equal(w.pushes.length,0,'저장 안 함');assert.ok(w.magCalls.length>0&&w.magCalls.every(c=>c.p_env===null),'드라이런은 .env 목록도 Supabase에 안 씀');
  const off=[];assert.equal(await magDry(['--mag-dry'],env(dir,{MAG:'0'}),()=>{},{fetcher:w.fetcher,now:()=>w.now,out:l=>off.push(l)}),0);assert.match(off.join(),/MAG=0/);
 });

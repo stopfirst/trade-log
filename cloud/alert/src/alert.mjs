@@ -260,7 +260,7 @@ export class Alerter{
  async magData(main,t,h){
   const c=this.cfg.mag,M=this.magS||(this.magS={settings:null,setAt:0,sqlMissing:false,envSent:null,watch:null,db:{fills:[],funding:[]},c:{},list:null});
   if(t-M.setAt>=5*MIN){M.setAt=t;const envStr=c.envSubs.join(',');
-   try{const r=await this.rpc.call('mag_status',{p_token:this.cfg.token,p_env:M.envSent===envStr?null:envStr,p_from:day.utcStart(day.utcDate(t))-86400000});
+   try{const r=await this.rpc.call('mag_status',{p_token:this.cfg.token,p_env:this.dryRun||M.envSent===envStr?null:envStr,p_from:day.utcStart(day.utcDate(t))-86400000});
     M.settings=r.settings&&typeof r.settings==='object'?r.settings:{};M.watch=Array.isArray(r.watch)?r.watch:null;M.db={fills:Array.isArray(r.fills)?r.fills:[],funding:Array.isArray(r.funding)?r.funding:[]};M.envSent=envStr;
     if(M.sqlMissing)this.log('INFO','alert20.sql 확인 → 탄창 목록을 앱 설정에서 읽고 Supabase가 탄창 체결도 수집합니다.');M.sqlMissing=false;}
    catch(e){const code=String(e.message||e);if(code==='SUPABASE_ALERT20_SQL_NOT_INSTALLED'){M.sqlMissing=true;M.settings=null;M.watch=null;M.db={fills:[],funding:[]};this.magWarn('sql','alert20.sql이 아직 없습니다 → 탄창 목록은 .env HL_SUBS만 씁니다(앱 설정 못 읽음, Supabase 탄창 수집 없음). Supabase SQL Editor에서 alert20.sql을 실행하세요.');}
