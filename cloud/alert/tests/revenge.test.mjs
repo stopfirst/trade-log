@@ -23,7 +23,7 @@ const E=(o)=>({market:'HL',key:'hl:e'+o.time,seg:'HL:'+(o.symbol||'ETH')+':'+o.t
 const T0=Date.parse('2026-11-01T03:00:00Z'); // 11/01 12:00 KST · UTC 11/01
 
 test('버전 2.11.0 · 설정 기본값(켜짐·15분·3연패) · 끄기 · 형식 오류는 CONFIG_INCOMPLETE',()=>{
- assert.equal(VERSION,'2.13.0');
+ assert.equal(VERSION,'2.14.0');
  const c=readConfig(env('/tmp')).revenge;assert.deepEqual([c.enabled,c.cooldownMin,c.streakMax,c.usSwitch,c.riskUp,c.minLoss],[true,15,3,true,true,0]);
  assert.equal(readConfig(env('/tmp',{REVENGE_ALERT:'0'})).revenge.enabled,false);
  const d=readConfig(env('/tmp',{REVENGE_COOLDOWN_MIN:'30',DAILY_LOSS_STREAK_MAX:'0',REVENGE_US_SWITCH:'0'})).revenge;assert.deepEqual([d.cooldownMin,d.streakMax,d.usSwitch],[30,0,false]);
