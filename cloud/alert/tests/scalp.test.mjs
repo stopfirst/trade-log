@@ -93,3 +93,15 @@ test('Reminder: 단타 제외 메시지 · 단타만 있는 날 안 보냄(로�
  assert.match(await R3.afterCheck(at('2026-11-01','09:31')),/거래 5건\n일지 빈 칸 5건/);assert.equal(l3.filter(x=>/alert18/.test(x)).length,0);
  const R4=new rm.Reminder({rpc,token:'k',cfg:rm.remindConfig({}),state:()=>({sent:{},outbox:[]}),log:()=>{}});assert.match(await R4.afterCheck(at('2026-11-01','09:31')),/거래 5건/); // scalp 안 넘기면(예전 호출) 끔
 });
+test('--remind-dry: 미리 보기·뺀 단타 목록, 보내지 않음 · 단타만 있는 날 "보내지 않습니다" · 채팅 ID 없어도 됨',async()=>{
+ const {remindDry,VERSION}=await import('../src/alert.mjs');assert.equal(VERSION,'2.14.0');
+ const env={SUPABASE_URL:'https://abcdefgh.supabase.co',SUPABASE_KEY:'sb_publishable_'+'k'.repeat(24),KW_COLLECTOR_TOKEN:'kwc_'+'A'.repeat(43),TELEGRAM_BOT_TOKEN:'123456789:AAH'+'x'.repeat(32)};
+ const out=[],orig=console.log;let calls=[];const rpc=j=>({call:async(n,b)=>{calls.push([n,b]);return {ok:true,journal:j};}});
+ console.log=(...a)=>out.push(a.join(' '));
+ try{assert.equal(await remindDry(['--remind-dry','--day','2026-10-31'],env,()=>{},{rpc:rpc(J(five()))}),0);
+  const only=J([mk('S29','ETH','01:00','01:29',100,102.5)]);assert.equal(await remindDry(['--remind-dry','--day','2026-10-31'],env,()=>{},{rpc:rpc(only)}),0);
+  assert.equal(await remindDry(['--remind-dry','--day','10/31'],env,()=>{},{rpc:rpc(only)}),2);}
+ finally{console.log=orig;}
+ const s=out.join('\n');assert.equal(calls[0][0],'review_gaps');assert.equal(calls[0][1].p_since,'2026-10-31');
+ assert.match(s,/미리 보기 · 2026-10-31 · 단타 제외 켜짐 · alert18\.sql 확인됨 · 기준 30분/);assert.match(s,/뺀 단타: HL ETH 롱 · 보유 29분 · R 0\.5/);assert.match(s,/뺀 단타: HL DOGE 롱 · 보유 20분/);
+ assert.match(s,/남은 단타\(예외\): HL SOL · 10분 · −1R 넘긴 손실/);assert.match(s,/단타 2건 제외/);assert.match(s,/\(보내지 않았습니다\)/);assert.match(s,/이 날은 알림을 보내지 않습니다\(대상 거래 없음\)/);});

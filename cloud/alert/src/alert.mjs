@@ -27,6 +27,7 @@
 //      node --env-file=.env src/alert.mjs --clear-stops US        (잘못 걸린 중단 해제 — 기록 남김)
 //      node --env-file=.env src/alert.mjs --zones-dry             (2.10.0 존 목록만 출력 — 보내지도 저장하지도 않음, 꺼져 있어도 동작)
 //      node --env-file=.env src/alert.mjs --flip-dry [--from YYYY-MM-DD] [--to YYYY-MM-DD]  (2.13.0 지난 HL 체결로 방향 전환 경고가 몇 건 나왔을지 — 보내지도 저장하지도 않음)
+//      node --env-file=.env src/alert.mjs --remind-dry [--day YYYY-MM-DD]  (2.14.0 그날 거래로 매일 복기 알림이 어떻게 나올지·뺀 단타 목록 — 보내지도 저장하지도 않음, 기본 어제)
 //      node --env-file=.env src/alert.mjs --revenge-dry [--from YYYY-MM-DD] [--to YYYY-MM-DD]  (2.11.0 지난 체결로 복수매매 경고가 몇 건 나왔을지 — 보내지도 저장하지도 않음)
 import {readFile,writeFile,rename,mkdir} from 'node:fs/promises';
 import {createRequire} from 'node:module';
@@ -525,6 +526,18 @@ export async function flipDry(argv,env,log,{fetcher=fetch,out=l=>console.log(l),
  return 0;
 }
 const DAY_MS=86400000;
+/** 2.14.0 --remind-dry [--day YYYY-MM-DD]: 그날(기본 어제 KST) 매일 복기 알림 미리 보기 + 뺀 단타 목록. 보내지 않음 · 저장 안 함(서버 .env 그대로 사용). */
+export async function remindDry(argv,env,log,{rpc}={}){
+ let cfg;try{cfg=readConfig(env,{needTelegram:false});}catch(e){explainConfig(e,log);return 2;}
+ const di=argv.indexOf('--day'),day=di>=0?String(argv[di+1]||''):rm.prevDate(rm.kstParts(Date.now()).date);if(!/^\d{4}-\d{2}-\d{2}$/.test(day)){log('ERROR','--day는 YYYY-MM-DD');return 2;}
+ let d;try{d=await (rpc||new SupabaseRpc(cfg)).call('review_gaps',{p_token:cfg.token,p_since:day});}catch(e){log('ERROR',/SQL_NOT_INSTALLED/.test(String(e.message))?'alert11.sql(review_gaps)이 없습니다 → Supabase SQL Editor에서 alert11.sql, alert18.sql 실행':'review_gaps 실패: '+String(e.message||e).slice(0,120));return 1;}
+ let nh=0;const sk=[],mins=new Set();const rows=rm.pick(d.journal,day,{onHidden:()=>nh++,scalp:cfg.scalp,onScalp:(t,i,m)=>{sk.push({t,i});mins.add(m);}});
+ const st=!cfg.scalp.enabled?'단타 제외 꺼짐(SCALP_MIN=0)':scm.hasScalpData(d.journal)?`단타 제외 켜짐 · alert18.sql 확인됨 · 기준 ${[...mins].join('/')||'앱 설정(없으면 '+cfg.scalp.min+')'}분`:'alert18.sql 없음 → 단타 제외 안 됨(예전처럼 알림)';
+ console.log(`매일 복기 알림 미리 보기 · ${day} · ${st}${nh?` · 숨긴 거래 ${nh}건 제외`:''}`);
+ for(const {t,i} of sk)console.log(`  뺀 단타: ${t.market||''} ${String(t.name||'?')} ${t.direction==='short'?'숏':'롱'} · 보유 ${scm.holdText(i.hold)} · R ${i.R===null?'모름(1R 없음)':i.R}`);
+ for(const r of rows.filter(r=>r.scalp))console.log(`  남은 단타(예외): ${r.market} ${r.name} · ${scm.holdText(r.scalp.hold)} · ${r.scalp.exc.join(', ')}`);
+ if(!rm.shouldSend(rows,sk.length)){console.log('\n→ 이 날은 알림을 보내지 않습니다('+(rows.length?'남은 게 빈 칸 없는 예외 단타뿐':'대상 거래 없음')+').');return 0;}
+ console.log('\n'+rm.text(rows,day,{scalpSkip:sk.length,scalpMin:mins.size===1?[...mins][0]:null})+'\n\n(보내지 않았습니다)');return 0;}
 
 export async function main(argv=process.argv.slice(2),env=process.env){
  const log=makeLogger(env);
@@ -535,6 +548,7 @@ export async function main(argv=process.argv.slice(2),env=process.env){
   try{console.log(await zw.dryList(zc,{log}));console.log(`\n존 터치 알림: ${on?'켜짐':'꺼짐'} (${how}) · 위 목록은 보내지 않았습니다.`);return 0;}
   catch(e){log('ERROR','존 목록 실패: '+String(e.message||e));return 1;}
  }
+ if(argv.includes('--remind-dry'))return remindDry(argv,env,log);
  if(argv.includes('--revenge-dry'))return revengeDry(argv,env,log);
  if(argv.includes('--flip-dry'))return flipDry(argv,env,log);
  if(argv.includes('--find-chat')){
