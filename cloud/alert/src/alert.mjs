@@ -1,4 +1,7 @@
-// trade-alert 2.15.0 (alert19): 복수매매 '오늘은 여기까지'를 같은 날 '연속' 손실 청산 DAILY_LOSS_STREAK_MAX(3)회로 — 청산 순서대로 손실 +1 · 이익 청산(순손익 > 0) 0으로 · 순손익 0은 유지(revenge.mjs streakReach). 도달 뒤 그날 진입 위반 경고·서버 단타 예외 'n연패 후 진입'도 같은 함수. DAILY_LOSS_STREAK_MODE=count = 2.14.0 횟수 방식. 메시지 '손실 청산 3회' → '연속 손실 3회'. 손실 한도·쿨다운·갈아타기·위험 증가·방향 전환·백업 로직 변경 없음. SQL 없음.
+// trade-alert 2.16.0 (alert20): HL 하위계정 '탄창' — 목록 = 앱 설정 v123Subs(alert20.sql mag_status) → 없으면 .env HL_SUBS(Scalping 제외). 손실 한도(하루·주·월) 분모 = 주계정 + 탄창 마감(portfolio 근삿값),
+//   실현손익 = 주계정 + 탄창 체결·펀딩, 주↔탄창 이체 = 내부 이동(앱 v123과 같음). 새 텔레그램 알림(.env로 각각 끔): 🧯 탄창 소진 · 장중 재충전 · 금고에서 거래 · 09:00 탄창 점검(mag.mjs).
+//   복수매매·방향 전환·즉시 복기도 탄창 체결 포함(계정별로 구간을 만든 뒤 합침). Supabase pg_cron이 탄창 체결·펀딩도 수집(alert20.sql). --mag-dry(= --dry)로 오늘 탄창 상태. MAG=0 = 2.15.0 그대로.
+// (이전) 2.15.0 (alert19): 복수매매 '오늘은 여기까지'를 같은 날 '연속' 손실 청산 DAILY_LOSS_STREAK_MAX(3)회로 — 청산 순서대로 손실 +1 · 이익 청산(순손익 > 0) 0으로 · 순손익 0은 유지(revenge.mjs streakReach). 도달 뒤 그날 진입 위반 경고·서버 단타 예외 'n연패 후 진입'도 같은 함수. DAILY_LOSS_STREAK_MODE=count = 2.14.0 횟수 방식. 메시지 '손실 청산 3회' → '연속 손실 3회'. 손실 한도·쿨다운·갈아타기·위험 증가·방향 전환·백업 로직 변경 없음. SQL 없음.
 // (이전) 2.14.0 (alert18): 매일 복기 알림에서 단타 제외(앱 v121·v122와 같은 판정) — 끝난 거래의 가장 긴 0→0 왕복 보유 < 앱 설정 단타 기준(없으면 .env SCALP_MIN, 기본 30분)이면 빈 칸 알림에서 빼고 '단타 n건 제외' 한 줄. 규칙 위반·복수매매·손익비 미달·위험 초과·실현 R < −1은 남김(scalp.mjs). 판정 데이터 = review_gaps v12(alert18.sql, 없으면 예전처럼). SCALP_MIN=0 = 끔. 손실 한도·백업·존·복수매매·방향 전환 로직 변경 없음.
 // (이전) 2.13.0 (alert17): HL 포지션 방향 전환(롱↔숏) 감지 경고 '[방향 전환 의심]' — 한 주문으로 부호 반전(reduce-only 아닌 반대 주문) 또는 청산 뒤 FLIP_WINDOW_MIN(5)분 안 반대 진입(flip.mjs). 기록 = Supabase flip_alerts(alert17.sql, 없으면 텔레그램만). 손실 한도·복수매매 등 다른 로직 변경 없음.
 // (이전) 2.12.0 (alert16): 매일 복기 알림 판정을 앱 v106과 맞춤 — 계획 손익비가 기록돼 있으면 기준 미달이어도 빈 칸 아님(미기록만), 앱에서 ×로 숨긴 거래(t.v92Hide) 제외(remind.mjs · alert11.sql review_gaps 'hide'). 손실 한도·백업·존·복수매매 로직 변경 없음.
@@ -29,6 +32,7 @@
 //      node --env-file=.env src/alert.mjs --zones-dry             (2.10.0 존 목록만 출력 — 보내지도 저장하지도 않음, 꺼져 있어도 동작)
 //      node --env-file=.env src/alert.mjs --flip-dry [--from YYYY-MM-DD] [--to YYYY-MM-DD]  (2.13.0 지난 HL 체결로 방향 전환 경고가 몇 건 나왔을지 — 보내지도 저장하지도 않음)
 //      node --env-file=.env src/alert.mjs --remind-dry [--day YYYY-MM-DD]  (2.14.0 그날 거래로 매일 복기 알림이 어떻게 나올지·뺀 단타 목록 — 보내지도 저장하지도 않음, 기본 어제)
+//      node --env-file=.env src/alert.mjs --mag-dry   (= --dry)  (2.16.0 오늘 탄창 상태·목표·지금 조건이면 보낼 탄창 알림 — 보내지도 저장하지도 않음)
 //      node --env-file=.env src/alert.mjs --revenge-dry [--from YYYY-MM-DD] [--to YYYY-MM-DD]  (2.11.0 지난 체결로 복수매매 경고가 몇 건 나왔을지 — 보내지도 저장하지도 않음)
 import {readFile,writeFile,rename,mkdir} from 'node:fs/promises';
 import {createRequire} from 'node:module';
@@ -46,10 +50,11 @@ import * as spot from './spot.mjs';
 import * as zw from './zonewatch.mjs';
 import * as rv from './revenge.mjs';
 import * as fl from './flip.mjs';
+import * as mg from './mag.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.15.0';
+export const VERSION='2.16.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -85,6 +90,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
  const zoneCfg=zw.zoneConfig(env);for(const f of zoneCfg.errors)P(f);
  const revCfg=rv.revengeConfig(env);for(const f of revCfg.errors)P(f);
  const flipCfg=fl.flipConfig(env);for(const f of flipCfg.errors)P(f);
+ const magCfg=mg.magConfig(env);for(const f of magCfg.errors)P(f);
  const extra=String(env.US_EXTRA_HOLIDAYS||'').split(',').map(s=>s.trim()).filter(Boolean);if(extra.some(d=>!/^\d{4}-\d{2}-\d{2}$/.test(d)))P('US_EXTRA_HOLIDAYS (YYYY-MM-DD,YYYY-MM-DD)');
  let cfg;
  try{
@@ -97,7 +103,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
    checkSec:numIn(env,'RISK_CHECK_SEC',60,60,300,{int:true}),idleSec:numIn(env,'RISK_IDLE_SEC',300,60,1800,{int:true}),pushMin:numIn(env,'RISK_PUSH_MIN',5,1,30,{int:true}),
    usFlowMin:numIn(env,'US_FLOW_MIN_USD',50,1,1e7),usStaleMin:numIn(env,'US_STALE_MIN',20,5,240,{int:true}),anchorMaxGapMin:numIn(env,'ANCHOR_MAX_GAP_MIN',20,2,120,{int:true}),
    usExtraHolidays:extra,dayBasis,riskStartDate:rsd||null,hlAddress:hlAddr?hlAddr.toLowerCase():null,
-   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),scalp:scm.scalpConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),zones:zoneCfg,revenge:revCfg,flip:flipCfg,summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
+   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),scalp:scm.scalpConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),zones:zoneCfg,revenge:revCfg,flip:flipCfg,mag:magCfg,summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
    stateDir:String(env.STATE_DIRECTORY||env.ALERT_STATE_DIR||'/var/lib/trade-alert').split(':')[0]};
  }catch(e){if(e.fields)problems.push(...e.fields);else throw e;}
  if(problems.length){const e=Error('CONFIG_INCOMPLETE');e.fields=problems;throw e;}
@@ -167,7 +173,7 @@ export class SupabaseRpc{
    if(r.status===429||r.status>=500){if(attempt<2){await this.sleep(2000*2**attempt);continue;}throw Error('SUPABASE_UNAVAILABLE_'+r.status);}
    const text=await r.text();let data=null;try{data=JSON.parse(text);}catch{}
    if(r.status===401||r.status===403||/invalid collector token/.test(String(data?.message||'')))throw Error('SUPABASE_TOKEN_REJECTED');
-   if(r.status===404||/risk_status|risk_push|risk_day_data|quick_review_push|revenge_push|revenge_data|flip_push|could not find the function/i.test(String(data?.message||'')))throw Error(name==='risk_day_data'?'SUPABASE_ALERT3_SQL_NOT_INSTALLED':name==='quick_review_push'?'SUPABASE_ALERT9_SQL_NOT_INSTALLED':/^revenge_/.test(name)?'SUPABASE_ALERT15_SQL_NOT_INSTALLED':name==='flip_push'?'SUPABASE_ALERT17_SQL_NOT_INSTALLED':'SUPABASE_SQL_NOT_INSTALLED');
+   if(r.status===404||/risk_status|risk_push|risk_day_data|quick_review_push|revenge_push|revenge_data|flip_push|mag_status|could not find the function/i.test(String(data?.message||'')))throw Error(name==='risk_day_data'?'SUPABASE_ALERT3_SQL_NOT_INSTALLED':name==='quick_review_push'?'SUPABASE_ALERT9_SQL_NOT_INSTALLED':/^revenge_/.test(name)?'SUPABASE_ALERT15_SQL_NOT_INSTALLED':name==='flip_push'?'SUPABASE_ALERT17_SQL_NOT_INSTALLED':name==='mag_status'?'SUPABASE_ALERT20_SQL_NOT_INSTALLED':'SUPABASE_SQL_NOT_INSTALLED');
    if(!r.ok)throw Error('SUPABASE_HTTP_'+r.status);
    if(!data||typeof data!=='object')throw Error('SUPABASE_BAD_RESPONSE');
    if(data.ok===false)throw Error('SUPABASE_REJECTED_'+String(data.error||'unknown').replace(/[^a-z_]/g,'').slice(0,40));
@@ -210,6 +216,8 @@ export class Alerter{
   this.revenge=this.cfg.revenge.enabled&&!dryRun?new rv.Revenge({cfg:this.cfg.revenge,tg:this.tg,rpc:this.rpc,token:this.cfg.token,chat:this.cfg.chat,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist(),cal:this.cal}):null;this.rvIn=null;this.rvDataMissing=false;
   // 2.13.0 방향 전환 감지(dry-run·--test에선 없음). 상태는 state2.json의 flip
   this.flip=this.cfg.flip.enabled&&!dryRun?new fl.Flip({cfg:this.cfg.flip,tg:this.tg,rpc:this.rpc,token:this.cfg.token,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist()}):null;this.flipIn=null;
+  // 2.16.0 탄창(하위계정) — 데이터·합산은 dry-run에서도, 알림 처리기는 dry-run·--test에선 없음. 상태는 state2.json의 mag
+  this.magAlert=this.cfg.mag.enabled&&!dryRun?new mg.Mag({cfg:this.cfg.mag,tg:this.tg,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist()}):null;this.magS=null;this.magLast=null;this.magWarned={};
  }
  /** 2.10.0 텔레그램 메시지(명령) — TELEGRAM_CHAT_ID 대화방의 /zones on|off|status만 */
  async onTgMessage(m){
@@ -230,8 +238,7 @@ export class Alerter{
  want(m,auto){return this.cfg.markets?this.cfg.markets.includes(m):auto;}
  async hlData(addr,t){
   const h=this.hl;if(h.addr!==addr){Object.assign(h,{addr,fills:new Map(),fillsAt:0,funding:new Map(),fundingAt:0,ledger:[],ledgerAt:0,portfolio:null,portfolioAt:0});h.client=new HLClient(addr,this.fetcher,this.now);}
-  const cal=this.cal.HL,today=cal.dayOf(t),since=cal.dayStart(cal.firstOf(today,'month'))-3*86400000,weekSince=cal.dayStart(cal.firstOf(today,'week'))-86400000,
-   pStart=this.cfg.dayBasis==='realized'?day.utcStart(day.periodFrom(this.rcal,day.utcDate(t))):Infinity,from=Math.min(since,weekSince,pStart-86400000);
+  const {from,pStart}=this.hlWindow(t);
   let equity=null;try{equity=await h.client.balance();}catch(e){this.log('WARN','하이퍼리퀴드 BALANCE 조회 실패 → 이번 회차 HL 판정 건너뜀: '+String(e.message||e).slice(0,80));}
   try{const start=h.fillsAt?Math.max(from,h.fillsAt-2*3600000):from;for(const f of await h.client.fills(start))h.fills.set(String(f.tid??f.hash+':'+f.time),f);h.fillsAt=t;for(const [k,f] of h.fills)if(f.time<from-86400000)h.fills.delete(k);}
   catch(e){this.log('WARN','하이퍼리퀴드 체결 조회 실패: '+String(e.message||e).slice(0,80));}
@@ -242,10 +249,45 @@ export class Alerter{
    try{const start=h.fundingAt?Math.max(fs,h.fundingAt-2*3600000):fs;for(const f of await h.client.funding(start)){const c=f?.delta?.coin;if(f&&Number.isFinite(f.time)&&typeof c==='string')h.funding.set(f.time+':'+c,f);}h.fundingAt=t;for(const [k,f] of h.funding)if(f.time<fs)h.funding.delete(k);}
    catch(e){this.log('WARN','하이퍼리퀴드 펀딩 조회 실패(Supabase 수집분으로 계산): '+String(e.message||e).slice(0,80));}}
   if(t-h.portfolioAt>=60*MIN){try{h.portfolio=await h.client.portfolio();h.portfolioAt=t;}catch{}}
-  return {equity,fills:src.hlFills([...h.fills.values()]),rawFills:[...h.fills.values()],rawFunding:[...h.funding.values()],flows:src.hlFlows(h.ledger,addr),portfolio:h.portfolio,client:h.client}; // 2.8.1: 현물 평가(spotB)가 h.client.raw를 씀 — 2.7.0~2.8.0엔 빠져 현물이 분모에 안 들어갔음
+  return {equity,ledger:h.ledger,fills:src.hlFills([...h.fills.values()]),rawFills:[...h.fills.values()],rawFunding:[...h.funding.values()],flows:src.hlFlows(h.ledger,addr),portfolio:h.portfolio,client:h.client}; // 2.8.1: 현물 평가(spotB)가 h.client.raw를 씀 — 2.7.0~2.8.0엔 빠져 현물이 분모에 안 들어갔음
+ }
+ /** 체결·원장 조회 범위(주계정·탄창 공통) */
+ hlWindow(t){const cal=this.cal.HL,today=cal.dayOf(t),since=cal.dayStart(cal.firstOf(today,'month'))-3*86400000,weekSince=cal.dayStart(cal.firstOf(today,'week'))-86400000,
+   pStart=this.cfg.dayBasis==='realized'?day.utcStart(day.periodFrom(this.rcal,day.utcDate(t))):Infinity,from=Math.min(since,weekSince,pStart-86400000);
+  return {from,pStart,fs:Math.min(day.utcStart(day.utcDate(t))-86400000,pStart)};}
+ magWarn(k,m){if(this.magWarned[k])return;this.magWarned[k]=1;this.log('WARN',m);}
+ /** 2.16.0 탄창 데이터: 목록(앱 설정 mag_status → .env HL_SUBS) · 잔고(subAccounts) · 탄창별 체결·펀딩(HL 공개 API + Supabase 수집분) · portfolio(마감값). 탄창 없으면 subs = [] */
+ async magData(main,t,h){
+  const c=this.cfg.mag,M=this.magS||(this.magS={settings:null,setAt:0,sqlMissing:false,envSent:null,watch:null,db:{fills:[],funding:[]},c:{},list:null});
+  if(t-M.setAt>=5*MIN){M.setAt=t;const envStr=c.envSubs.join(',');
+   try{const r=await this.rpc.call('mag_status',{p_token:this.cfg.token,p_env:M.envSent===envStr?null:envStr,p_from:day.utcStart(day.utcDate(t))-86400000});
+    M.settings=r.settings&&typeof r.settings==='object'?r.settings:{};M.watch=Array.isArray(r.watch)?r.watch:null;M.db={fills:Array.isArray(r.fills)?r.fills:[],funding:Array.isArray(r.funding)?r.funding:[]};M.envSent=envStr;
+    if(M.sqlMissing)this.log('INFO','alert20.sql 확인 → 탄창 목록을 앱 설정에서 읽고 Supabase가 탄창 체결도 수집합니다.');M.sqlMissing=false;}
+   catch(e){const code=String(e.message||e);if(code==='SUPABASE_ALERT20_SQL_NOT_INSTALLED'){M.sqlMissing=true;M.settings=null;M.watch=null;M.db={fills:[],funding:[]};this.magWarn('sql','alert20.sql이 아직 없습니다 → 탄창 목록은 .env HL_SUBS만 씁니다(앱 설정 못 읽음, Supabase 탄창 수집 없음). Supabase SQL Editor에서 alert20.sql을 실행하세요.');}
+    else this.log('WARN','탄창 설정 조회 실패(직전 값으로): '+code.slice(0,80));}}
+  let list=null;try{list=mg.parseSubAccounts(await h.client.raw({type:'subAccounts',user:main}));M.list=list;}catch(e){this.log('WARN','HL 하위계정 목록(subAccounts) 조회 실패 → 이번 회차 탄창 잔고 모름: '+String(e.message||e).slice(0,80));}
+  const R=mg.resolveSubs({settings:M.settings,cfg:c,main,list:list||M.list||[]});
+  if(list){const drop=R.subs.filter(a=>!list.some(x=>x.addr===a));if(drop.length){R.subs=R.subs.filter(a=>!drop.includes(a));this.magWarn('drop:'+drop.join(),`탄창 ${drop.map(mg.short).join(', ')}은(는) 주계정의 하위계정 목록에 없어 뺍니다(주소 확인: ${R.source==='env'?'.env HL_SUBS':'앱 설정'}).`);}}
+  if(list)M.balAt=t;else if(t-(M.balAt||0)<=10*MIN&&M.list)list=M.list; // subAccounts 일시 실패 → 10분 안의 직전 잔고
+  if(!R.subs.length)return {resolved:R,subs:[],balSum:null,watch:M.watch,sqlMissing:M.sqlMissing};
+  const {from,fs}=this.hlWindow(t),subs=[];
+  for(const a of R.subs){
+   const X=M.c[a]||(M.c[a]={client:new HLClient(a,this.fetcher,this.now),fills:new Map(),fillsAt:0,funding:new Map(),fundingAt:0,portfolio:null,portfolioAt:0});
+   try{const start=X.fillsAt?Math.max(from,X.fillsAt-2*3600000):from;for(const f of await X.client.fills(start))X.fills.set(String(f.tid??f.hash+':'+f.time),f);X.fillsAt=t;for(const [k,f] of X.fills)if(f.time<from-86400000)X.fills.delete(k);}
+   catch(e){this.log('WARN',`탄창 ${mg.short(a)} 체결 조회 실패(Supabase 수집분으로): `+String(e.message||e).slice(0,80));}
+   try{const start=X.fundingAt?Math.max(fs,X.fundingAt-2*3600000):fs;for(const f of await X.client.funding(start)){const cn=f?.delta?.coin;if(f&&Number.isFinite(f.time)&&typeof cn==='string')X.funding.set(f.time+':'+cn,f);}X.fundingAt=t;for(const [k,f] of X.funding)if(f.time<fs)X.funding.delete(k);}
+   catch(e){this.log('WARN',`탄창 ${mg.short(a)} 펀딩 조회 실패: `+String(e.message||e).slice(0,80));}
+   if(t-X.portfolioAt>=30*MIN||X.portfolio===null){try{X.portfolio=await X.client.portfolio();X.portfolioAt=t;}catch(e){this.log('WARN',`탄창 ${mg.short(a)} portfolio 조회 실패(마감값 모름): `+String(e.message||e).slice(0,60));}}
+   const dbF=M.db.fills.filter(x=>x&&x.address===a).map(x=>x.raw).filter(Boolean),dbU=M.db.funding.filter(x=>x&&x.address===a);
+   const sa=(list||[]).find(x=>x.addr===a);
+   subs.push({addr:a,name:sa?.name||(M.list||[]).find(x=>x.addr===a)?.name||mg.short(a),bal:list?(sa?mg.subBalance(sa).value:null):null,
+    rawFills:day.mergeHlFills([...X.fills.values()],dbF),rawFunding:[...X.funding.values(),...dbU.map(x=>({time:Number(x.time),delta:{coin:x.coin,usdc:x.usdc}}))],portfolio:X.portfolio,client:X.client});
+  }
+  const balSum=subs.every(s=>Number.isFinite(s.bal))?Math.round(subs.reduce((a,s)=>a+s.bal,0)*100)/100:null;
+  return {resolved:R,subs,balSum,watch:M.watch,sqlMissing:M.sqlMissing};
  }
  async check(){
-  const t=this.now(),S=this.state;this.qrSeen=null;this.rvIn={};this.flipIn=null;
+  const t=this.now(),S=this.state;this.qrSeen=null;this.rvIn={};this.flipIn=null;this.magLast=null;
   const data=await this.rpc.call('risk_status',{p_token:this.cfg.token,p_us_revision:S.journal.US?.revision??null,p_hl_revision:S.journal.HL?.revision??null});
   for(const sc of ['US','HL']){const j=data.journal?.[sc];if(j&&!j.unchanged)S.journal[sc]={revision:j.revision,defaultRisk:Number(j.defaultRisk)||null,account:Number(j.account)>0?Number(j.account):null};}
   // v1.3 하루 한도 데이터(alert3.sql risk_day_data). 미설치 → v1.2 하루 판정, 일시 실패 → 10분 안의 직전 값, 그보다 오래되면 하루 판정 건너뜀
@@ -294,8 +336,15 @@ export class Alerter{
   const addr=this.cfg.hlAddress||data.hl_address;
   if(addr&&this.want('HL',true)){
    const cal=this.cal.HL,h=await this.hlData(String(addr).toLowerCase(),t);
+   // 2.16.0 탄창: 체결·실현손익·분모 = 주계정 + 탄창, 주↔탄창 이체 = 내부 이동(입출금 아님)
+   let mgd=null;if(this.cfg.mag.enabled){try{mgd=await this.magData(String(addr).toLowerCase(),t,h);}catch(e){this.log('WARN','탄창 데이터 실패 → 이번 회차 주계정만: '+String(e.message||e).slice(0,80));mgd=null;}}
+   const subs=mgd?.subs?.length?mgd.subs:null,intl=subs?mg.internalRefs(h.ledger,addr,subs.map(x=>x.addr)):new Set();
+   if(subs){h.flows=h.flows.filter(f=>!intl.has(f.ref));
+    if(mgd.balSum===null){h.equity=null;this.log('WARN','탄창 잔고를 몰라 이번 회차 HL 판정을 건너뜁니다(주계정만으로 섞인 숫자를 만들지 않음).');}
+    else if(h.equity)h.equity={...h.equity,value:Math.round((h.equity.value+mgd.balSum)*1e6)/1e6,source:h.equity.source+' + 탄창',main:h.equity.value,mag:mgd.balSum};}
+   const isIntl=f=>subs&&intl.has(f.ref);
    const known=new Set(dbFlows('HL').map(f=>f.ref));const newFlows=h.flows.filter(f=>!known.has(f.ref)&&!S.pending.flows.some(p=>p.ref===f.ref));
-   const fm=new Map();for(const f of [...dbFlows('HL'),...S.pending.flows.filter(f=>f.market==='hl'),...h.flows])fm.set(f.ref,f);const flows=[...fm.values()];
+   const fm=new Map();for(const f of [...dbFlows('HL'),...S.pending.flows.filter(f=>f.market==='hl'),...h.flows])if(!isIntl(f))fm.set(f.ref,f);const flows=[...fm.values()];
    const fb=src.hlPortfolioFallback(h.portfolio,cal,h.equity);
    // 2.7.0 현물 포함 분모: 마감값·현재 기준액에 현물 평가 더함(SPOT_IN_BASIS=0이면 끔)
    let acctH=dd?.acct,acctP=pdd?.acct,curH=h.equity?.value,spotNote=null;
@@ -305,22 +354,34 @@ export class Alerter{
       const m=await sb.closes(a,keys);acctH=spot.withSpot(dd?.acct,m);acctP=spot.withSpot(pdd?.acct,m);
       if(!c.miss&&curH>0)curH=curH+c.usd;spotNote=`현물 포함(지금 ${c.items.map(i=>i.coin).join('·')} ≈ $${c.usd.toFixed(2)})`;}}
     catch(e){this.log('WARN','현물 평가 실패 → 이번 회차 분모 USDC만: '+String(e.message||e).slice(0,80));acctH=dd?.acct;acctP=pdd?.acct;curH=h.equity?.value;spotNote=null;}}
+   // 2.16.0 탄창 마감값(portfolio 근삿값)을 마감 행에 더함 — 모르는 날은 주계정만(missing). curH는 h.equity가 이미 합산(위)
+   let magMissing=new Set();if(subs){const a1=mg.withSubCloses(acctH,subs),a2=mg.withSubCloses(acctP,subs);acctH=a1.rows;acctP=a2.rows;magMissing=new Set([...a1.missing,...a2.missing]);}
    let dayRealized=null;
    if(dayMode==='realized'){const k=day.utcDate(t),db=dd?.hl&&String(dd.hl.address||'').toLowerCase()===String(addr).toLowerCase()?dd.hl:null;
-    const D=day.hlDayRealized(day.mergeHlFills(h.rawFills,db?.fills),day.mergeHlFunding(h.rawFunding,db?.funding),k);
-    D.denom=day.dayDenom({acct:acctH,k0:k,market:'HL',current:curH,manual:S.journal.HL?.account});if(D.denom&&spotNote)D.denom.spot=spotNote;dayRealized=D;}
+    let D=day.hlDayRealized(day.mergeHlFills(h.rawFills,db?.fills),day.mergeHlFunding(h.rawFunding,db?.funding),k);
+    if(subs)D=mg.addDay(D,mg.subDayRealized(subs,k));
+    D.denom=day.dayDenom({acct:acctH,k0:k,market:'HL',current:curH,manual:S.journal.HL?.account});if(D.denom&&spotNote)D.denom.spot=spotNote;
+    if(D.denom&&subs){if(D.denom.mode==='close'&&magMissing.has(D.denom.key))D.denom.magPending=true;else if(D.denom.mode==='close')D.denom.mag=true;}dayRealized=D;}
    let periodRealized=null;
    if(pdd){const k=day.utcDate(t),rc=this.rcal,db=pdd.hl&&String(pdd.hl.address||'').toLowerCase()===String(addr).toLowerCase()?pdd.hl:null,basis=day.basisDenom(curH,S.journal.HL?.account,'HL');
-    const days=day.hlPeriodDays(day.mergeHlFills(h.rawFills,db?.fills),day.mergeHlFunding(h.rawFunding,db?.funding),db?.days||null,day.periodFrom(rc,k),k);
+    let days=day.hlPeriodDays(day.mergeHlFills(h.rawFills,db?.fills),day.mergeHlFunding(h.rawFunding,db?.funding),db?.days||null,day.periodFrom(rc,k),k);
+    if(subs)days=mg.addPeriodDays(days,subs,day.periodFrom(rc,k),k);
     const dn=day.dayDenomFor(acctP,'HL',basis);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal:rc,rows:days.map(d=>({label:d.key,pnl:d.pnl})),days,basis,denomAt:dn};} // v1.6
    const ecH=engineCfg(this.cfg,'HL',S.journal.HL?.defaultRisk,dayMode,cal);
    const anchorH=ecH.riskStart?ms=>{const pk=addDays(ecH.riskStart.date,-1),r=dd?day.closeRows(dd.acct,'HL')[pk]:null;if(r&&r.value>0)return {equity:r.value,at:ecH.riskStart.at,source:'HL 마감 '+pk.slice(5).replace('-','/')+' UTC'};return src.hlPortfolioAt(h.portfolio,ms,h.equity);}:null;
-   const res=risk.step(S.engine.HL,{now:t,cal,cfg:ecH,equity:h.equity,flows,fills:h.fills,fallbackStart:fb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorH,periodMode,periodRealized});
+   const fillsAll=subs?[...h.fills,...subs.flatMap(x=>src.hlFills(x.rawFills))].sort((a,b)=>a.t-b.t):h.fills;
+   const res=risk.step(S.engine.HL,{now:t,cal,cfg:ecH,equity:h.equity,flows,fills:fillsAll,fallbackStart:fb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorH,periodMode,periodRealized});
    if(spotNote&&this.spotB?.cur&&!this.spotB.cur.miss)res.status.spot={usd:Math.round(this.spotB.cur.usd*100)/100,coins:this.spotB.cur.items.map(i=>i.coin)};
+   // 2.16.0 오늘 탄창(알림·표시용, 판정과 무관)
+   if(mgd){const dn=dayRealized?.denom,comb=dn&&dn.mode==='close'&&!!dn.mag;
+    const m=mg.model({t,cfg:this.cfg.mag,main:String(addr).toLowerCase(),subs:subs||[],balSum:mgd.balSum,source:mgd.resolved.source,pct:mgd.resolved.pct,since:mgd.resolved.since,denom:comb?dn.value:null,denomPending:!!(subs&&dn&&dn.magPending),
+      pnl:subs?mg.subDayRealized(subs,day.utcDate(t)).pnl:null,mainRawFills:h.rawFills,ledger:h.ledger});
+    this.magLast={model:m,resolved:mgd.resolved,watch:mgd.watch,sqlMissing:mgd.sqlMissing};
+    if(subs)res.status.mag={subs:m.subs.map(x=>({name:x.name,addr:x.addr,bal:x.bal})),balSum:m.balSum,target:m.target,pct:m.pct,state:m.state,source:m.source,denomPending:m.denomPending};}
    results.push({m:'HL',res,newFlows});
-   this.qrSeen={rawFills:h.rawFills,rawFunding:h.rawFunding,equity:h.equity?.value,defaultRisk:S.journal.HL?.defaultRisk}; // 2.6.0 즉시 복기용(판정과 무관)
-   if(this.flip)this.flipIn={rawFills:h.rawFills,client:h.client}; // 2.13.0 방향 전환(판정과 무관)
-   if(this.revenge){try{this.rvIn.HL=await this.hlRevengeInput(h,t);}catch(e){this.log('WARN','복수매매 HL 입력 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
+   this.qrSeen={rawFills:h.rawFills,rawFunding:h.rawFunding,equity:h.equity?.value,defaultRisk:S.journal.HL?.defaultRisk,subs:subs||[]}; // 2.6.0 즉시 복기용(판정과 무관) · 2.16.0 탄창도
+   if(this.flip)this.flipIn={rawFills:h.rawFills,client:h.client,subs:subs||[]}; // 2.13.0 방향 전환(판정과 무관) · 2.16.0 탄창도(계정별로 판정)
+   if(this.revenge){try{this.rvIn.HL=await this.hlRevengeInput(h,t,subs||[]);}catch(e){this.log('WARN','복수매매 HL 입력 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
   }
   // --- 상태 반영 + 알림 + 저장
   const payload={states:[],days:[],events:[],flows:[]};
@@ -350,18 +411,25 @@ export class Alerter{
   for(const msg of S.outbox){if(t-msg.at>2*3600000)continue;try{await this.deliver(msg.text);sent++;}catch(e){keep.push(msg);this.log('ERROR','텔레그램 전송 실패: '+(e.message||e)+' (다음 확인 때 다시 시도)');}}
   S.outbox=this.dryRun?[]:keep;
   for(const [k,v] of Object.entries(S.sent))if(v<t-45*86400000)delete S.sent[k];
-  if(this.qr){try{await this.qr.afterCheck(this.qrSeen,t);}catch(e){this.log('WARN','즉시 복기 처리 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
+  if(this.qr){try{await this.qr.afterCheck(this.qrSeen,t);for(const x of this.qrSeen?.subs||[])await this.qr.afterCheck({rawFills:x.rawFills,rawFunding:x.rawFunding,equity:this.qrSeen.equity,defaultRisk:this.qrSeen.defaultRisk},t);}catch(e){this.log('WARN','즉시 복기 처리 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
   if(this.revenge){try{await this.revenge.afterCheck(this.rvIn,t);}catch(e){this.log('WARN','복수매매 알림 처리 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
-  if(this.flip){try{await this.flip.afterCheck(this.flipIn?.rawFills||null,this.flipIn?.client||null,t);}catch(e){this.log('WARN','방향 전환 알림 처리 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
+  if(this.flip){try{await this.flip.afterCheck(this.flipIn?.rawFills||null,this.flipIn?.client||null,t);for(const x of this.flipIn?.subs||[])await this.flip.afterCheck(x.rawFills,x.client,t);}catch(e){this.log('WARN','방향 전환 알림 처리 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
+  if(this.magAlert){try{await this.magAlert.afterCheck(this.magLast?.model||null,t);}catch(e){this.log('WARN','탄창 알림 처리 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
   await this.persist();
   return {results,sent,messages:results.flatMap(r=>r.res.messages.map(x=>x.text)),statuses:results.map(r=>r.res.status)};
  }
  /** 2.11.0 HL 복수매매 입력: 체결 구간 + 청산 손익(detectCloses, 펀딩 포함) + 열린 스탑 위험(frontendOpenOrders, 실패해도 명목으로) */
- async hlRevengeInput(h,t){
-  const segs=rv.hlSegments(h.rawFills);
-  if(segs.some(s=>!s.closed&&s.openTime&&t-s.openTime<=2*86400000)){try{const oo=await h.client.info({type:'frontendOpenOrders'});this.revenge.noteStops(rv.hlStopRisks(segs,oo));}catch(e){this.log('WARN','HL 열린 스탑 조회 실패(명목 금액으로 비교): '+String(e.message||e).slice(0,60));}}
-  const closes=new Map(qr.detectCloses(h.rawFills,h.rawFunding).map(c=>[c.tid,c]));
-  return rv.hlEvents(h.rawFills,closes,this.revenge.S.stopRisk);
+ async hlRevengeInput(h,t,subs=[]){
+  // 2.16.0: 주계정·탄창 각각 구간을 만든 뒤(포지션은 계정별) 이벤트를 합침 → 쿨다운·오늘은 여기까지·위험 증가가 두 계정을 함께 봄
+  const out={closes:[],entries:[]};
+  for(const acc of [{rawFills:h.rawFills,rawFunding:h.rawFunding,client:h.client},...subs]){
+   const segs=rv.hlSegments(acc.rawFills);
+   if(segs.some(s=>!s.closed&&s.openTime&&t-s.openTime<=2*86400000)){try{const oo=await acc.client.info({type:'frontendOpenOrders'});this.revenge.noteStops(rv.hlStopRisks(segs,oo));}catch(e){this.log('WARN','HL 열린 스탑 조회 실패(명목 금액으로 비교): '+String(e.message||e).slice(0,60));}}
+   const closes=new Map(qr.detectCloses(acc.rawFills,acc.rawFunding).map(c=>[c.tid,c]));
+   const ev=rv.hlEvents(acc.rawFills,closes,this.revenge.S.stopRisk);out.closes.push(...ev.closes);out.entries.push(...ev.entries);
+  }
+  out.closes.sort((a,b)=>a.time-b.time);out.entries.sort((a,b)=>a.time-b.time);
+  return out;
  }
  /** 2.11.0 US 복수매매 입력: 키움 주문 + 최신 보유 + 종목별 실현(alert15.sql revenge_data, 없으면 평균단가 추정) — 최근 6시간 체결이 있을 때만 Supabase 1회 더 */
  async usRevengeInput(data,t){
@@ -403,6 +471,7 @@ export class Alerter{
   const st=s.stops?.length?s.stops.map(x=>`⛔ 중단: ${x.label} ~ ${x.untilText}`):null;
   rows.push(`연속 손실 ${s.streak?.count??0}/${s.streak?.need??0}일 · ${st?'중단 있음':'중단 없음'}`);if(st)rows.push(...st);
   if(s.halfRisk?.active)rows.push(`✅ 재시작 첫날: 1회 위험 ${Math.round(s.halfRisk.factor*100)}%`);
+  if(HLm&&s.mag&&s.mag.subs?.length){const g=s.mag;rows.push(`🔋 탄창 ${g.subs.map(x=>x.name).join('·')} ${C(g.balSum)}${g.target?` / 목표 ${C(g.target)} (${g.pct}%)`:''}${g.state?' · '+({empty:'소진',full:'가득',use:'사용 중'}[g.state]):''}${g.denomPending?' · 탄창 마감값 확인 중(분모 주계정만)':''}`);}
   if(rs?.before)rows.push(`한도 적용: ${fmt.applyText(mk,rs.day,rs.at)}`);
   if(detail){const d=P.day,w=P.week,m=P.month,md=k=>k?String(k).slice(5).replace('-','/'):'';const parts=[];
    if(d&&Number.isFinite(d.startEquity))parts.push(`오늘 ${C(d.startEquity)}`);
@@ -431,6 +500,7 @@ export class Alerter{
   const rc=c.revenge;
   this.log('INFO',`복수매매 차단 알림 ${rc.enabled?'켜짐':'꺼짐(REVENGE_ALERT=0)'}`+(rc.enabled?` · 쿨다운 ${rc.cooldownMin||'끔'}분 · 오늘은 여기까지 ${rc.streakMax?rv.streakWord(rc.streakMode)+' '+rc.streakMax+'회'+(rc.streakMode==='count'?'(횟수, DAILY_LOSS_STREAK_MODE=count)':'(이익 청산이면 리셋)'):'끔'} · US 갈아타기 ${rc.usSwitch?'켬':'끔'} · 위험 증가 ${rc.riskUp?'켬':'끔'} · 기록 alert15.sql`:''));
   {const sp=c.scalp;this.log(sp.bad?'WARN':'INFO',`매일 복기 알림 단타 제외 ${c.remind.enabled?(sp.enabled?`켜짐 · 앱 설정 단타 기준(없으면 ${sp.min}분) 미만 끝난 거래는 규칙 위반·−1R 넘긴 손실 아니면 뺌 · alert18.sql 필요`:'꺼짐(SCALP_MIN=0)'):'(복기 알림 꺼짐)'}${sp.bad?` · SCALP_MIN='${sp.raw}' 형식 오류 → 30분`:''}`);}
+  {const g=c.mag,A=g.alerts;this.log('INFO',`탄창(하위계정) ${g.enabled?`켜짐 · 목록 앱 설정(alert20.sql)${g.envSubs.length?` → 없으면 .env HL_SUBS ${g.envSubs.length}개`:' (HL_SUBS 없음)'} · 분모·실현손익 = 주계정 + 탄창 · 주↔탄창 이체 = 내부 이동 · 알림 소진 ${A.empty?'켬':'끔'} · 장중 재충전 ${A.refill?'켬':'끔'} · 금고에서 거래 ${A.vault?'켬':'끔'} · 09:${String(g.openMin).padStart(2,'0')} 점검 ${A.open?`켬(±${g.openTolPct}%)`:'끔'}`:'꺼짐(MAG=0 — 2.15.0처럼 주계정만)'}`);}
   this.log('INFO',`방향 전환 감지 ${c.flip.enabled?`켜짐 · 한 주문 반전 + 청산 뒤 ${c.flip.windowMin?c.flip.windowMin+'분 안 반대 진입':'반대 진입 규칙 끔'} · 기록 alert17.sql`:'꺼짐(FLIP_ALERT=0)'}`);
   const zc=c.zones;
   this.log('INFO',`존 터치 알림 ${this.zones.enabled()?'켜짐':'꺼짐'} · ${zc.symbols.join(',')} ${zc.tf} · ${zc.kinds.join(',')} · ${zc.checkSec}초마다 · 소스 ${zc.source}`+(zc.commands?' · 텔레그램 /zones on|off|status':''));
@@ -540,6 +610,17 @@ export async function remindDry(argv,env,log,{rpc}={}){
  if(!rm.shouldSend(rows,sk.length)){console.log('\n→ 이 날은 알림을 보내지 않습니다('+(rows.length?'남은 게 빈 칸 없는 예외 단타뿐':'대상 거래 없음')+').');return 0;}
  console.log('\n'+rm.text(rows,day,{scalpSkip:sk.length,scalpMin:mins.size===1?[...mins][0]:null})+'\n\n(보내지 않았습니다)');return 0;}
 
+/** 2.16.0 --mag-dry (= --dry): 오늘 탄창 상태 + 지금 조건이면 보낼 탄창 알림. 보내지 않음 · 저장 안 함(판정 1회 dry-run과 같은 데이터) */
+export async function magDry(argv,env,log,{fetcher=fetch,now=Date.now,out=l=>console.log(l)}={}){
+ let a;try{a=new Alerter(env,{dryRun:true,log,fetcher,now,out:()=>{}});}catch(e){explainConfig(e,log);return 2;}
+ if(!a.cfg.mag.enabled){out('탄창 기능이 꺼져 있습니다(.env MAG=0) → 2.15.0처럼 주계정만 판정합니다.');return 0;}
+ await a.init();let r;try{r=await a.check();}catch(e){log('ERROR','판정 데이터 실패: '+String(e.message||e).slice(0,120));return 1;}
+ const L=a.magLast;const hl=r.statuses.find(s=>s.market==='HL');
+ const d=hl?.periods?.day;const note=hl?`HL 오늘 한도: ${d&&Number.isFinite(d.pct)?risk.pctText(d.pct)+' / '+(d.limit||'끔')+'%':'—'} · 실현 ${d&&Number.isFinite(d.pnl)?d.pnl.toFixed(2):'—'} USDC · 분모 ${d&&Number.isFinite(d.startEquity)?d.startEquity.toFixed(2):'—'} USDC${hl.mag?' (주계정 + 탄창)':''}`:'HL 판정 없음(HL 주소 없음 또는 조회 실패)';
+ out(mg.dryText(L?.model||null,a.cfg.mag,now(),{resolved:L?.resolved,watch:L?.watch,sqlMissing:L?.sqlMissing,note}));
+ out('\n(보내지 않았습니다 · 저장 안 함)');return 0;
+}
+
 export async function main(argv=process.argv.slice(2),env=process.env){
  const log=makeLogger(env);
  if(argv.includes('--version')){console.log(VERSION);return 0;}
@@ -552,6 +633,7 @@ export async function main(argv=process.argv.slice(2),env=process.env){
  if(argv.includes('--remind-dry'))return remindDry(argv,env,log);
  if(argv.includes('--revenge-dry'))return revengeDry(argv,env,log);
  if(argv.includes('--flip-dry'))return flipDry(argv,env,log);
+ if(argv.includes('--mag-dry')||argv.includes('--dry'))return magDry(argv,env,log);
  if(argv.includes('--find-chat')){
   let cfg;try{cfg=readConfig(env,{needSupabase:false,needTelegram:false});}catch(e){explainConfig(e,log);return 2;}
   try{const chats=await new Telegram(cfg.bot,'').findChats();
@@ -578,6 +660,8 @@ export async function main(argv=process.argv.slice(2),env=process.env){
    {const r=cfg.revenge;let q='';if(r.enabled){try{await new SupabaseRpc(cfg).call('revenge_push',{p_token:cfg.token,p_payload:{items:[]}});q=' · alert15.sql 확인됨';}catch(e){q=/ALERT15/.test(String(e.message))?' · alert15.sql 없음(텔레그램만, 기록은 서버에만)':' · 기록 확인 실패';}}
     {const f=cfg.flip;let q='';if(f.enabled){try{await new SupabaseRpc(cfg).call('flip_push',{p_token:cfg.token,p_payload:{items:[]}});q=' · alert17.sql 확인됨';}catch(e){q=/ALERT17/.test(String(e.message))?' · alert17.sql 없음(텔레그램만, 기록은 서버에만)':' · 기록 확인 실패';}}
      console.log(`방향 전환 감지: ${f.enabled?`켜짐 · 청산 뒤 반대 진입 ${f.windowMin}분${q}`:'꺼짐 (FLIP_ALERT=0)'} (지난 체결로 보기: --flip-dry)`);}
+    {const g=cfg.mag;let q='';if(g.enabled){try{await new SupabaseRpc(cfg).call('mag_status',{p_token:cfg.token});q=' · alert20.sql 확인됨';}catch(e){q=/ALERT20/.test(String(e.message))?' · alert20.sql 없음(.env HL_SUBS만, Supabase 탄창 수집 없음)':' · 확인 실패';}}
+     console.log(`탄창(하위계정): ${g.enabled?`켜짐${q}${g.envSubs.length?` · .env HL_SUBS ${g.envSubs.length}개`:''}`:'꺼짐 (MAG=0)'} (오늘 탄창: --mag-dry)`);}
     console.log(`복수매매 차단 알림: ${r.enabled?`켜짐 · 쿨다운 ${r.cooldownMin}분 · 오늘은 여기까지 ${r.streakMax?rv.streakWord(r.streakMode)+' '+r.streakMax+'회':'끔'}${q}`:'꺼짐 (REVENGE_ALERT=0)'} (지난 체결로 보기: --revenge-dry)`);}
    return 0;}
   catch(e){log('ERROR','테스트 전송 실패: '+String(e.message));return 1;}

@@ -1,4 +1,16 @@
-# 매매일지 손실한도 판정 v1.6 (trade-alert 2.15.0 · alert19)
+# 매매일지 손실한도 판정 v1.6 (trade-alert 2.16.0 · alert20)
+
+## 2.16.0 — HL 하위계정 '탄창'(앱 v123과 같은 규칙 · SQL alert20.sql · 기본 켜짐, 탄창이 정해졌을 때만 동작 · `MAG=0` = 2.15.0)
+사용자 규칙: 매일 HL 하루 시작(UTC 00:00 = 09:00 KST)에 계좌의 2%(= 하루 손실 한도)만 하위계정 하나('탄창')에 넣고 그 계정으로만 거래, 장중 재충전 금지, 주계정 = 금고.
+- **탄창 목록**: 앱 설정(일지 `state.settings.v123Subs`, Supabase `mag_status`로 읽음) → 비었거나 alert20.sql이 없으면 `.env HL_SUBS`. 앱 제외 목록 `v123Ex`(없으면 Scalping), 주계정, Scalping `0x2b4f…eea9`는 항상 뺌. 최대 5개. 주계정의 하위계정 목록(`subAccounts`)에 없는 주소는 뺌(로그 1회).
+- **손실 한도(하루·주·월·연속)**: 실현손익 = 주계정 + 탄창 체결 Σ(closedPnl − fee) + 펀딩. 분모 = 주계정 마감(acct_snapshots, 현물 포함) + 탄창 마감(탄창 HL portfolio 기록점: 마감 직전 4시간 안 → 직후 4시간 안 → 앞뒤 값이 같으면 그 값, 근삿값 — 앱과 같음). 그 날 탄창 마감값을 모르면 그 날 분모는 주계정만(섞인 숫자 안 만듦, `--test`에 '탄창 마감값 확인 중'). 현재 기준액 = 주계정 BALANCE + 탄창 잔고(앱 v123Bal, HIP-3 dex 제외). 탄창 잔고(`subAccounts`)를 10분 넘게 모르면 그 회차 HL 판정은 건너뜀.
+- **주↔탄창(·탄창끼리) 이체**(send·subAccountTransfer·internalTransfer·spotTransfer, USDC)는 입출금이 아님 — risk_flows에 안 올리고 판정에서도 뺌.
+- **새 텔레그램 알림**(각 1회, `.env`로 끔): `🧯 탄창 소진 · 오늘 매매 끝`(탄창 잔고 < 목표의 10%, 그날 탄창 체결 뒤 · `MAG_EMPTY_ALERT`) · `⚠️ [장중 재충전]`(같은 HL 하루 첫 탄창 체결 뒤 주계정→탄창 이체 · `MAG_REFILL_ALERT`) · `⚠️ [금고에서 거래]`(주계정 새 무기한 진입, 주문마다 · 앱 v123Since 뒤 · `MAG_VAULT_ALERT`) · `🔔 탄창 09:00 점검`(09:10 KST 뒤 첫 확인, 12:00 KST 전, 탄창 잔고가 목표 = 직전 마감 합산 × 2%와 ±10% 넘게 다르면 · `MAG_OPEN_ALERT`). 목표 % = 앱 `v123Pct` → `MAG_PCT`(2).
+- **복수매매·방향 전환·즉시 복기**: 탄창 체결도 계정별로 구간을 만든 뒤 합침(쿨다운·오늘은 여기까지·위험 증가가 두 계정을 함께 봄 — 탄창 손실 뒤 주계정 진입도 경고). 매일 복기 알림은 일지 기반이라 앱이 넣은 탄창 거래도 그대로 대상.
+- **Supabase alert20.sql**: 새 cron `hl-sub-collector`가 탄창 주소의 체결·펀딩을 같은 `hl_fills`·`hl_funding`에(주소 = 탄창) 수집, 기존 `hl-collector`·`hl_watch`·주계정 행은 그대로(unique(address,tid) → 중복 없음). 앱은 `address=eq.주계정`으로 읽어 섞이지 않음. `mag_status` RPC(토큰). harden 뒤에 실행했으면 alert20.sql 한 번 더.
+- **오늘 탄창 보기**(보내지 않음·저장 안 함): `sudo -u tradealert node --env-file=/opt/trade-alert/.env /opt/trade-alert/src/alert.mjs --mag-dry`(= `--dry`).
+- 한계: 탄창 HIP-3 dex 잔고 미포함 · 마감값은 portfolio 근삿값 · 서버 백업(alert13 backup_dump)은 주계정 hl_fills만 · 설치 첫날 '미실현 포함 변동' 참고 줄은 하루 시작 관측이 주계정만이라 틀릴 수 있음.
+
 
 ## 2.15.0 — 복수매매 '오늘은 여기까지' = 같은 날 연속 손실 청산 3회(SQL 없음 · 손실 한도·쿨다운·갈아타기·위험 증가·방향 전환·백업 변경 없음)
 - 같은 하루(HL UTC 00:00 = KST 09:00 / US 16:00 ET) 안에서 **청산 순서대로** 손실이면 +1, **이익 청산(순손익 > 0, 수수료·펀딩 포함)이면 0으로**, 순손익 정확히 0이면 그대로(`REVENGE_MIN_LOSS_USD` 이하 손실도 그대로).
@@ -226,12 +238,14 @@ $A --flow US 500 "원화 환전 입금"     # 입출금 수동 등록(+입금 / 
 $A --flow-remove manual:US:…        # 수동 등록 취소
 $A --clear-stops US                 # 잘못 걸린 중단 해제(기록 남김)
 $A --zones-dry                      # 2.10.0 지금 존 목록(보내지·저장하지 않음)
+$A --mag-dry                        # 2.16.0 오늘 탄창 상태·목표·보낼 알림(보내지·저장하지 않음, = --dry)
 ```
 설정 바꾸기: `sudo nano /opt/trade-alert/.env` → `sudo systemctl restart trade-alert` (키 목록은 env.template).
 alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_SEC` 등은 2.0.0에서 쓰지 않습니다(무시).
 앱 설정의 손실 한도(하루·주·달 %)는 앱 자체 표시용이고, 서버 판정은 `.env`(기본 3/6/10)를 씁니다. 앱 설정 → 계좌·위험에 서버 값이 그대로 보입니다.
 
 ## 테스트(개발)
+2.16.0: `node --test tests/*.test.mjs` 215개 (mag.test.mjs 15) · SQL `node tests/alert20-sql.pglite.mjs <cloud 폴더>` 44개(alert20.sql 탄창 수집기 + mag_status + harden 순서).
 2.13.0: `node --test tests/*.test.mjs` (flip.test.mjs) · SQL `node tests/alert17-sql.pglite.mjs <cloud 폴더>`(alert17.sql + harden 순서).
 2.12.0: `node --test tests/*.test.mjs` (remind.test.mjs 손익비 미달·숨김 포함) · SQL `node tests/alert11-sql.pglite.mjs <cloud.sql> <kiwoom-collector.sql> <alert11.sql>`.
 2.11.0: `node --test tests/*.test.mjs` 163개 (revenge.test.mjs 15) · SQL `node tests/alert15-sql.pglite.mjs <cloud.sql> <kiwoom-collector.sql> <alert15.sql>` 30개.
