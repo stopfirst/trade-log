@@ -59,8 +59,8 @@ for(const f of ['cloud.sql','kiwoom-collector.sql','alert2.sql','alert11.sql','a
 const tok='kwc_'+randomBytes(32).toString('base64url');await db.transaction(async tx=>{await tx.exec(`set local role authenticated; select set_config('request.jwt.sub','${U1}',true);`);await tx.query('select public.kw_register_token($1)',[createHash('sha256').update(tok).digest('hex')]);});
 await db.query(`insert into public.journal_cloud(user_id,scope,payload,revision) values($1,'HL',$2::jsonb,1),($1,'US',$3::jsonb,1)`,[U1,JSON.stringify(hl.payload),JSON.stringify(us.payload)]);
 const rg=(await db.query('select public.review_gaps($1,$2::date) r',[tok,'2026-11-02'])).rows[0].r;
-let fail=0,n=0;const cfg=sc.scalpConfig({});if(hl.HL!==true||us.HL!==false){console.log('FAIL 일지 종류',hl.HL,us.HL);fail++;}
-for(const [scope,app,isHL] of [['HL',hl,true],['US',us,false]]){const j=rg.journal[scope],min=sc.scopeMin(j,cfg),m=sc.model(j,isHL,min),srvR={};for(const [t,x] of m)srvR[t.id]=x;
+let fail=0,n=0;const cfg=sc.scalpConfig({DAILY_LOSS_STREAK_MODE:process.env.DAILY_LOSS_STREAK_MODE||'count'}); // 앱 v99~v123 '연패' = 횟수 → count로 대조(앱 v124 연속 뒤에는 DAILY_LOSS_STREAK_MODE=consecutive로)if(hl.HL!==true||us.HL!==false){console.log('FAIL 일지 종류',hl.HL,us.HL);fail++;}
+for(const [scope,app,isHL] of [['HL',hl,true],['US',us,false]]){const j=rg.journal[scope],min=sc.scopeMin(j,cfg),m=sc.model(j,isHL,min,{streakMode:cfg.streakMode}),srvR={};for(const [t,x] of m)srvR[t.id]=x;
  if(min!==app.min){fail++;console.log('FAIL',scope,'기준 분',min,app.min);}
  for(const [id,a] of Object.entries(app.res)){const s=srvR[id],S={scalp:!!(s&&s.scalp),skip:!!(s&&s.scalp&&!s.exc.length),exc:s&&s.scalp?s.exc:[],hold:s?Math.round(s.hold/60000):null,R:s?s.R:null};n++;
   const same=JSON.stringify(S)===JSON.stringify(a);if(!same)fail++;console.log(same?'ok  ':'FAIL',scope,id.padEnd(6),'app',JSON.stringify(a),same?'':'\n     server '+JSON.stringify(S));}}

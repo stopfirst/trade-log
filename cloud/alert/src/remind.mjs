@@ -47,7 +47,7 @@ export const hasHideField=journal=>{for(const sc of ['HL','US']){const tr=journa
 export function pick(journal,day,opts={}){const rows=[];const useScalp=!!(opts.scalp&&opts.scalp.enabled&&sc.hasScalpData(journal));
  for(const scp of ['HL','US']){const j=journal?.[scp];if(!j||!Array.isArray(j.trades))continue;
   const from=/^\d{4}-\d{2}-\d{2}$/.test(String(j.from||''))?j.from:'2026-11-01',mr=num(j.minRR)>0?num(j.minRR):2;
-  const min=useScalp?sc.scopeMin(j,opts.scalp):0;let M=null;const model=()=>M||(M=sc.model(j,scp==='HL',min));
+  const min=useScalp?sc.scopeMin(j,opts.scalp):0;let M=null;const model=()=>M||(M=sc.model(j,scp==='HL',min,{streakMode:opts.scalp?.streakMode}));
   for(const t of j.trades){const s=span(t);if(!s||s.first<from)continue;if(!(s.dates.has(day)||(s.open&&s.first<=day)))continue;
    if(hidden(t)){opts.onHidden?.(t);continue;} // 앱 v106 × 숨김
    let si=null;if(min>0){si=model().get(t)||null;if(si&&si.scalp&&!si.exc.length){opts.onScalp?.(t,si,min);continue;}} // 앱 v121 예외 없는 단타

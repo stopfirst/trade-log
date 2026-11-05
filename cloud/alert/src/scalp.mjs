@@ -6,10 +6,13 @@
 // 예외(단타여도 알림에 남음) = 앱 v121Exc:
 //   · 규칙 위반(앱 processOf): 저장한 위반(violations)·process 'violation'·청산 체결 위반 표시·서버 중단 중 진입(risk_events, 앱 v21Viol)
 //     · 앱 v99 복수매매 의심·n연패 후 진입·위험 키움·갈아타기 '강해 보여서'(앱 v109에서 ×로 숨긴 감지는 뺌)
+//       2.15.0: 'n연패 후 진입' = 그날 진입 전에 연속 손실 n회 도달(revenge.mjs streakReach, 이익 청산이면 리셋·손익 0 유지).
+//       DAILY_LOSS_STREAK_MODE=count면 2.14.0(앱 v99~v123)처럼 그날 진입 전 손실 청산 횟수.
 //   · 손익비 기준 미달(앱 v92Checks 'rr' bad = v71PlanRR < v92MinRR)
 //   · 앱 v37 자동 감지 '포지션 위험 초과'·'총 오픈 위험 초과'(기준액 = 거래의 acctAt → 없으면 설정 account; 둘 다 없으면 판정 안 함)
 //     '한도 도달 뒤 진입'은 서버가 직접 판정한 거래 중단 중 진입(위 v21)으로 대신함(아래 한계 참고)
 //   · 실현 R < −1 (손익 = 체결가·수수료·HL 펀딩 합, 1R = initialRisk. 1R 없으면 판정 못 함 → 다른 위반 없으면 빠짐, 앱과 같음)
+import {streakReach,streakMode} from './revenge.mjs';
 export const SCALP_DEFAULT=30;
 const num=v=>{if(typeof v==='number')return Number.isFinite(v)?v:null;if(v===null||v===undefined||String(v).trim()==='')return null;const x=Number(String(v).replace(/,/g,''));return Number.isFinite(x)?x:null;};
 const dateOK=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')&&!Number.isNaN(Date.parse(s+'T12:00:00Z'))&&new Date(s+'T12:00:00Z').toISOString().slice(0,10)===s;
@@ -19,8 +22,9 @@ const sortEv=(a,b)=>String(a.date).localeCompare(String(b.date))||String(a.time|
 const sorted=(L,base=0)=>(Array.isArray(L)?L:[]).filter(e=>e&&typeof e==='object').map((e,i)=>({...e,_i:base+i})).sort(sortEv);
 
 /** .env SCALP_MIN: 빈칸 = 30, 0 = 끔, 1~1440 정수. 이상한 값 = 30(로그용 bad). */
-export function scalpConfig(env){const raw=String(env.SCALP_MIN??'').trim();if(raw==='')return {min:SCALP_DEFAULT,enabled:true,raw};
- const v=Number(raw);if(v===0)return {min:0,enabled:false,raw};if(Number.isInteger(v)&&v>=1&&v<=1440)return {min:v,enabled:true,raw};return {min:SCALP_DEFAULT,enabled:true,raw,bad:true};}
+export function scalpConfig(env){const raw=String(env.SCALP_MIN??'').trim(),sm=['count','횟수'].includes(String(env.DAILY_LOSS_STREAK_MODE??'').trim().toLowerCase())?'count':'consecutive';
+ if(raw==='')return {min:SCALP_DEFAULT,enabled:true,raw,streakMode:sm};
+ const v=Number(raw);if(v===0)return {min:0,enabled:false,raw,streakMode:sm};if(Number.isInteger(v)&&v>=1&&v<=1440)return {min:v,enabled:true,raw,streakMode:sm};return {min:SCALP_DEFAULT,enabled:true,raw,bad:true,streakMode:sm};}
 /** 일지(시장)별 기준 분: 앱 settings.v121Min(양수) → 없으면 .env. .env 0이면 무조건 끔. */
 export function scopeMin(j,cfg){if(!cfg||!cfg.enabled)return 0;const a=num(j&&j.v121Min);return a>0?a:cfg.min;}
 /** review_gaps가 v12(alert18.sql)인지 = 단타 판정에 필요한 칸(체결가·1R 등)이 있는지. 거래가 없으면 판단 불가 → true. */
@@ -64,7 +68,7 @@ const dismissed=t=>new Set(Array.isArray(t&&t.dismiss)?t.dismiss.filter(x=>typeo
 const pctP=x=>x.toFixed(2)+'%',pctL=x=>String(Number(x.toFixed(4)))+'%'; // 앱 v37P · v37L
 
 /** 앱 v99Build (복수매매·연패·위험 키움·갈아타기) — 한 일지(시장) 안에서. 반환 Map id → flags[] (v109 숨김 반영). */
-export function v99Flags(trades,hl,{cool=15,maxLoss=3}={}){const coolMs=cool*60000,rows=[];
+export function v99Flags(trades,hl,{cool=15,maxLoss=3,mode='consecutive'}={}){mode=streakMode(mode);const coolMs=cool*60000,rows=[];
  for(const t of trades){const c=calc(t,hl);if(!c.valid)continue;const e0=sorted(t.entries)[0],E=evMs(e0,hl);if(E===null)continue;
   let X=null,xd=null;if(c.done&&(t.fills||[]).length){const f=sorted(t.fills).at(-1);X=evMs(f,hl);xd=f.date;}
   const R=num(t.initialRisk);rows.push({t,c,E,ed:e0.date,X,xd,loss:X!==null&&Number.isFinite(c.pnl)&&c.pnl<0,risk:R>0?R:null,name:String(t.name||'').toUpperCase()});}
@@ -72,7 +76,9 @@ export function v99Flags(trades,hl,{cool=15,maxLoss=3}={}){const coolMs=cool*600
  for(const r of rows){const prior=losses.filter(L=>L.t!==r.t&&L.X<=r.E),L=prior.at(-1)||null,gap=L?r.E-L.X:null,flags=[];
   if(L&&coolMs>0&&gap<=coolMs)flags.push({code:'revenge',label:'복수매매 의심',viol:true});
   if(!hl){const sw=prior.filter(x=>x.xd===r.ed&&x.name!==r.name);if(sw.length){const w=r.t.v99Why;flags.push({code:'switch',label:w==='strong'?'갈아타기 · 강해 보여서':w==='plan'?'갈아타기 · 미리 정한 가격':'갈아타기',viol:w==='strong'});}}
-  if(maxLoss>0){const d=prior.filter(x=>x.xd===r.ed);if(d.length>=maxLoss)flags.push({code:'maxloss',label:maxLoss+'연패 후 진입',viol:true});}
+  if(maxLoss>0){ // 2.15.0: 그날(청산일 = 진입일) 진입 전 청산을 시간순으로 → 연속 손실 maxLoss회 도달(이익 청산 리셋) · count = 손실 횟수(2.14.0)
+   const d=rows.filter(o=>o.t!==r.t&&o.X!==null&&o.X<=r.E&&o.xd===r.ed&&Number.isFinite(o.c.pnl)).sort((a,b)=>a.X-b.X);
+   if(streakReach(d,maxLoss,{mode,isLoss:o=>o.loss,isWin:o=>o.c.pnl>0,time:o=>o.X}))flags.push({code:'maxloss',label:maxLoss+'연패 후 진입',viol:true});}
   if(L&&r.risk&&L.risk){const within=coolMs>0&&gap<=coolMs,next=L.xd===r.ed&&!rows.some(o=>o!==r&&o.t!==L.t&&o.E>=L.X&&o.E<r.E);
    if((within||next)&&r.risk>L.risk*(1+1e-9))flags.push({code:'riskup',label:'위험 키움',viol:true});}
   const ds=dismissed(r.t);out.set(r.t,flags.filter(f=>!ds.has('v99'+f.code)));}
@@ -91,9 +97,9 @@ export function v37Flags(t,trades,j,hl){const out=[],ds=dismissed(t),f=sorted(t.
 /** 앱 rText: (+)숫자(최대 소수 2자리, en-US)R */
 const rTxt=x=>Number.isFinite(x)?(x>0?'+':'')+(x===0?0:x).toLocaleString('en-US',{maximumFractionDigits:2})+'R':'—';
 /** 한 일지(시장) 전체 판정. 반환 Map(trade → {hold, scalp, exc[], R, pnl, revenge}). 끝난 거래·시각 아는 거래만 들어감. */
-export function model(j,hl,min){const out=new Map();if(!(min>0)||!j||!Array.isArray(j.trades))return out;const trades=j.trades.filter(t=>t&&typeof t==='object');
+export function model(j,hl,min,{streakMode:mode='consecutive'}={}){const out=new Map();if(!(min>0)||!j||!Array.isArray(j.trades))return out;const trades=j.trades.filter(t=>t&&typeof t==='object');
  const cool=(()=>{const v=num(j.v99Cool);return v===null||v<0?15:v;})(),maxLoss=(()=>{const v=num(j.v99MaxLoss);return v===null||v<0?3:Math.floor(v);})(),minRR=num(j.minRR)>0?num(j.minRR):2;
- let F=null;const flags=()=>F||(F=v99Flags(trades,hl,{cool,maxLoss}));
+ let F=null;const flags=()=>F||(F=v99Flags(trades,hl,{cool,maxLoss,mode}));
  for(const t of trades){const c=calc(t,hl);if(!c.valid||!c.done)continue;const h=holdMs(t,hl);if(h===null)continue;const scalp=h<min*60000,r={hold:h,scalp,exc:[],R:c.R,pnl:c.pnl,revenge:false};
   if(scalp){const why=[],fl=flags().get(t)||[];r.revenge=fl.some(f=>f.code==='revenge');
    const viol=fl.filter(f=>f.viol).map(f=>f.label);

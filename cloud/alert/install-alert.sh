@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 매매일지 손실한도 판정 v1.6 알림 + 텔레그램 즉시 복기 · 현물 포함 분모 · 매일 복기 알림 · 서버 일일 백업 · flow-chart 존 터치 알림 · 복수매매 차단 알림 · 방향 전환 감지 · 복기 알림 단타 제외(trade-alert 2.14.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
+# 매매일지 손실한도 판정 v1.6 알림 + 텔레그램 즉시 복기 · 현물 포함 분모 · 매일 복기 알림 · 서버 일일 백업 · flow-chart 존 터치 알림 · 복수매매 차단 알림 · 방향 전환 감지 · 복기 알림 단타 제외 · 오늘은 여기까지 연속 손실(trade-alert 2.15.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
 #   curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash
 # 다시 실행하면 코드만 업데이트합니다(.env와 알림 기록은 절대 덮어쓰지 않음).
 # 키움 수집기(kiwoom-collector)와 별개의 서비스입니다. 수집기는 건드리지 않습니다.
@@ -137,8 +137,13 @@ else
   fi
   if ! grep -q '^# \[복기 알림 단타 제외 2.14.0\]' "$DIR/.env"; then
     # 2.14.0 안내(주석)만 덧붙입니다. 기본 = 켜짐(앱 설정 단타 기준, 없으면 SCALP_MIN=30). 판정 데이터는 Supabase alert18.sql(없으면 예전처럼 단타도 알림).
-    sed -n '/^# \[복기 알림 단타 제외 2.14.0\]/,$p' "$DIR/env.template" >> "$DIR/.env"
+    sed -n '/^# \[복기 알림 단타 제외 2.14.0\]/,/^# \[오늘은 여기까지 연속 2.15.0\]/p' "$DIR/env.template" | sed '$d' >> "$DIR/.env"
     echo "기존 .env에 복기 알림 단타 제외(SCALP_MIN) 안내(주석)를 덧붙였습니다. 끄기: SCALP_MIN=0"
+  fi
+  if ! grep -q '^# \[오늘은 여기까지 연속 2.15.0\]' "$DIR/.env"; then
+    # 2.15.0 안내(주석)만 덧붙입니다. 기본 = 연속(consecutive). 예전 횟수 방식: DAILY_LOSS_STREAK_MODE=count. 새 SQL 없음.
+    sed -n '/^# \[오늘은 여기까지 연속 2.15.0\]/,$p' "$DIR/env.template" >> "$DIR/.env"
+    echo "기존 .env에 '오늘은 여기까지' 연속 손실(DAILY_LOSS_STREAK_MODE) 안내(주석)를 덧붙였습니다. 예전 방식: DAILY_LOSS_STREAK_MODE=count"
   fi
   if ! grep -q '^# \[손실한도 판정 v1.6\]' "$DIR/.env"; then
     # 2.4.0 안내(주석)만 덧붙입니다. 설정할 값 없음(주·월 분모 = 기간 시작 직전 마감 잔액, 새 SQL 없음).

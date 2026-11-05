@@ -23,7 +23,7 @@ const E=(o)=>({market:'HL',key:'hl:e'+o.time,seg:'HL:'+(o.symbol||'ETH')+':'+o.t
 const T0=Date.parse('2026-11-01T03:00:00Z'); // 11/01 12:00 KST · UTC 11/01
 
 test('버전 2.11.0 · 설정 기본값(켜짐·15분·3연패) · 끄기 · 형식 오류는 CONFIG_INCOMPLETE',()=>{
- assert.equal(VERSION,'2.14.0');
+ assert.equal(VERSION,'2.15.0');
  const c=readConfig(env('/tmp')).revenge;assert.deepEqual([c.enabled,c.cooldownMin,c.streakMax,c.usSwitch,c.riskUp,c.minLoss],[true,15,3,true,true,0]);
  assert.equal(readConfig(env('/tmp',{REVENGE_ALERT:'0'})).revenge.enabled,false);
  const d=readConfig(env('/tmp',{REVENGE_COOLDOWN_MIN:'30',DAILY_LOSS_STREAK_MAX:'0',REVENGE_US_SWITCH:'0'})).revenge;assert.deepEqual([d.cooldownMin,d.streakMax,d.usSwitch],[30,0,false]);
@@ -51,7 +51,7 @@ test('이익 청산 뒤에는 경고 없음 · 기준은 진입 전 마지막 �
  assert.equal(rv.judge({closes:[C({time:T0,pnl:-0.5})],entries:[E({time:T0+MIN})]},{...CFG,minLoss:1},utcDay).alerts.length,0,'REVENGE_MIN_LOSS_USD=1 → −$0.50은 손실로 안 봄');
 });
 
-test('하루 손실 청산 3회(HL UTC 00:00 경계): 오늘은 여기까지 1회 + 그날 이후 진입마다(이익 청산 뒤에도) 위반 · 다음 UTC 날은 리셋',()=>{
+test('하루 연속 손실 청산 3회(HL UTC 00:00 경계): 오늘은 여기까지 1회 + 그날 이후 진입마다(이익 청산 뒤에도) 위반 · 다음 UTC 날은 리셋',()=>{
  const d0=Date.parse('2026-11-01T00:00:00Z'); // = 11/01 09:00 KST
  const closes=[C({time:d0-20*MIN,symbol:'A'}),C({time:d0-10*MIN,symbol:'B'}),C({time:d0+10*MIN,symbol:'C'})]; // 2개는 10/31 UTC
  assert.equal(rv.judge({closes,entries:[]},CFG,utcDay).stops.length,0,'UTC 날짜가 갈리면 3연패 아님');
@@ -60,9 +60,11 @@ test('하루 손실 청산 3회(HL UTC 00:00 경계): 오늘은 여기까지 1�
  assert.equal(r.stops.length,1);assert.equal(r.stops[0].day,'2026-11-01');assert.equal(r.stops[0].losses.length,3);assert.equal(r.stops[0].at,d0+3*MIN);
  const k=r.alerts.map(a=>[a.entry.time,a.kinds.includes('streak')]);
  assert.deepEqual(k.filter(x=>x[1]).map(x=>x[0]),[d0+3*HOUR,d0+5*HOUR],'도달 뒤 진입만(이익 청산 뒤인 5시간째도) · 다음 날은 아님');
- assert.equal(rv.judge({closes:[C({time:d0+MIN}),C({time:d0+2*MIN,pnl:5}),C({time:d0+3*MIN}),C({time:d0+4*MIN})],entries:[]},CFG,utcDay).stops[0].at,d0+4*MIN,'연속이 아니라 그날 손실 청산 횟수(앱 v99와 같음) — 중간 이익 있어도 3번째 손실에서');
+ assert.equal(rv.judge({closes:[C({time:d0+MIN}),C({time:d0+2*MIN,pnl:5}),C({time:d0+3*MIN}),C({time:d0+4*MIN})],entries:[]},CFG,utcDay).stops.length,0,'2.15.0 손-이-손-손 = 이익에서 리셋 → 연속 2회 → 없음');
+ assert.equal(rv.judge({closes:[C({time:d0+MIN}),C({time:d0+2*MIN,pnl:5}),C({time:d0+3*MIN}),C({time:d0+4*MIN})],entries:[]},{...CFG,streakMode:'count'},utcDay).stops[0].at,d0+4*MIN,'count 모드 = 2.14.0 횟수(중간 이익 있어도 3번째 손실에서)');
  assert.equal(rv.judge({closes:same,entries:[]},{...CFG,streakMax:0},utcDay).stops.length,0,'0이면 끔');
- const txt=rv.stopText(r.stops[0],USC);assert.match(txt,/^🛑 \[오늘은 여기까지\] 🟦 하이퍼리퀴드 · 오늘 손실 청산 3회/);assert.match(txt,/UTC 11\/01/);assert.match(txt,/리셋: 11\/02 09:00 KST/);
+ const txt=rv.stopText(r.stops[0],USC);assert.match(txt,/^🛑 \[오늘은 여기까지\] 🟦 하이퍼리퀴드 · 오늘 연속 손실 3회/);
+ assert.match(rv.stopText(rv.judge({closes:same,entries:[]},{...CFG,streakMode:'count'},utcDay).stops[0],USC),/· 오늘 손실 청산 3회/,'count 모드는 2.14.0 문구');assert.match(txt,/UTC 11\/01/);assert.match(txt,/리셋: 11\/02 09:00 KST/);
 });
 
 test('US 날짜(ET 장 마감 16:00 경계): 손절한 거래일 안의 다른 종목 매수 = 갈아타기, 16:00 ET 뒤는 다음 거래일',()=>{
@@ -178,14 +180,14 @@ test('서비스: 설치 뒤 HL 손실 청산 → 6분 뒤 더 큰 진입 = [복�
  assert.ok(logs.some(l=>/alert15\.sql 확인/.test(l)));
 });
 
-test('서비스: 하루 손실 청산 3회 → 오늘은 여기까지 1회 → 그 뒤 진입은 [오늘은 여기까지 위반] · REVENGE_ALERT=0이면 아무것도 안 함',async()=>{
+test('서비스: 하루 연속 손실 청산 3회 → 오늘은 여기까지 1회 → 그 뒤 진입은 [오늘은 여기까지 위반] · REVENGE_ALERT=0이면 아무것도 안 함',async()=>{
  const w=world();const a=await mk(w);await a.check();
  w.now+=60*MIN;const t=w.now;
  w.fills.push(F(11,t-50*MIN,'B',1,0,{coin:'A'}),F(12,t-49*MIN,'A',1,1,{coin:'A',closedPnl:'-10'}),F(13,t-40*MIN,'B',1,0,{coin:'B'}),F(14,t-39*MIN,'A',1,1,{coin:'B',closedPnl:'-10'}),
   F(15,t-30*MIN,'B',1,0,{coin:'C'}),F(16,t-29*MIN,'A',1,1,{coin:'C',closedPnl:'-10'}),F(17,t-1*MIN,'B',0.1,0,{coin:'D'}));
  await a.check();const m=rvMsgs(w);
  assert.equal(m.filter(x=>/^🛑 \[오늘은 여기까지\]/.test(x)).length,1);
- const last=m.find(x=>/· D 롱 진입/.test(x));assert.match(last,/^⛔ \[오늘은 여기까지 위반\]/);assert.match(last,/손실 청산 3회 뒤 진입 — 오늘은 여기까지 규칙 위반/);
+ const last=m.find(x=>/· D 롱 진입/.test(x));assert.match(last,/^⛔ \[오늘은 여기까지 위반\]/);assert.match(last,/연속 손실 3회 뒤 진입 — 오늘은 여기까지 규칙 위반/);
  assert.ok(m.find(x=>/· C 롱 진입/.test(x)),'C 진입(B 손실 뒤 9분)은 쿨다운 경고');
  w.now+=MIN;await a.check();assert.equal(rvMsgs(w).length,m.length,'다시 안 보냄');
  const w2=world();const b=await mk(w2,{REVENGE_ALERT:'0'});assert.equal(b.revenge,null);await b.check();w2.now+=MIN;w2.fills.push(...w.fills.map(f=>({...f,time:w2.now-(t-f.time)})));await b.check();assert.equal(rvMsgs(w2).length,0);assert.equal(w2.rvPush.length,0);
@@ -239,7 +241,7 @@ test('--revenge-dry: 지난 체결로 몇 건인지 출력 · 텔레그램·저�
  w.fills.push(F(41,t,'B',1,0),F(42,t+MIN,'A',1,1,{closedPnl:'-50'}),F(43,t+5*MIN,'B',2,0,{coin:'ETH'}),F(44,Date.parse('2026-09-20T03:00:00Z'),'B',1,0,{coin:'XRP'}));
  const code=await revengeDry(['--revenge-dry','--from','2026-10-01','--to','2026-10-31'],env('/tmp/none'),()=>{},{fetcher:w.fetcher,out:l=>lines.push(l),now:()=>now});
  assert.equal(code,0);const out=lines.join('\n');
- assert.match(out,/복수매매 드라이런 \(보내지 않음 · 저장 안 함\) · 2026-10-01 ~ 2026-10-31 · 쿨다운 15분 · 하루 손실 3회/);
+ assert.match(out,/복수매매 드라이런 \(보내지 않음 · 저장 안 함\) · 2026-10-01 ~ 2026-10-31 · 쿨다운 15분 · 오늘은 여기까지 연속 손실 3회/);
  assert.match(out,/10\/20 12:05 KST ETH 롱 진입 ← \[쿨다운·위험 증가\] 직전 BTC −\$50\.00 4분 전 · 명목 \$120,000 vs \$60,000/);
  assert.match(out,/보냈을 텔레그램 메시지: 1건 \(HL 1 · US 0\)/);assert.doesNotMatch(out,/XRP/,'기간 밖 제외');
  assert.equal(w.tgCalls.length,0);assert.equal(w.rvPush.length,0);

@@ -1,3 +1,4 @@
+// trade-alert 2.15.0 (alert19): 3) streak = 같은 날 '연속' 손실 청산 N회(이익 청산이면 0으로, 손익 0은 유지). DAILY_LOSS_STREAK_MODE=count = 2.14.0까지의 횟수 방식.
 // trade-alert 2.11.0 (alert15) — 복수매매 차단 알림. 손실 한도 판정과 무관(판정 코드·상태를 읽지도 바꾸지도 않음).
 //  정의(앱 v99와 같게): 기준 시각 = 손실 청산 체결 시각 → 다음 진입 체결 시각. 손실 = 그 거래(포지션 0→0 구간) 누적 실현손익
 //   (HL: Σ(closedPnl − fee) + 구간 펀딩 = quick.mjs detectCloses, US: 키움 일별 종목별 실현손익 ust21640 pl_amt(수수료·세금 뺀 값)) < 0.
@@ -6,7 +7,9 @@
 //  규칙
 //   1) cooldown : 진입 전 마지막 손실 청산 체결 → 이번 진입 체결 ≤ REVENGE_COOLDOWN_MIN(기본 15)분(경계 포함, 앱 v99와 같음) → '[복수매매 의심]'
 //   2) switch   : US, 같은 날(ET 거래일) 손절(손실 청산)한 종목들 중 진입 종목과 다른 종목이 있으면 → 별도 메시지 + [미리 정한 가격] [강해 보여서] 버튼
-//   3) streak   : 같은 날 손실 청산 DAILY_LOSS_STREAK_MAX(기본 3)회(앱 v99와 같이 연속이 아니라 횟수) → '오늘은 여기까지' 1회, 그날 이후 진입마다 위반 경고
+//   3) streak   : 같은 날 '연속' 손실 청산 DAILY_LOSS_STREAK_MAX(기본 3)회(2.15.0) → '오늘은 여기까지' 1회, 그날 이후 진입마다 위반 경고
+//                 청산 순서대로 손실 +1 · 이익 청산(순손익 > 0, 수수료·펀딩 포함) 0으로 · 순손익 정확히 0(또는 REVENGE_MIN_LOSS_USD 이하 손실)은 유지.
+//                 DAILY_LOSS_STREAK_MODE=count → 2.14.0까지(앱 v99~v123)처럼 연속이 아니라 그날 손실 청산 횟수.
 //   4) risk_up  : 손실 직후(쿨다운 안, 또는 같은 날 그 손실 청산 뒤 첫 진입) 진입의 위험이 직전 손실 거래보다 큼 → 강한 경고
 //                 위험 = 스탑 기준 위험 금액(HL 열린 스탑 주문, 진입·직전 거래 둘 다 있을 때) · 없으면 명목 금액(최대 |포지션| × 가격)
 //  같은 진입(포지션)은 한 번만, 재시작 뒤 재발송 없음(state2.json rv.sent에 보내기 전에 저장).
@@ -22,7 +25,8 @@ export function revengeConfig(env){
  const errors=[];
  const flag=(k,d)=>{const v=String(env[k]??'').trim().toLowerCase();if(!v)return d;if(['1','true','yes','on','켬'].includes(v))return true;if(['0','false','no','off','끔'].includes(v))return false;errors.push(`${k} (1 = 켬, 0 = 끔)`);return d;};
  const int=(k,d,min,max)=>{const v=String(env[k]??'').trim();if(!v)return d;const x=Number(v);if(!Number.isInteger(x)||x<min||x>max){errors.push(`${k} (${min}–${max} 정수)`);return d;}return x;};
- return {enabled:flag('REVENGE_ALERT',true),cooldownMin:int('REVENGE_COOLDOWN_MIN',15,0,240),streakMax:int('DAILY_LOSS_STREAK_MAX',3,0,20),
+ const streakMode=(()=>{const v=String(env.DAILY_LOSS_STREAK_MODE??'').trim().toLowerCase();if(!v||['consecutive','연속'].includes(v))return 'consecutive';if(['count','횟수'].includes(v))return 'count';errors.push('DAILY_LOSS_STREAK_MODE (consecutive = 연속 손실, count = 횟수)');return 'consecutive';})();
+ return {enabled:flag('REVENGE_ALERT',true),cooldownMin:int('REVENGE_COOLDOWN_MIN',15,0,240),streakMax:int('DAILY_LOSS_STREAK_MAX',3,0,20),streakMode,
   usSwitch:flag('REVENGE_US_SWITCH',true),riskUp:flag('REVENGE_RISK_UP',true),minLoss:(()=>{const v=String(env.REVENGE_MIN_LOSS_USD??'').trim();if(!v)return 0;const x=Number(v);if(!Number.isFinite(x)||x<0||x>100000){errors.push('REVENGE_MIN_LOSS_USD (0–100000, 0 = 모든 손실)');return 0;}return x;})(),maxAgeMs:6*HOUR,errors};
 }
 
@@ -137,19 +141,35 @@ export function usEvents(fills,positions,realized){
 }
 
 // ---- 판정(순수) -----------------------------------------------------------------------------
+/** 2.15.0 '오늘은 여기까지' 도달 판정 — 같은 하루의 청산 목록(시간순)에서 손실이 max번 쌓인 첫 청산.
+ *  mode 'consecutive'(기본): 손실 +1 · 이익(isWin) 0으로 리셋 · 그 밖(순손익 0 등) 유지.  'count': 이익과 무관하게 손실 횟수(2.14.0·앱 v99~v123).
+ *  반환 {close(도달 청산), at, losses(이번 연속(count면 처음 max개) 손실들)} 또는 null. 서버 단타 예외 'n연패 후 진입'(scalp.mjs v99Flags)도 이 함수. */
+export function streakMode(v){return v==='count'?'count':'consecutive';}
+export function streakReach(list,max,{mode='consecutive',isLoss=c=>c.pnl<0,isWin=c=>c.pnl>0,time=c=>c.time}={}){
+ if(!(max>0))return null;let run=[];
+ for(const c of list||[]){
+  if(isLoss(c)){run.push(c);if(run.length>=max)return {close:c,at:time(c),losses:run.slice(0,max)};}
+  else if(mode!=='count'&&isWin(c))run=[];
+ }
+ return null;
+}
+/** 메시지 낱말: 연속(기본) '연속 손실' · count '손실 청산'(2.14.0 문구 그대로) */
+export const streakWord=mode=>mode==='count'?'손실 청산':'연속 손실';
 /** closes·entries(한 시장) → 진입별 판정 + '오늘은 여기까지'(그날 손실 청산 N회 도달) 목록.
  *  dayOf(ms) = 그 시장의 하루 키. cfg = revengeConfig. */
 export function judge({closes,entries},cfg,dayOf){
  // 앱 v99 v99Build와 같은 판정: L = 진입 전 마지막 '손실' 청산(이익 청산은 건너뜀), 쿨다운은 경계 포함(≤ N분),
- // 갈아타기 = 같은 날 손실 청산 중 진입 종목과 다른 종목이 있으면, N회 = 같은 날 진입 전 손실 청산 수 ≥ N(연속 아님),
+ // 갈아타기 = 같은 날 손실 청산 중 진입 종목과 다른 종목이 있으면(N회 기준 안 씀 — 2.15.0에도 그대로),
+ // N회 = 같은 날 진입 전에 '오늘은 여기까지'(연속 손실 N회, streakReach) 도달(2.15.0; count 모드 = 2.14.0처럼 진입 전 손실 청산 수 ≥ N),
  // 위험 증가 = (쿨다운 안 또는 같은 날 L 뒤 첫 진입) & 위험 > L의 위험.
  const minL=Number(cfg.minLoss)||0,loss=c=>c.pnl<-minL; // 기본 0 = 실현손익 < 0이면 손실(앱과 같음)
  closes=[...closes].sort((a,b)=>a.time-b.time);
  const losses=closes.filter(loss),cool=cfg.cooldownMin*MIN;
- // 하루별 손실 청산 N회 도달 시각 → '오늘은 여기까지'
- const stops=[],byDay=new Map();
- for(const c of losses){const d=dayOf(c.time);if(!byDay.has(d))byDay.set(d,[]);byDay.get(d).push(c);}
- if(cfg.streakMax>0)for(const [d,list] of byDay)if(list.length>=cfg.streakMax){const c=list[cfg.streakMax-1];stops.push({day:d,at:c.time,market:c.market,losses:list.slice(0,cfg.streakMax),close:c});}
+ // 하루별 (연속) 손실 청산 N회 도달 → '오늘은 여기까지' (2.15.0 streakReach: 청산 순서대로, 이익 청산이면 리셋 · count면 횟수)
+ const mode=streakMode(cfg.streakMode);
+ const stops=[],byDay=new Map(),stopOf=new Map();
+ for(const c of closes){const d=dayOf(c.time);if(!byDay.has(d))byDay.set(d,[]);byDay.get(d).push(c);}
+ if(cfg.streakMax>0)for(const [d,list] of byDay){const r=streakReach(list,cfg.streakMax,{mode,isLoss:loss});if(r){const s={day:d,at:r.at,market:r.close.market,losses:r.losses,close:r.close,mode};stops.push(s);stopOf.set(d,s);}}
  const out=[];const ents=[...entries].sort((a,b)=>a.time-b.time);
  for(const e of ents){
   const prior=losses.filter(c=>c.time<=e.time&&c.seg!==e.seg);
@@ -159,7 +179,10 @@ export function judge({closes,entries},cfg,dayOf){
   const within=!!L&&cfg.cooldownMin>0&&gap<=cool;
   if(within)kinds.push('cooldown');
   if(e.market==='US'&&cfg.usSwitch){const sw=today.filter(c=>c.symbol!==e.symbol);if(sw.length){kinds.push('switch');info.switchFrom=sw.at(-1);info.switchSymbols=[...new Set(sw.map(c=>c.symbol))];}}
-  if(cfg.streakMax>0&&today.length>=cfg.streakMax){kinds.push('streak');info.streakLosses=today.length;}
+  if(cfg.streakMax>0){
+   if(mode==='count'){if(today.length>=cfg.streakMax){kinds.push('streak');info.streakLosses=today.length;info.streakMode=mode;}}
+   else{const s=stopOf.get(d);if(s&&s.at<=e.time){kinds.push('streak');info.streakLosses=s.losses.length;info.streakMode=mode;}}
+  }
   if(cfg.riskUp&&L){
    const next=dayOf(L.time)===d&&!ents.some(o=>o!==e&&o.seg!==L.seg&&o.time>=L.time&&o.time<e.time);
    if(within||next){const stop=e.stopRisk>0&&L.stopRisk>0;
@@ -189,14 +212,14 @@ export function entryText(a,cfg,cal){
  const L=[`${title} ${HEAD[e.market]} · ${e.symbol} ${side(e)}`,''];
  if(c)L.push(`직전 ${c.pnl<0?'손실':'청산'}: ${c.symbol} ${closeWord(c)} ${usd(c.pnl)}${c.estimated?'(추정)':''} · 청산 ${kst(c.time)} KST`);
  L.push(`진입: ${kst(e.time)} KST${c?` · 경과 ${a.minutes<1?'1분 미만':Math.floor(a.minutes)+'분'}`:''}${cool?` (쿨다운 ${cfg.cooldownMin}분 안)`:''}`);
- if(st)L.push(`⛔ 오늘(${dayLabel(e.market,a.day)}) 손실 청산 ${a.streakLosses}회 뒤 진입 — 오늘은 여기까지 규칙 위반 · 리셋 ${resetText(e.market,a.day,cal)}`);
+ if(st)L.push(`⛔ 오늘(${dayLabel(e.market,a.day)}) ${streakWord(a.streakMode)} ${a.streakLosses}회 뒤 진입 — 오늘은 여기까지 규칙 위반 · 리셋 ${resetText(e.market,a.day,cal)}`);
  if(ru){L.push('',`🔥 ${riskLine(a.risk)}`,'   잃은 걸 한 번에 되찾으려는 크기입니다. 지금 크기를 줄이거나 정리하세요.');}
  else if(cool)L.push('','손실 직후 감정이 남아 있을 때의 진입입니다. 계획에 있던 자리가 아니면 정리하고 쉬세요.');
  else if(st)L.push('','오늘은 더 진입하지 않기로 한 날입니다.');
  return L.join('\n');
 }
 export function stopText(s,cal){
- const L=[`🛑 [오늘은 여기까지] ${HEAD[s.market]} · 오늘 손실 청산 ${s.losses.length}회`,''];
+ const L=[`🛑 [오늘은 여기까지] ${HEAD[s.market]} · 오늘 ${streakWord(s.mode)} ${s.losses.length}회`,''];
  L.push(`오늘(${dayLabel(s.market,s.day)}): `+s.losses.map(c=>`${c.symbol} ${usd(c.pnl)}`).join(' · '));
  const sum=s.losses.reduce((a,c)=>a+c.pnl,0);L.push(`합계: ${usd(sum)} · 마지막 청산 ${kst(s.at)} KST`);
  L.push('',`오늘 남은 진입은 모두 규칙 위반으로 경고합니다. 리셋: ${resetText(s.market,s.day,cal)}`);
@@ -222,7 +245,7 @@ export function alertItem(a,{now}){
  const e=a.entry,c=a.last;
  return {ref:'rv:'+e.key,market:e.market==='US'?'us':'hl',kinds:a.kinds,symbol:e.symbol,direction:e.dir,entry_key:e.market==='HL'?String(e.tid):String(e.orderKey),entry_date:e.orderDate||null,entry_at:e.time,
   prev_symbol:c?.symbol??null,prev_key:c?(c.market==='HL'?String(c.tid):String(c.orderKey)):null,prev_pnl:c?r2(c.pnl):null,prev_close_at:c?.time??null,minutes:a.minutes!==null&&a.minutes!==undefined?Math.round(a.minutes*10)/10:null,
-  day:a.day,detail:{risk:a.risk||null,streakLosses:a.streakLosses||null,switchFrom:a.switchFrom?{symbol:a.switchFrom.symbol,pnl:r2(a.switchFrom.pnl),at:a.switchFrom.time,symbols:a.switchSymbols||[a.switchFrom.symbol]}:null,estimated:!!c?.estimated,notional:e.notional||null,stopRisk:e.stopRisk||null},sent_at:now};
+  day:a.day,detail:{risk:a.risk||null,streakLosses:a.streakLosses||null,streakMode:a.streakMode||null,switchFrom:a.switchFrom?{symbol:a.switchFrom.symbol,pnl:r2(a.switchFrom.pnl),at:a.switchFrom.time,symbols:a.switchSymbols||[a.switchFrom.symbol]}:null,estimated:!!c?.estimated,notional:e.notional||null,stopRisk:e.stopRisk||null},sent_at:now};
 }
 export function stopItem(s,{now}){return {ref:`rv:stop:${s.market==='US'?'us':'hl'}:${s.day}`,market:s.market==='US'?'us':'hl',kinds:['stop_day'],symbol:s.close.symbol,direction:s.close.dir,entry_key:null,entry_date:null,entry_at:null,
  prev_symbol:s.close.symbol,prev_key:s.close.market==='HL'?String(s.close.tid):String(s.close.orderKey),prev_pnl:r2(s.close.pnl),prev_close_at:s.at,minutes:null,day:s.day,
@@ -251,7 +274,7 @@ export class Revenge{
    const j=judge(inp,cfg,this.dayOf(m));
    for(const s of j.stops){const key=`stop:${m}:${s.day}`;if(R.sent[key]||!fresh(s.at))continue;R.sent[key]=t;await this.save();
     await this.sendText(key,stopText(s,this.cal.US),t);R.pending.push(stopItem(s,{now:t}));n++;
-    this.log('INFO',`오늘은 여기까지: ${m} ${s.day} 손실 청산 ${s.losses.length}회`);}
+    this.log('INFO',`오늘은 여기까지: ${m} ${s.day} ${streakWord(s.mode)} ${s.losses.length}회`);}
    for(const a of j.alerts){const e=a.entry;if(!fresh(e.time))continue;
     const main=a.kinds.filter(x=>x!=='switch'),key='entry:'+e.key,skey='switch:'+e.key;
     if(main.length&&!R.sent[key]){R.sent[key]=t;await this.save();await this.sendText(key,entryText({...a,kinds:main},cfg,this.cal.US),t);n++;
@@ -307,18 +330,18 @@ export class Revenge{
 
 // ---- 드라이런 출력 ---------------------------------------------------------------------------
 export function dryReport(results,cfg,cal,{from,to}){
- const L=[`복수매매 드라이런 (보내지 않음 · 저장 안 함) · ${from} ~ ${to} · 쿨다운 ${cfg.cooldownMin}분 · 하루 손실 ${cfg.streakMax?cfg.streakMax+'회':'끔'} · US 갈아타기 ${cfg.usSwitch?'켬':'끔'} · 위험 증가 ${cfg.riskUp?'켬':'끔'}`];
+ const L=[`복수매매 드라이런 (보내지 않음 · 저장 안 함) · ${from} ~ ${to} · 쿨다운 ${cfg.cooldownMin}분 · 오늘은 여기까지 ${cfg.streakMax?streakWord(streakMode(cfg.streakMode))+' '+cfg.streakMax+'회':'끔'} · US 갈아타기 ${cfg.usSwitch?'켬':'끔'} · 위험 증가 ${cfg.riskUp?'켬':'끔'}`];
  const cnt={cooldown:0,switch:0,streak:0,risk_up:0,stop_day:0};
  for(const r of results){
   L.push('',`${HEAD[r.market]} · 청산 ${r.closes} (손실 ${r.losses}) · 새 진입 ${r.entries}${r.note?' · '+r.note:''}`);
-  for(const s of r.stops){cnt.stop_day++;L.push(`  🛑 ${s.day} 손실 청산 ${s.losses.length}회 도달 ${kst(s.at)} KST: `+s.losses.map(c=>`${c.symbol} ${usd(c.pnl)}`).join(' · '));}
+  for(const s of r.stops){cnt.stop_day++;L.push(`  🛑 ${s.day} ${streakWord(s.mode)} ${s.losses.length}회 도달 ${kst(s.at)} KST: `+s.losses.map(c=>`${c.symbol} ${usd(c.pnl)}`).join(' · '));}
   for(const a of r.alerts){for(const k of a.kinds)cnt[k]++;const e=a.entry,c=a.last;
-   L.push(`  ${kst(e.time)} KST ${e.symbol} ${side(e)} ← [${a.kinds.map(k=>({cooldown:'쿨다운',switch:'갈아타기',streak:'손실 N회 뒤',risk_up:'위험 증가'})[k]).join('·')}]`+(c?` 직전 ${c.symbol} ${usd(c.pnl)}${c.estimated?'(추정)':''} ${a.minutes<1?'<1':Math.floor(a.minutes)}분 전`:'')+(a.risk?` · ${a.risk.basis==='stop'?'스탑위험':'명목'} ${money(a.risk.now)} vs ${money(a.risk.prev)}`:''));}
+   L.push(`  ${kst(e.time)} KST ${e.symbol} ${side(e)} ← [${a.kinds.map(k=>({cooldown:'쿨다운',switch:'갈아타기',streak:streakWord(streakMode(cfg.streakMode))+' N회 뒤',risk_up:'위험 증가'})[k]).join('·')}]`+(c?` 직전 ${c.symbol} ${usd(c.pnl)}${c.estimated?'(추정)':''} ${a.minutes<1?'<1':Math.floor(a.minutes)}분 전`:'')+(a.risk?` · ${a.risk.basis==='stop'?'스탑위험':'명목'} ${money(a.risk.now)} vs ${money(a.risk.prev)}`:''));}
   if(!r.alerts.length&&!r.stops.length)L.push('  (해당 없음)');
   r.msgs=r.alerts.filter(a=>a.kinds.some(k=>k!=='switch')).length+r.alerts.filter(a=>a.kinds.includes('switch')).length+r.stops.length;
  }
  L.push('',`보냈을 텔레그램 메시지: ${results.reduce((a,r)=>a+r.msgs,0)}건 (`+results.map(r=>`${r.market} ${r.msgs}`).join(' · ')+`) · 경고 대상 진입 ${results.reduce((a,r)=>a+r.alerts.length,0)}건${cfg.minLoss>0?` · 손실 기준 −$${cfg.minLoss} 초과만`:''}`);
- L.push(`종류별(한 진입에 여러 개 가능): 쿨다운 ${cnt.cooldown} · 갈아타기 ${cnt.switch} · 손실 N회 뒤 진입 ${cnt.streak} · 위험 증가 ${cnt.risk_up} · 오늘은 여기까지 ${cnt.stop_day}일`);
+ L.push(`종류별(한 진입에 여러 개 가능): 쿨다운 ${cnt.cooldown} · 갈아타기 ${cnt.switch} · ${streakWord(streakMode(cfg.streakMode))} N회 뒤 진입 ${cnt.streak} · 위험 증가 ${cnt.risk_up} · 오늘은 여기까지 ${cnt.stop_day}일`);
  return {text:L.join('\n'),counts:cnt};
 }
 export {r6};
