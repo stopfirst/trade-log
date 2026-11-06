@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# 지금 보드를 텔레그램으로 한 번 보냄.  riskboard-now        (화면에만: riskboard-now --once)
+[ "$(id -u)" -eq 0 ] || { echo "sudo riskboard-now 로 실행하세요"; exit 1; }
+set -e
+A=(); [ -f /opt/trade-alert/.env ] && A+=(--env-file=/opt/trade-alert/.env); [ -f /opt/riskboard/.env ] && A+=(--env-file=/opt/riskboard/.env)
+cd /opt/riskboard && exec env RB_STATE=/var/lib/riskboard/state.json node "${A[@]}" src/riskboard.mjs "${1:---send}"

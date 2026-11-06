@@ -1,0 +1,1 @@
+{"name":"riskboard","version":"1.0.0","private":true,"type":"module","engines":{"node":">=22"},"scripts":{"start":"node --env-file-if-exists=.env src/riskboard.mjs","once":"node src/riskboard.mjs --once","test":"node --test tests/*.test.mjs"}}

@@ -1,0 +1,26 @@
+[Unit]
+Description=시장 리스크 보드 텔레그램 알림 (riskboard)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=riskboard
+Group=riskboard
+WorkingDirectory=/opt/riskboard
+# 텔레그램 토큰·채팅 ID는 trade-alert 설정을 그대로 씁니다. /opt/riskboard/.env가 있으면 그 값이 우선.
+EnvironmentFile=-/opt/trade-alert/.env
+EnvironmentFile=-/opt/riskboard/.env
+Environment=RB_STATE=/var/lib/riskboard/state.json
+ExecStart=/usr/bin/node src/riskboard.mjs
+Restart=always
+RestartSec=30
+StateDirectory=riskboard
+StateDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
