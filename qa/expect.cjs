@@ -447,4 +447,20 @@ module.exports = {
         P('dbgVer', { v: 'v124', j: 'us', max: 3, day: true }); P('rec', { U4: ['3연패 후 진입'] });
         P('link', { U4: { proc: '규칙 위반', det: ['v99maxloss'] }, U5: { proc: '규칙 준수', det: [] } }); P('month.row', ['3연패 후 진입', '1']);
         P('set0.cb', { checked: true, dis: false, vis: true }); P('off.on', false); P('back.on', true); P('max2.flags', { U3: ['maxloss'], U4: ['maxloss'] }); P('url0.on', false); P('url0set.cb.dis', true); } } } },
+  /* v125 차트 불러오기 속도: 끝난 거래 첫 열기 봉 요청이 openTrade 안에서 시작(?v125=0은 끝난 뒤) · 다시 열기·새로고침 뒤 봉 요청 0 · 다시 열기가 더 빠름 ·
+     같은 거래 SVG가 ?v125=0과 동일 · 닫힌 대화상자 renderDetail 뒤 차트 다시 그리기 0(예전 매 프레임) · PC 마우스 pointerdown 미리 받기 합류(요청 1) · 터치는 미리 받지 않음 · v125Debug (1440·390) */
+  t125: { check(A, o) {
+    for (const W of [1440, 390]) {
+      const k = 'w' + W, f = 'off' + W, P = (p, v) => A.eq(k + '.' + p, v);
+      P('first.req', 1); P('first.inOpen', true); P('again.req', 0); P('reload.req', 0); P('svgReload', true); P('closedLoop', 0); P('bars', 57);
+      const a = o[k] || {};
+      if (!(a.first && a.first.ms > 0)) A.fail(k + '.first.ms 차트 안 그려짐 ' + JSON.stringify(a.first));
+      if (!(a.again && a.again.ms >= 0 && a.first && a.again.ms < a.first.ms)) A.fail(k + ': 다시 열기(' + (a.again && a.again.ms) + 'ms)가 첫 열기(' + (a.first && a.first.ms) + 'ms)보다 빠르지 않음');
+      if (!(a.reload && a.reload.ms >= 0)) A.fail(k + '.reload 차트 안 그려짐');
+      P('press', W === 1440 ? { el: true, mouse: true, atDown: 1, total: 1, open: true, trade: 'three' } : { el: true, mouse: false, atDown: 0, total: 1, open: true, trade: 'three' });
+      P('dbgOn', true); P('dbgPress', W === 1440 ? 1 : 0); if (!(a.dbgJoin >= 1)) A.fail(k + '.dbgJoin ' + a.dbgJoin);
+      if (!(Array.isArray(a.dbgSrc) && a.dbgSrc[0] === '네트워크' && a.dbgSrc[1] === '메모리')) A.fail(k + '.dbgSrc ' + JSON.stringify(a.dbgSrc));
+      A.eq(f + '.first.req', 1); A.eq(f + '.first.inOpen', false); A.eq(f + '.again.req', 0); A.eq(f + '.reload.req', 0); A.eq(f + '.dbgOn', false); A.eq(f + '.press.atDown', 0); A.eq(f + '.bars', 57);
+      A.eq('same' + W, true);
+    } } },
 };
