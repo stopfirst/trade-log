@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 시장 리스크 보드(riskboard 1.0.0) 설치/업데이트 — Ubuntu, AWS Lightsail
+# 시장 리스크 보드(riskboard 1.0.1) 설치/업데이트 — Ubuntu, AWS Lightsail
 #   curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/riskboard/install-riskboard.sh | sudo bash
 # trade-alert와 별개 서비스이며 trade-alert는 건드리지 않습니다(텔레그램 설정만 읽음). 다시 실행하면 코드만 업데이트.
 set -euo pipefail
