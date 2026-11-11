@@ -1,4 +1,15 @@
-# 매매일지 손실한도 판정 v1.6 (trade-alert 2.16.0 · alert20)
+# 매매일지 손실한도 판정 v1.6 (trade-alert 2.17.0 · alert21)
+
+## 2.17.0 — 앱 v126 '새 출발' 기준 시각(SQL alert21.sql · 기본 켜짐, 앱에서 새 출발했을 때만 동작 · `FRESH_START=0` = 2.16.0)
+
+- **읽는 것**: 앱 일지 `settings.v126`(기준 시각 cutoff · 세대 epoch · 새 출발 시점 계좌 가치 eq · 이월 id)만. Supabase `fresh_status(token)`(alert21.sql)로 5분마다. 거래·복기·보관함(`v126Archive`)은 안 나감.
+- **판정**: 그 시각 이전 체결·펀딩(HL 주계정·탄창·Supabase 수집분, 키움 주문)을 뺀 뒤 기존 판정 그대로 — 손실 한도 하루·주·월 · 연속 손실 · 복수매매 · 방향 전환 · 즉시 복기 · 탄창 점검. 이월 포지션은 새 출발 뒤 청산분부터.
+- **분모**: 새 출발이 든 하루·주·월 = 앱이 저장한 새 출발 시점 계좌 가치(`새 출발 시점 $X`). 다음 날·다음 주·다음 달부터는 평소(직전 마감).
+- **경계**: 기존 '한도 기준일'(RISK_START_DATE) 구조를 그대로 씀 — 기준 시각 = cutoff. `.env RISK_START_DATE`가 더 늦으면 그쪽. 새 출발 전 손실로 걸린 거래 중단은 해제(🔄 1회 · risk_events clear/risk-start).
+- **US(키움)**: 일별 실현손익은 하루 합계뿐이라 새 출발 날은 '서버가 새 출발을 처음 본 때의 그날 합계'를 뺌(근사 — 서버가 늦게 알면 그 사이 실현은 빠짐).
+- **취소**: 앱에서 '새 출발 취소' → 5분 안에 전체 체결로 돌아감. 매일 복기 알림은 앱 일지(활성 거래)를 읽어 원래 새 출발 뒤만.
+- alert21.sql이 없으면 2.16.0과 같음(로그 WARN 1회). harden 뒤에 실행했으면 alert21.sql 한 번 더. 되돌리기: `drop function if exists public.fresh_status(text);` 또는 `.env FRESH_START=0`.
+
 
 ## 2.16.0 — HL 하위계정 '탄창'(앱 v123과 같은 규칙 · SQL alert20.sql · 기본 켜짐, 탄창이 정해졌을 때만 동작 · `MAG=0` = 2.15.0)
 사용자 규칙: 매일 HL 하루 시작(UTC 00:00 = 09:00 KST)에 계좌의 2%(= 하루 손실 한도)만 하위계정 하나('탄창')에 넣고 그 계정으로만 거래, 장중 재충전 금지, 주계정 = 금고.
@@ -245,6 +256,7 @@ alert1의 `LOSS_STREAK_N`, `INCLUDE_UNREALIZED`, `US_LIMITS_PCT`, `CHECK_ACTIVE_
 앱 설정의 손실 한도(하루·주·달 %)는 앱 자체 표시용이고, 서버 판정은 `.env`(기본 3/6/10)를 씁니다. 앱 설정 → 계좌·위험에 서버 값이 그대로 보입니다.
 
 ## 테스트(개발)
+2.17.0: `node --test tests/*.test.mjs` 220개 (fresh.test.mjs 5) · SQL `node tests/alert21-sql.pglite.mjs <cloud 폴더>` 19개(alert21.sql fresh_status + harden 순서).
 2.16.0: `node --test tests/*.test.mjs` 215개 (mag.test.mjs 15) · SQL `node tests/alert20-sql.pglite.mjs <cloud 폴더>` 44개(alert20.sql 탄창 수집기 + mag_status + harden 순서).
 2.13.0: `node --test tests/*.test.mjs` (flip.test.mjs) · SQL `node tests/alert17-sql.pglite.mjs <cloud 폴더>`(alert17.sql + harden 순서).
 2.12.0: `node --test tests/*.test.mjs` (remind.test.mjs 손익비 미달·숨김 포함) · SQL `node tests/alert11-sql.pglite.mjs <cloud.sql> <kiwoom-collector.sql> <alert11.sql>`.

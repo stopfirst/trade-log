@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 매매일지 손실한도 판정 v1.6 알림 + 텔레그램 즉시 복기 · 현물 포함 분모 · 매일 복기 알림 · 서버 일일 백업 · flow-chart 존 터치 알림 · 복수매매 차단 알림 · 방향 전환 감지 · 복기 알림 단타 제외 · 오늘은 여기까지 연속 손실 · 탄창 하위계정(trade-alert 2.16.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
+# 매매일지 손실한도 판정 v1.6 알림 + 텔레그램 즉시 복기 · 현물 포함 분모 · 매일 복기 알림 · 서버 일일 백업 · flow-chart 존 터치 알림 · 복수매매 차단 알림 · 방향 전환 감지 · 복기 알림 단타 제외 · 오늘은 여기까지 연속 손실 · 탄창 하위계정 · 앱 새 출발 기준 시각(trade-alert 2.17.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
 #   curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash
 # 다시 실행하면 코드만 업데이트합니다(.env와 알림 기록은 절대 덮어쓰지 않음).
 # 키움 수집기(kiwoom-collector)와 별개의 서비스입니다. 수집기는 건드리지 않습니다.
@@ -12,7 +12,7 @@ SVC=trade-alert
 USR=tradealert
 STATE=/var/lib/trade-alert
 KWC_ENV=/opt/kiwoom-collector/.env
-FILES="package.json src/alert.mjs src/risk.mjs src/format.mjs src/quick.mjs src/remind.mjs src/spot.mjs src/calendar.mjs src/sources.mjs src/day.mjs src/hl-balance.cjs src/backup.mjs src/zones.mjs src/zonewatch.mjs src/revenge.mjs src/flip.mjs src/scalp.mjs src/mag.mjs env.template trade-alert.service trade-alert-backup.service trade-alert-backup.timer"
+FILES="package.json src/alert.mjs src/risk.mjs src/format.mjs src/quick.mjs src/remind.mjs src/spot.mjs src/calendar.mjs src/sources.mjs src/day.mjs src/hl-balance.cjs src/backup.mjs src/zones.mjs src/zonewatch.mjs src/revenge.mjs src/flip.mjs src/scalp.mjs src/mag.mjs src/fresh.mjs env.template trade-alert.service trade-alert-backup.service trade-alert-backup.timer"
 
 say(){ printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 die(){ printf '\n\033[1;31m[중단] %s\033[0m\n' "$*" >&2; exit 1; }
@@ -147,8 +147,13 @@ else
   fi
   if ! grep -q '^# \[탄창 하위계정 2.16.0\]' "$DIR/.env"; then
     # 2.16.0 안내(주석)만 덧붙입니다. 기본 = 켜짐(MAG=1, 탄창이 정해졌을 때만). 앱 설정 읽기·탄창 수집은 Supabase alert20.sql(없으면 HL_SUBS만).
-    sed -n '/^# \[탄창 하위계정 2.16.0\]/,$p' "$DIR/env.template" >> "$DIR/.env"
+    sed -n '/^# \[탄창 하위계정 2.16.0\]/,/^# \[새 출발 2.17.0\]/p' "$DIR/env.template" | sed '$d' >> "$DIR/.env"
     echo "기존 .env에 탄창 하위계정(MAG·HL_SUBS) 안내(주석)를 덧붙였습니다. 끄기: MAG=0 · 오늘 탄창: --mag-dry"
+  fi
+  if ! grep -q '^# \[새 출발 2.17.0\]' "$DIR/.env"; then
+    # 2.17.0 안내(주석)만 덧붙입니다. 기본 = 켜짐(FRESH_START=1). 앱 새 출발 읽기는 Supabase alert21.sql(없으면 2.16.0처럼).
+    sed -n '/^# \[새 출발 2.17.0\]/,$p' "$DIR/env.template" >> "$DIR/.env"
+    echo "기존 .env에 앱 새 출발(FRESH_START) 안내(주석)를 덧붙였습니다. 끄기: FRESH_START=0"
   fi
   if ! grep -q '^# \[손실한도 판정 v1.6\]' "$DIR/.env"; then
     # 2.4.0 안내(주석)만 덧붙입니다. 설정할 값 없음(주·월 분모 = 기간 시작 직전 마감 잔액, 새 SQL 없음).
