@@ -463,4 +463,38 @@ module.exports = {
       A.eq(f + '.first.req', 1); A.eq(f + '.first.inOpen', false); A.eq(f + '.again.req', 0); A.eq(f + '.reload.req', 0); A.eq(f + '.dbgOn', false); A.eq(f + '.press.atDown', 0); A.eq(f + '.bars', 57);
       A.eq('same' + W, true);
     } } },
+  t126: { check(A, o) {
+    A.eq('seed', ['BTC', 'ETH', 'SOL']); A.eq('seedMeta.auto', true); A.eq('mob0.act', ['BTC', 'ETH', 'SOL']);
+    /* (0) 보관 실패 → 무변경 */
+    A.eq('fail.ok', false); A.eq('fail.n', 3); A.eq('fail.same', true); A.eq('fail.cfg', false); A.eq('fail.arc', false); A.eq('fail.bad', true); A.has('fail.msg', '아무것도 바꾸지 않았'); A.eq('dl0', 0);
+    /* (1) 새 출발 */
+    A.eq('confirm', { vis: true, carry: ['SOL'], txt: true, tab: true });
+    A.eq('start.act', ['SOL*']); A.eq('start.arc', ['BTC', 'ETH', 'SOL*']); A.eq('start.on', true); A.eq('start.graves', 2); A.eq('start.dr', 0); A.eq('start.sc', 0); A.eq('start.arcEth', 'ETH 처음 복기'); A.eq('start.lim', [2.5, 6, 10]);
+    A.eq('startMore.cut', true); A.eq('startMore.eq', 1100); A.eq('startMore.carry', 1); A.eq('startMore.preLedger', 0); A.eq('startMore.dayBasis', true); A.eq('startMore.dayVal', 1100); A.eq('startMore.weekBasis', true);
+    A.eq('startMore.local', 1); A.eq('startMore.localN', 3); A.eq('startMore.badge', ['이월']); A.eq('startMore.dbg.on', true); A.eq('startMore.dbg.arc', 3); A.eq('startMore.dbg.carry', 1); A.eq('startMore.dbg.pre', 0);
+    if (!(Array.isArray(o.dl) && o.dl.length === 1 && /^trade-journal-hyperliquid-before-fresh-\d{8}-\d{4}\.json$/.test(o.dl[0].file))) A.fail('JSON 백업 파일 내려받기 없음 ' + JSON.stringify(o.dl));
+    A.eq('push1', 'pushed'); A.eq('cloud1', { act: ['SOL'], arc: 3, cfg: true }); A.eq('pushFlag', null);
+    /* (2) 옛 세대 기기 · 새 기기 · 예전 앱 되살림 */
+    A.eq('mobCard', true); A.eq('mobSync', 'pushed'); A.eq('mob1.act', ['SOL*']); A.eq('mob1.arc', ['BTC', 'ETH', 'SOL*']); A.eq('mob1.arcEth', 'ETH 폰에서 고침'); A.eq('mob1.arcConf', 1); A.eq('mobBlock', false);
+    A.eq('cloud2', { act: ['SOL'], arcEth: 'ETH 폰에서 고침' }); A.eq('pc2.act', ['SOL*']); A.eq('pc2.arcEth', 'ETH 폰에서 고침');
+    A.eq('mobCard2', { active: true, carry: ['SOL'] });
+    A.eq('new1.act', ['SOL*']); A.eq('new1.arc', ['BTC', 'ETH', 'SOL*']);
+    A.eq('old1.act', ['SOL*']); A.eq('old1.arc', ['BTC', 'ETH', 'SOL*']); A.eq('old1.arcConf', 1); A.eq('oldCloud', ['SOL']);
+    /* (3) 새 출발 뒤 체결 */
+    A.eq('after', ['DOGE', 'SOL']); A.eq('afterMore', { solCarry: true, solDone: true, solRisk: 10, solNote: 'SOL 근거', drop: true, ledgerDays: ['2026-10-31'] });
+    /* (4) 보관함 */
+    A.eq('chip', { vis: true, txt: '지난 기록' });
+    A.eq('arcView.mode', 'arc'); A.eq('arcView.names', ['BTC', 'ETH', 'SOL']); A.eq('arcView.bar', true); A.eq('arcView.badge', ['이월됨']); A.eq('arcView.sync', false); A.eq('arcView.nav', 3);
+    A.eq('arcEdit', { ok: true, stash: true, realAct: ['DOGE', 'SOL'] });
+    A.eq('arcClosed.act', ['DOGE', 'SOL*']); A.eq('arcClosed.arcEth', '보관함에서 쓴 복기'); A.eq('arcClosedMore', { stash: false, bar: false });
+    A.eq('push3', 'pushed'); A.eq('mob3.act', ['DOGE', 'SOL*']); A.eq('mob3.arcEth', '보관함에서 쓴 복기');
+    /* (5) ?v126=0 · 미국 주식 */
+    A.eq('v0.mode', 'all'); A.eq('v0.names', ['BTC', 'DOGE', 'ETH', 'SOL']); A.eq('v0.persist', true); A.eq('v0.sync', false); A.eq('v0.bar', true);
+    A.eq('afterV0.act', ['DOGE', 'SOL*']); A.eq('afterV0.arcEth', '보관함에서 쓴 복기');
+    A.eq('us0', { x: true, n: 2 }); A.eq('usConfirm', { carry: ['MSFT'] }); A.eq('us1', { sameCut: true, act: ['MSFT*'], arc: ['AAPL', 'MSFT'], eq: 5000, day: '2026-10-30' });
+    /* (6) 취소 */
+    A.eq('undoBox', true); A.eq('undo.act', ['BTC', 'DOGE', 'ETH', 'SOL']); A.eq('undo.arc', null); A.eq('undo.on', false); A.eq('undo.graves', 0); A.eq('undo.dr', 1); A.eq('undo.sc', 1);
+    A.eq('undoMore', { undone: true, eth: '보관함에서 쓴 복기', dr: '옛 일간 메모', sc: '옛 단타 메모', chip: false });
+    A.eq('push4', 'pushed'); A.eq('mob4.act', ['BTC', 'DOGE', 'ETH', 'SOL']); A.eq('mob4.arc', null); A.eq('cloud4', ['BTC', 'DOGE', 'ETH', 'SOL']); A.eq('casBad', 0);
+  } },
 };
