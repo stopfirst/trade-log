@@ -1,4 +1,7 @@
-// trade-alert 2.16.0 (alert20): HL 하위계정 '탄창' — 목록 = 앱 설정 v123Subs(alert20.sql mag_status) → 없으면 .env HL_SUBS(Scalping 제외). 손실 한도(하루·주·월) 분모 = 주계정 + 탄창 마감(portfolio 근삿값),
+// trade-alert 2.17.0 (alert21): 앱 v126 '새 출발' — 앱 settings.v126(기준 시각·세대·기준 계좌 가치)을 fresh_status(alert21.sql)로 5분마다 읽어 그 시각 이전 체결·펀딩을 판정에서 뺌
+//   (손실 한도 하루·주·월·연속 손실·복수매매·방향 전환·즉시 복기·탄창 점검 — 이월 포지션은 새 출발 뒤 청산분부터). 새 출발이 든 하루·주·월 분모 = 앱 기준 계좌 가치(fresh.mjs).
+//   alert21.sql 없으면 예전(2.16.0)처럼 전체 체결로 판정 + WARN 1회. .env FRESH_START=0이면 끔. 매일 복기 알림은 앱 일지(활성 거래)를 읽으므로 원래 새 출발 뒤만.
+// (이전) 2.16.0 (alert20): HL 하위계정 '탄창' — 목록 = 앱 설정 v123Subs(alert20.sql mag_status) → 없으면 .env HL_SUBS(Scalping 제외). 손실 한도(하루·주·월) 분모 = 주계정 + 탄창 마감(portfolio 근삿값),
 //   실현손익 = 주계정 + 탄창 체결·펀딩, 주↔탄창 이체 = 내부 이동(앱 v123과 같음). 새 텔레그램 알림(.env로 각각 끔): 🧯 탄창 소진 · 장중 재충전 · 금고에서 거래 · 09:00 탄창 점검(mag.mjs).
 //   복수매매·방향 전환·즉시 복기도 탄창 체결 포함(계정별로 구간을 만든 뒤 합침). Supabase pg_cron이 탄창 체결·펀딩도 수집(alert20.sql). --mag-dry(= --dry)로 오늘 탄창 상태. MAG=0 = 2.15.0 그대로.
 // (이전) 2.15.0 (alert19): 복수매매 '오늘은 여기까지'를 같은 날 '연속' 손실 청산 DAILY_LOSS_STREAK_MAX(3)회로 — 청산 순서대로 손실 +1 · 이익 청산(순손익 > 0) 0으로 · 순손익 0은 유지(revenge.mjs streakReach). 도달 뒤 그날 진입 위반 경고·서버 단타 예외 'n연패 후 진입'도 같은 함수. DAILY_LOSS_STREAK_MODE=count = 2.14.0 횟수 방식. 메시지 '손실 청산 3회' → '연속 손실 3회'. 손실 한도·쿨다운·갈아타기·위험 증가·방향 전환·백업 로직 변경 없음. SQL 없음.
@@ -51,10 +54,11 @@ import * as zw from './zonewatch.mjs';
 import * as rv from './revenge.mjs';
 import * as fl from './flip.mjs';
 import * as mg from './mag.mjs';
+import * as fr from './fresh.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.16.0';
+export const VERSION='2.17.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -103,7 +107,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
    checkSec:numIn(env,'RISK_CHECK_SEC',60,60,300,{int:true}),idleSec:numIn(env,'RISK_IDLE_SEC',300,60,1800,{int:true}),pushMin:numIn(env,'RISK_PUSH_MIN',5,1,30,{int:true}),
    usFlowMin:numIn(env,'US_FLOW_MIN_USD',50,1,1e7),usStaleMin:numIn(env,'US_STALE_MIN',20,5,240,{int:true}),anchorMaxGapMin:numIn(env,'ANCHOR_MAX_GAP_MIN',20,2,120,{int:true}),
    usExtraHolidays:extra,dayBasis,riskStartDate:rsd||null,hlAddress:hlAddr?hlAddr.toLowerCase():null,
-   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),scalp:scm.scalpConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),zones:zoneCfg,revenge:revCfg,flip:flipCfg,mag:magCfg,summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
+   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),scalp:scm.scalpConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),zones:zoneCfg,revenge:revCfg,flip:flipCfg,mag:magCfg,fresh:fr.freshConfig(env),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
    stateDir:String(env.STATE_DIRECTORY||env.ALERT_STATE_DIR||'/var/lib/trade-alert').split(':')[0]};
  }catch(e){if(e.fields)problems.push(...e.fields);else throw e;}
  if(problems.length){const e=Error('CONFIG_INCOMPLETE');e.fields=problems;throw e;}
@@ -173,7 +177,7 @@ export class SupabaseRpc{
    if(r.status===429||r.status>=500){if(attempt<2){await this.sleep(2000*2**attempt);continue;}throw Error('SUPABASE_UNAVAILABLE_'+r.status);}
    const text=await r.text();let data=null;try{data=JSON.parse(text);}catch{}
    if(r.status===401||r.status===403||/invalid collector token/.test(String(data?.message||'')))throw Error('SUPABASE_TOKEN_REJECTED');
-   if(r.status===404||/risk_status|risk_push|risk_day_data|quick_review_push|revenge_push|revenge_data|flip_push|mag_status|could not find the function/i.test(String(data?.message||'')))throw Error(name==='risk_day_data'?'SUPABASE_ALERT3_SQL_NOT_INSTALLED':name==='quick_review_push'?'SUPABASE_ALERT9_SQL_NOT_INSTALLED':/^revenge_/.test(name)?'SUPABASE_ALERT15_SQL_NOT_INSTALLED':name==='flip_push'?'SUPABASE_ALERT17_SQL_NOT_INSTALLED':name==='mag_status'?'SUPABASE_ALERT20_SQL_NOT_INSTALLED':'SUPABASE_SQL_NOT_INSTALLED');
+   if(r.status===404||/risk_status|risk_push|risk_day_data|quick_review_push|revenge_push|revenge_data|flip_push|mag_status|fresh_status|could not find the function/i.test(String(data?.message||'')))throw Error(name==='risk_day_data'?'SUPABASE_ALERT3_SQL_NOT_INSTALLED':name==='quick_review_push'?'SUPABASE_ALERT9_SQL_NOT_INSTALLED':/^revenge_/.test(name)?'SUPABASE_ALERT15_SQL_NOT_INSTALLED':name==='flip_push'?'SUPABASE_ALERT17_SQL_NOT_INSTALLED':name==='mag_status'?'SUPABASE_ALERT20_SQL_NOT_INSTALLED':name==='fresh_status'?'SUPABASE_ALERT21_SQL_NOT_INSTALLED':'SUPABASE_SQL_NOT_INSTALLED');
    if(!r.ok)throw Error('SUPABASE_HTTP_'+r.status);
    if(!data||typeof data!=='object')throw Error('SUPABASE_BAD_RESPONSE');
    if(data.ok===false)throw Error('SUPABASE_REJECTED_'+String(data.error||'unknown').replace(/[^a-z_]/g,'').slice(0,40));
@@ -286,10 +290,18 @@ export class Alerter{
   const balSum=subs.every(s=>Number.isFinite(s.bal))?Math.round(subs.reduce((a,s)=>a+s.bal,0)*100)/100:null;
   return {resolved:R,subs,balSum,watch:M.watch,sqlMissing:M.sqlMissing};
  }
+ /** 2.17.0 앱 새 출발(settings.v126) — 5분마다 fresh_status. 없으면(alert21.sql 미설치) null, 일시 실패면 직전 값 */
+ async freshData(t){if(!this.cfg.fresh||!this.cfg.fresh.enabled)return null;const F=this.freshS||(this.freshS={at:0,data:null,missing:false,seen:null});
+  if(t-F.at>=5*MIN){F.at=t;try{const r=await this.rpc.call('fresh_status',{p_token:this.cfg.token});F.data=fr.parseFresh(r);if(F.missing)this.log('INFO','alert21.sql 확인 → 앱 새 출발 기준 시각을 읽습니다.');F.missing=false;
+    const sig=JSON.stringify(Object.entries(F.data).map(([m,x])=>[m,x.epoch]));if(sig!==F.seen){F.seen=sig;const L=Object.entries(F.data).map(([m,x])=>fr.freshText(x,m));this.log('INFO',L.length?'앱 새 출발: '+L.join(' · ')+' → 그 이전 체결·펀딩은 판정에서 뺌':'앱 새 출발 없음(전체 체결로 판정)');}}
+   catch(e){const code=String(e.message||e);if(code==='SUPABASE_ALERT21_SQL_NOT_INSTALLED'){if(!F.missing)this.log('WARN','alert21.sql이 아직 없습니다 → 앱 새 출발(기준 시각)을 서버가 몰라 전체 체결로 판정합니다(2.16.0과 같음). Supabase SQL Editor에서 alert21.sql을 실행하세요.');F.missing=true;F.data=null;}
+    else this.log('WARN','새 출발 설정 조회 실패(직전 값으로): '+code.slice(0,80));}}
+  return F.data;}
  async check(){
   const t=this.now(),S=this.state;this.qrSeen=null;this.rvIn={};this.flipIn=null;this.magLast=null;
   const data=await this.rpc.call('risk_status',{p_token:this.cfg.token,p_us_revision:S.journal.US?.revision??null,p_hl_revision:S.journal.HL?.revision??null});
   for(const sc of ['US','HL']){const j=data.journal?.[sc];if(j&&!j.unchanged)S.journal[sc]={revision:j.revision,defaultRisk:Number(j.defaultRisk)||null,account:Number(j.account)>0?Number(j.account):null};}
+  let FR={};try{FR=await this.freshData(t)||{};}catch(e){FR={};this.log('WARN','새 출발 확인 실패(전체 체결로 판정): '+String(e.message||e).slice(0,80));}
   // v1.3 하루 한도 데이터(alert3.sql risk_day_data). 미설치 → v1.2 하루 판정, 일시 실패 → 10분 안의 직전 값, 그보다 오래되면 하루 판정 건너뜀
   let dayMode='equity',dd=null;
   if(this.cfg.dayBasis==='realized'){
@@ -315,30 +327,38 @@ export class Alerter{
   // --- 미국주식
   if(this.want('US',!!data.kw?.latest)){
    const cal=this.cal.US,latest=data.kw?.latest;const eq=src.usEquity(latest,t,this.cfg.usStaleMin);
+   // 2.17.0 새 출발: 그 이전 키움 주문 빼고, 그날 일별 실현은 처음 본 합계를 뺌
+   const FU=FR.US||null,rsFU=FU?fr.riskStartOf(FU,'US',cal):null,ubase=FU?fr.usBaseFor(S,FU,rsFU,(dd||pdd)?.kw_days):null;
+   const kwOrders=FU?(data.kw?.orders||[]).filter(o=>{const tt=src.orderTime(o);return !(tt&&tt<FU.cutoff);}):data.kw?.orders;
+   const ddU=FU&&dd?{...dd,kw_days:fr.cutKwDays(dd.kw_days,ubase)}:dd,pddU=FU&&pdd?{...pdd,kw_days:fr.cutKwDays(pdd.kw_days,ubase)}:pdd;
    const newFlows=[];if(latest){if(!S.usObs)this.log('INFO','미국주식 입출금 추정: 직전 관측이 없어 이번 스냅샷을 기준으로 시작합니다(그 전의 입출금은 추정 못 함).');
     const r=src.usImpliedFlow(S.usObs,latest,data.kw.orders,this.cfg.usFlowMin);
     // v1.5: 추정한 입출금을 관측 갱신과 같은 회차에 보관(저장 전에 확인이 실패해도 다음 회차에 저장) — 2.2.0까지는 이 회차가 실패하면 사라졌음
     if(r.flow&&!dbFlows('US').some(f=>f.ref===r.flow.ref)&&!S.pending.flows.some(f=>f.ref===r.flow.ref)){S.pending.flows.push({market:'us',...r.flow});newFlows.push(r.flow);this.log('INFO',`미국주식 입출금 추정 ${r.flow.amount} USD (${r.flow.note}) → 손익에서 제외`);}S.usObs=r.obs;}
    const fmU=new Map();for(const f of [...dbFlows('US'),...S.pending.flows.filter(f=>f.market==='us')])if(!fmU.has(f.ref))fmU.set(f.ref,f);const flows=[...fmU.values()];
    let dayRealized=null;
-   if(dayMode==='realized'&&dd){const k=cal.dayOf(t),cur=src.usEquity(latest,t,1e9);const D=day.usDayRealized(dd.kw_days,k,{from:cal.dayStart(k),until:cal.dayEnd(k)});D.denom=day.dayDenom({acct:dd.acct,k0:k,market:'US',current:cur?.value,manual:S.journal.US?.account});dayRealized=D;}
+   if(dayMode==='realized'&&dd){const k=cal.dayOf(t),cur=src.usEquity(latest,t,1e9);const D=day.usDayRealized(ddU.kw_days,k,{from:cal.dayStart(k),until:cal.dayEnd(k)});D.denom=day.dayDenom({acct:dd.acct,k0:k,market:'US',current:cur?.value,manual:S.journal.US?.account});if(FU&&FU.eq>0&&k===rsFU.day)D.denom=fr.freshDen(FU);dayRealized=D;}
    let periodRealized=null;
-   if(pdd){const k=cal.dayOf(t),cur=src.usEquity(latest,t,1e9),basis=day.basisDenom(cur?.value,S.journal.US?.account,'US'),{rows,days}=day.usPeriodDays(pdd.kw_days,cal,day.periodFrom(cal,k),k,src.usFills(data.kw?.orders));
-    const dn=day.dayDenomFor(pdd.acct,'US',basis);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal,rows,days,basis,denomAt:dn};} // v1.6: 주·월 분모 = 기간 시작 직전 마감
-   const ecU=engineCfg(this.cfg,'US',S.journal.US?.defaultRisk,dayMode,cal),usFb=src.usFallback(data.acct_us,cal);
-   const anchorU=ecU.riskStart?()=>{const rs=ecU.riskStart,pk=cal.prev(rs.day),r=dd?day.closeRows(dd.acct,'US')[pk]:null;if(r&&r.value>0)return {equity:r.value,at:r.capturedAt||rs.at,source:'키움 마감 잔액 '+pk};return usFb(rs.day,'day');}:null;
-   const res=risk.step(S.engine.US,{now:t,cal,cfg:ecU,equity:eq,flows,fills:src.usFills(data.kw?.orders),fallbackStart:usFb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorU,periodMode,periodRealized});
+   if(pdd){const k=cal.dayOf(t),cur=src.usEquity(latest,t,1e9),basis=day.basisDenom(cur?.value,S.journal.US?.account,'US'),{rows,days}=day.usPeriodDays(pddU.kw_days,cal,day.periodFrom(cal,k),k,src.usFills(kwOrders));
+    const dn=fr.wrapDenomAt(day.dayDenomFor(pdd.acct,'US',basis),FU,rsFU);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal,rows,days,basis,denomAt:dn};} // v1.6: 주·월 분모 = 기간 시작 직전 마감
+   const ecU=engineCfg(this.cfg,'US',S.journal.US?.defaultRisk,dayMode,cal),usFb=src.usFallback(data.acct_us,cal);if(rsFU)ecU.riskStart=fr.pickStart(ecU.riskStart,rsFU);
+   const anchorU=ecU.riskStart?(ecU.riskStart.fresh&&ecU.riskStart.base0)?()=>ecU.riskStart.base0:()=>{const rs=ecU.riskStart,pk=cal.prev(rs.day),r=dd?day.closeRows(dd.acct,'US')[pk]:null;if(r&&r.value>0)return {equity:r.value,at:r.capturedAt||rs.at,source:'키움 마감 잔액 '+pk};return usFb(rs.day,'day');}:null;
+   const res=risk.step(S.engine.US,{now:t,cal,cfg:ecU,equity:eq,flows,fills:src.usFills(kwOrders),fallbackStart:usFb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorU,periodMode,periodRealized});
    if(eq?.stale)res.status.note=`키움 스냅샷이 ${Math.round((t-eq.t)/MIN)}분 전 값입니다(시세만 바뀌면 수집기가 최대 10분마다 올림)`;
+   if(FU)res.status.fresh={epoch:FU.epoch,cutoff:FU.cutoff,eq:FU.eq,usBase:ubase?ubase.base:null};
    results.push({m:'US',res,newFlows});
-   if(this.revenge){try{this.rvIn.US=await this.usRevengeInput(data,t);}catch(e){this.log('WARN','복수매매 US 입력 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
+   if(this.revenge){try{this.rvIn.US=await this.usRevengeInput(FU?{...data,kw:{...data.kw,orders:kwOrders}}:data,t);}catch(e){this.log('WARN','복수매매 US 입력 실패(손실 한도 알림과 무관): '+String(e.message||e).slice(0,80));}}
   }
   // --- 하이퍼리퀴드
   const addr=this.cfg.hlAddress||data.hl_address;
   if(addr&&this.want('HL',true)){
-   const cal=this.cal.HL,h=await this.hlData(String(addr).toLowerCase(),t);
+   const cal=this.cal.HL,h0=await this.hlData(String(addr).toLowerCase(),t);
+   // 2.17.0 새 출발: 그 이전 체결·펀딩(주계정·탄창·Supabase 수집분) 빼고 판정
+   const FH=FR.HL||null,rsFH=FH?fr.riskStartOf(FH,'HL',cal):null,cutDb=x=>x&&FH?{...x,fills:fr.cutRaw(x.fills,FH.cutoff),funding:fr.cutRaw(x.funding,FH.cutoff),days:fr.cutDbDays(x.days,rsFH)}:x;
+   const h=FH?{...h0,rawFills:fr.cutRaw(h0.rawFills,FH.cutoff),fills:fr.cutNorm(h0.fills,FH.cutoff),rawFunding:fr.cutRaw(h0.rawFunding,FH.cutoff)}:h0;
    // 2.16.0 탄창: 체결·실현손익·분모 = 주계정 + 탄창, 주↔탄창 이체 = 내부 이동(입출금 아님)
    let mgd=null;if(this.cfg.mag.enabled){try{mgd=await this.magData(String(addr).toLowerCase(),t,h);}catch(e){this.log('WARN','탄창 데이터 실패 → 이번 회차 주계정만: '+String(e.message||e).slice(0,80));mgd=null;}}
-   const subs=mgd?.subs?.length?mgd.subs:null,intl=subs?mg.internalRefs(h.ledger,addr,subs.map(x=>x.addr)):new Set();
+   const subs=mgd?.subs?.length?(FH?mgd.subs.map(x=>({...x,rawFills:fr.cutRaw(x.rawFills,FH.cutoff),rawFunding:fr.cutRaw(x.rawFunding,FH.cutoff)})):mgd.subs):null,intl=subs?mg.internalRefs(h.ledger,addr,subs.map(x=>x.addr)):new Set();
    if(subs){h.flows=h.flows.filter(f=>!intl.has(f.ref));
     if(mgd.balSum===null){h.equity=null;this.log('WARN','탄창 잔고를 몰라 이번 회차 HL 판정을 건너뜁니다(주계정만으로 섞인 숫자를 만들지 않음).');}
     else if(h.equity)h.equity={...h.equity,value:Math.round((h.equity.value+mgd.balSum)*1e6)/1e6,source:h.equity.source+' + 탄창',main:h.equity.value,mag:mgd.balSum};}
@@ -357,18 +377,18 @@ export class Alerter{
    // 2.16.0 탄창 마감값(portfolio 근삿값)을 마감 행에 더함 — 모르는 날은 주계정만(missing). curH는 h.equity가 이미 합산(위)
    let magMissing=new Set();if(subs){const a1=mg.withSubCloses(acctH,subs),a2=mg.withSubCloses(acctP,subs);acctH=a1.rows;acctP=a2.rows;magMissing=new Set([...a1.missing,...a2.missing]);}
    let dayRealized=null;
-   if(dayMode==='realized'){const k=day.utcDate(t),db=dd?.hl&&String(dd.hl.address||'').toLowerCase()===String(addr).toLowerCase()?dd.hl:null;
+   if(dayMode==='realized'){const k=day.utcDate(t),db=dd?.hl&&String(dd.hl.address||'').toLowerCase()===String(addr).toLowerCase()?cutDb(dd.hl):null;
     let D=day.hlDayRealized(day.mergeHlFills(h.rawFills,db?.fills),day.mergeHlFunding(h.rawFunding,db?.funding),k);
     if(subs)D=mg.addDay(D,mg.subDayRealized(subs,k));
-    D.denom=day.dayDenom({acct:acctH,k0:k,market:'HL',current:curH,manual:S.journal.HL?.account});if(D.denom&&spotNote)D.denom.spot=spotNote;
+    D.denom=day.dayDenom({acct:acctH,k0:k,market:'HL',current:curH,manual:S.journal.HL?.account});if(FH&&FH.eq>0&&k===rsFH.day)D.denom=fr.freshDen(FH);if(D.denom&&spotNote)D.denom.spot=spotNote;
     if(D.denom&&subs){if(D.denom.mode==='close'&&magMissing.has(D.denom.key))D.denom.magPending=true;else if(D.denom.mode==='close')D.denom.mag=true;}dayRealized=D;}
    let periodRealized=null;
-   if(pdd){const k=day.utcDate(t),rc=this.rcal,db=pdd.hl&&String(pdd.hl.address||'').toLowerCase()===String(addr).toLowerCase()?pdd.hl:null,basis=day.basisDenom(curH,S.journal.HL?.account,'HL');
+   if(pdd){const k=day.utcDate(t),rc=this.rcal,db=pdd.hl&&String(pdd.hl.address||'').toLowerCase()===String(addr).toLowerCase()?cutDb(pdd.hl):null,basis=day.basisDenom(curH,S.journal.HL?.account,'HL');
     let days=day.hlPeriodDays(day.mergeHlFills(h.rawFills,db?.fills),day.mergeHlFunding(h.rawFunding,db?.funding),db?.days||null,day.periodFrom(rc,k),k);
     if(subs)days=mg.addPeriodDays(days,subs,day.periodFrom(rc,k),k);
-    const dn=day.dayDenomFor(acctP,'HL',basis);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal:rc,rows:days.map(d=>({label:d.key,pnl:d.pnl})),days,basis,denomAt:dn};} // v1.6
-   const ecH=engineCfg(this.cfg,'HL',S.journal.HL?.defaultRisk,dayMode,cal);
-   const anchorH=ecH.riskStart?ms=>{const pk=addDays(ecH.riskStart.date,-1),r=dd?day.closeRows(dd.acct,'HL')[pk]:null;if(r&&r.value>0)return {equity:r.value,at:ecH.riskStart.at,source:'HL 마감 '+pk.slice(5).replace('-','/')+' UTC'};return src.hlPortfolioAt(h.portfolio,ms,h.equity);}:null;
+    const dn=fr.wrapDenomAt(day.dayDenomFor(acctP,'HL',basis),FH,rsFH);for(const d of days)d.denom=dn(d.key);periodRealized={key:k,cal:rc,rows:days.map(d=>({label:d.key,pnl:d.pnl})),days,basis,denomAt:dn};} // v1.6
+   const ecH=engineCfg(this.cfg,'HL',S.journal.HL?.defaultRisk,dayMode,cal);if(rsFH)ecH.riskStart=fr.pickStart(ecH.riskStart,rsFH);
+   const anchorH=ecH.riskStart?(ecH.riskStart.fresh&&ecH.riskStart.base0)?()=>ecH.riskStart.base0:ms=>{const pk=addDays(ecH.riskStart.date,-1),r=dd?day.closeRows(dd.acct,'HL')[pk]:null;if(r&&r.value>0)return {equity:r.value,at:ecH.riskStart.at,source:'HL 마감 '+pk.slice(5).replace('-','/')+' UTC'};return src.hlPortfolioAt(h.portfolio,ms,h.equity);}:null;
    const fillsAll=subs?[...h.fills,...subs.flatMap(x=>src.hlFills(x.rawFills))].sort((a,b)=>a.t-b.t):h.fills;
    const res=risk.step(S.engine.HL,{now:t,cal,cfg:ecH,equity:h.equity,flows,fills:fillsAll,fallbackStart:fb,eventRefs:refs,dayMode,dayRealized,anchorAt:anchorH,periodMode,periodRealized});
    if(spotNote&&this.spotB?.cur&&!this.spotB.cur.miss)res.status.spot={usd:Math.round(this.spotB.cur.usd*100)/100,coins:this.spotB.cur.items.map(i=>i.coin)};
@@ -378,6 +398,7 @@ export class Alerter{
       pnl:subs?mg.subDayRealized(subs,day.utcDate(t)).pnl:null,mainRawFills:h.rawFills,ledger:h.ledger});
     this.magLast={model:m,resolved:mgd.resolved,watch:mgd.watch,sqlMissing:mgd.sqlMissing};
     if(subs)res.status.mag={subs:m.subs.map(x=>({name:x.name,addr:x.addr,bal:x.bal})),balSum:m.balSum,target:m.target,pct:m.pct,state:m.state,source:m.source,denomPending:m.denomPending};}
+   if(FH)res.status.fresh={epoch:FH.epoch,cutoff:FH.cutoff,eq:FH.eq};
    results.push({m:'HL',res,newFlows});
    this.qrSeen={rawFills:h.rawFills,rawFunding:h.rawFunding,equity:h.equity?.value,defaultRisk:S.journal.HL?.defaultRisk,subs:subs||[]}; // 2.6.0 즉시 복기용(판정과 무관) · 2.16.0 탄창도
    if(this.flip)this.flipIn={rawFills:h.rawFills,client:h.client,subs:subs||[]}; // 2.13.0 방향 전환(판정과 무관) · 2.16.0 탄창도(계정별로 판정)
