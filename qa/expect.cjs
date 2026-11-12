@@ -523,4 +523,34 @@ module.exports = {
     /* 모바일 */
     A.eq('M.stop', true); A.eq('M.act', ['HL:dayr:2026-10-31']); A.eq('M.other', true); A.eq('M.hint', true); A.eq('Mbad', []); A.eq('Bbad', []);
   } },
+  /* v128: 사용자가 연 차트 봉 요청 — 바쁜 대기열에서도 먼저, 시간 제한은 네트워크부터(대기 제외), 1회 재시도, [다시 시도], ?v128=0 예전, 모바일 390 */
+  t128: { check(A, o) {
+    for (const k of ['w1440', 'w390']) {
+      const a = o[k] || {}, P = (p, v) => A.eq(k + '.' + p, v), F = m => A.fail(k + ': ' + m);
+      P('dbgOn', true);
+      /* (Q) 바쁜 대기열: 배경 봉 12개보다 먼저(이미 진행 중이던 것만 앞), 배경 우선순위 2·0 그대로, 모자란 구간 요청도 빨리 */
+      P('Q.ok', true); const q = a.Q || {};
+      if (!(q.ms > 0 && q.ms < 1500)) F('Q.ms 바쁜 대기열 차트 ' + q.ms + 'ms (기대 < 1500)');
+      if (!(q.bgBefore <= 4)) F('Q.bgBefore 차트보다 먼저 나간 배경 봉 ' + q.bgBefore + ' (기대 ≤ 4)');
+      if (!(Array.isArray(q.qPri) && q.qPri.includes(2) && q.qPri.includes(0) && !q.qPri.includes(3))) F('Q.qPri 배경 우선순위 ' + JSON.stringify(q.qPri));
+      if (!(q.extra && q.extra.ok && q.extra.ms < 1500)) F('Q.extra 모자란 구간 ' + JSON.stringify(q.extra));
+      /* (W) 예산 대기 3초 > 시간 제한 1.5초 → 시간 초과 없이 성공 */
+      P('W.ok', true); P('W.req', 1); P('Wdbg.retry', false); P('Wdbg.tries', 1); P('Wdbg.netTo', 0);
+      if (!(a.Wdbg && a.Wdbg.wait >= 2500)) F('Wdbg.wait ' + JSON.stringify(a.Wdbg));
+      /* (R) 1회 자동 재시도 */
+      P('R.ok', true); P('R.req', 2); P('Rdbg.retry', true); P('Rdbg.tries', 2);
+      /* (F) 두 번 실패 → 문구 + [다시 시도] → 누른 자리에서 그림 */
+      P('F.ok', false); P('F.btn', true); P('F.req', 2); A.has(k + '.F.msg', '차트를 불러오지 못했습니다'); A.has(k + '.F.msg', '시간 초과');
+      P('Fbox.txt', '다시 시도'); P('Fbox.inView', true); P('Ftap.ok', true); P('Ftap.req', 1); P('Ftap.tap', 1); P('Ftap.open', true);
+      /* (T) 429는 v104 처리(재시도 횟수 그대로 = R·F 의 2) */
+      P('T.ok', true); P('Tdbg.retry', 2); if (!(a.Tdbg && a.Tdbg.r429 >= 1)) F('Tdbg.r429 ' + JSON.stringify(a.Tdbg));
+      /* (I) 새로고침 뒤 끝난 구간 = IndexedDB, 요청 0 */
+      P('I.ok', true); P('I.req', 0);
+      P('docScroll', false);
+    }
+    /* ?v128=0 예전 동작 */
+    A.eq('off1440.dbgOn', false); A.eq('off1440.Q.ok', true);
+    if (!(o.off1440 && o.off1440.Q && o.off1440.Q.bgBefore >= 8 && o.off1440.Q.netStart > 1500)) A.fail('off1440.Q 예전엔 배경 봉 뒤에 서야 함 ' + JSON.stringify(o.off1440 && o.off1440.Q));
+    A.eq('off1440.B.ok', false); A.has('off1440.B.msg', 'signal timed out'); A.eq('off1440.B.btn', false);
+  } },
 };
