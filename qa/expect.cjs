@@ -497,4 +497,30 @@ module.exports = {
     A.eq('undoMore', { undone: true, eth: '보관함에서 쓴 복기', dr: '옛 일간 메모', sc: '옛 단타 메모', chip: false });
     A.eq('push4', 'pushed'); A.eq('mob4.act', ['BTC', 'DOGE', 'ETH', 'SOL']); A.eq('mob4.arc', null); A.eq('cloud4', ['BTC', 'DOGE', 'ETH', 'SOL']); A.eq('casBad', 0);
   } },
+  t127: { check(A, o) {
+    A.eq('seed', ['BTC', 'ETH']);
+    /* 새 출발 전: 옛 중단 그대로(기존 동작) */
+    A.eq('pre.stop', true); A.eq('pre.act', ['HL:monthr:2026-10', 'HL:weekr:2026-10-26', 'HL:streakr:2026-10-30']); A.eq('pre.viol', 2);
+    A.eq('fresh', { ok: true, day: '2026-10-30', eq: 1100, mark: true }); A.eq('after', ['DOGE']);
+    /* (A) 옛 서버 중단·옛 앱 판정·옛 위반 숨김 */
+    A.eq('A.stop', false); A.eq('A.vis', false); A.eq('A.act', []); A.eq('A.up', []); A.eq('A.viol', 0); A.eq('A.dogeViol', false); A.eq('A.badge', null); A.eq('A.half', false);
+    if (o.A && o.A.dogeProc === '규칙 위반') A.fail('A.dogeProc 규칙 위반');
+    A.eq('A.lim', [-20, -20, -20]); A.eq('A.dbg', { on: true, hl: ['HL:monthr:2026-10:before', 'HL:weekr:2026-10-26:before', 'HL:streakr:2026-10-30:mixed'], fresh: true, aware: false, violHidden: 2 });
+    A.has('note', '서버 중단 3건'); A.has('note', '위반 진입 2건'); A.has('note', '서버 기록은 그대로');
+    /* (B) 새 출발 뒤 새 위반은 표시 */
+    A.eq('B.stop', true); A.eq('B.act', ['HL:dayr:2026-10-31']); A.eq('B.viol', 1); A.eq('B.dogeViol', true); A.eq('B.dogeProc', '규칙 위반'); A.eq('B.badge', 'stop'); A.has('B.stopTxt', '위반 진입 1건');
+    if (o.B && /81\.17|16\.42/.test(o.B.stopTxt)) A.fail('B: 옛 중단 문구가 섞임');
+    /* (C) 섞인 기간: 앱 판정(분모 새 출발 시점) 미달 → 숨김, 도달 → 보임 */
+    A.eq('C1.stop', false); A.eq('C1.act', []); A.eq('afterX', ['DOGE', 'XRP']);
+    A.eq('C2.stop', true); A.eq('C2.act', ['HL:weekr-intraday:2026-10-31']); A.has('C2.stopTxt', '앱 판정'); A.has('C2.stopTxt', '−7.27%'); A.eq('C2.lim', { sum: -80, acct: 1100, hit: true, v126: true });
+    /* (D) 미국주식 줄 */
+    A.eq('D1.other', true); A.eq('D1.hint', true); A.eq('D1.stop', false); A.eq('D2.other', false); A.eq('D3.other', false);
+    /* (E) 서버 2.17.0 같은 새 출발 */
+    A.eq('E.stop', true);
+    if (!(o.E && o.E.act && o.E.act.length === 1 && /^HL:streakr:2026-10-30@e/.test(o.E.act[0]))) A.fail('E.act ' + JSON.stringify(o.E && o.E.act));
+    /* (F) ?v127=0 */
+    A.eq('F.on', false); A.eq('F.stop', true); A.eq('F.act', ['HL:monthr:2026-10', 'HL:weekr:2026-10-26', 'HL:streakr:2026-10-30']); A.eq('F.viol', 2);
+    /* 모바일 */
+    A.eq('M.stop', true); A.eq('M.act', ['HL:dayr:2026-10-31']); A.eq('M.other', true); A.eq('M.hint', true); A.eq('Mbad', []); A.eq('Bbad', []);
+  } },
 };
