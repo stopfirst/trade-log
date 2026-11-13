@@ -553,4 +553,39 @@ module.exports = {
     if (!(o.off1440 && o.off1440.Q && o.off1440.Q.bgBefore >= 8 && o.off1440.Q.netStart > 1500)) A.fail('off1440.Q 예전엔 배경 봉 뒤에 서야 함 ' + JSON.stringify(o.off1440 && o.off1440.Q));
     A.eq('off1440.B.ok', false); A.has('off1440.B.msg', 'signal timed out'); A.eq('off1440.B.btn', false);
   } },
+  /* v129: 일간 복기 작성 카드 — 점수 그대로 + 큰 글상자 하나(text), 옛 칸 합쳐 보이기·보존, 바뀐 칸만 저장, 미저장 글 되살림, 동기화 병합(PC 우선), 보관함, ?v129=0, 390 넘침 없음, 한글 IME 누락 없음 */
+  t129: { check(A, o) {
+    const OLD_TXT = '감정·컨디션: 잠 부족, 손실 뒤 조급함\n\n잘한 점:\n손절 지킴\n분할 익절\n\n내일 집중할 것: 손실 청산 뒤 15분 쉬기\n\n메모: CPI 발표';
+    for (const k of ['w1440', 'w390']) {
+      const a = o[k] || {}, P = (p, v) => A.eq(k + '.' + p, v), F = m => A.fail(k + ': ' + m);
+      /* (A) 빈 날 */
+      P('sel', '2026-10-31'); A.has(k + '.A.title', '일간 복기 작성'); P('A.ta', 1); P('A.inputs', 0); P('A.rows', 12); P('A.ph', '오늘 매매를 자유롭게.'); P('A.val', ''); P('A.scores', 5);
+      A.has(k + '.A.note', '날짜별로 이 기기에 저장되며 JSON 백업·클라우드 저장에 포함됩니다'); P('A.oldHidden', true); P('A.wFull', true); P('A.badge', '미작성'); P('A.dbg', true);
+      if (!(a.A && a.A.minLines >= 12)) F('A.minLines ' + JSON.stringify(a.A && a.A.minLines) + ' (기대 ≥ 12줄)');
+      /* (B) 한글 IME·Enter·잠금 중 입력 누락 없음 → 칸 벗어나면 text 저장 */
+      P('B.val', a.Bexp); P('B.same', true); P('B.dirty', true); P('B.draft', a.Bexp); P('Block', true);
+      if (!(a.Bbusy && a.Bbusy.lock >= 1 && a.Bbusy.enter >= 1)) F('Bbusy 잠금 예외 ' + JSON.stringify(a.Bbusy));
+      P('Bsaved.text', a.Bexp); P('Bsaved.mood', ''); P('Bafter.draft', null); P('Bafter.dirty', false); P('Bafter.tab', 'v21d-dot'); P('Bafter.badge', '작성 중'); A.has(k + '.Bafter.state', '저장됨');
+      P('Bgrow.inner', false); if (!(a.Bgrow && a.A && a.Bgrow.h > 500)) F('Bgrow 높이 늘어남 ' + JSON.stringify(a.Bgrow));
+      P('Blong', a.BlongExp);
+      /* (C) 옛 칸 데이터 */
+      P('C.val', OLD_TXT); P('C.oldVis', true); P('C.score', '3'); P('C.ta', 1);
+      P('Cscore.score', 4); P('Cscore.text', undefined); P('Cscore.mood', '잠 부족, 손실 뒤 조급함'); P('Cscore.good', '손절 지킴\n분할 익절'); P('Cscore.tomorrow', '손실 청산 뒤 15분 쉬기'); P('Cscore.memo', 'CPI 발표');
+      P('Ctext.text', OLD_TXT + '\n추가 메모'); P('Ctext.memo', '원격 메모'); P('Ctext.mood', '잠 부족, 손실 뒤 조급함'); P('Ctext.good', '손절 지킴\n분할 익절'); P('Ctext.score', 4);
+      P('Creopen.val', OLD_TXT + '\n추가 메모'); P('Creopen.oldVis', false);
+      /* (D) 미저장 글 되살림 */
+      P('D.val', '저장 전 글'); A.has(k + '.D.note', '저장 안 된 글을 되살렸어요'); P('D.rec', false); P('D.dirty', true); P('Dsaved.text', '저장 전 글'); P('Dsaved.draft', null);
+      P('Dkeep.t31', a.BlongExp); P('Dkeep.mood30', '잠 부족, 손실 뒤 조급함'); P('Dkeep.memo30', '원격 메모');
+      /* (E) 병합·백업 */
+      P('E.pcWins.text', 'PC 글'); P('E.pcWins.mood', '기분'); P('E.pcWins.conf', ['dailyReviews.hl.2026-10-20.text']); A.has(k + '.E.pcWins.label', '복기 글'); P('E.pcWins.rule', 'pc');
+      P('E.mineWins.text', 'PC 글'); P('E.both.text', '고친 글'); P('E.both.score', 5); P('E.both.conf', 0);
+      P('E.add.text', '새 글'); P('E.add.mood', '기분'); P('E.add.good', '잘함'); P('E.add.conf', 0); P('E.noBase.text', '새 글'); P('E.noBase.mood', '기분');
+      P('E.clean', '처음 글'); P('E.merge', '가져온 글'); A.has(k + '.E.badShape', '일간 복기 기록 오류'); P('E.okShape', 'ok'); P('E.exportHas', true);
+      A.has(k + '.E.summary', '· 토 10/31 · 오늘은 손절을 잘 지켰다.'); A.has(k + '.E.summary', '· 금 10/30 · 4/5 · 감정·컨디션: 잠 부족, 손실 뒤 조급함 · 작성 중');
+      /* (F) 보관함 */
+      P('F.okOpen', true); P('F.val', '보관함 글'); P('F.inView', '보관함 글 · 보관함에서 고침'); P('F.arc', '보관함 글 · 보관함에서 고침'); P('F.active', false);
+      /* (G) ?v129=0 */
+      P('G.on', false); P('G.ta', 4); P('G.big', 0); P('G.inputs', 1); P('G.mood', '잠 부족, 손실 뒤 조급함'); P('Gsaved.mood', '예전 폼에서 고침'); P('Gsaved.text', OLD_TXT + '\n추가 메모'); P('Gsaved.memo', '원격 메모');
+    }
+  } },
 };
