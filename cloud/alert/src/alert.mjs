@@ -1,3 +1,4 @@
+// trade-alert 2.18.0: 텔레그램 /risk → 같은 서버 riskboard 보드 답장(src/riskcmd.mjs).
 // trade-alert 2.17.0 (alert21): 앱 v126 '새 출발' — 앱 settings.v126(기준 시각·세대·기준 계좌 가치)을 fresh_status(alert21.sql)로 5분마다 읽어 그 시각 이전 체결·펀딩을 판정에서 뺌
 //   (손실 한도 하루·주·월·연속 손실·복수매매·방향 전환·즉시 복기·탄창 점검 — 이월 포지션은 새 출발 뒤 청산분부터). 새 출발이 든 하루·주·월 분모 = 앱 기준 계좌 가치(fresh.mjs).
 //   alert21.sql 없으면 예전(2.16.0)처럼 전체 체결로 판정 + WARN 1회. .env FRESH_START=0이면 끔. 매일 복기 알림은 앱 일지(활성 거래)를 읽으므로 원래 새 출발 뒤만.
@@ -55,10 +56,11 @@ import * as rv from './revenge.mjs';
 import * as fl from './flip.mjs';
 import * as mg from './mag.mjs';
 import * as fr from './fresh.mjs';
+import * as rk from './riskcmd.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.17.0';
+export const VERSION='2.18.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -107,7 +109,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
    checkSec:numIn(env,'RISK_CHECK_SEC',60,60,300,{int:true}),idleSec:numIn(env,'RISK_IDLE_SEC',300,60,1800,{int:true}),pushMin:numIn(env,'RISK_PUSH_MIN',5,1,30,{int:true}),
    usFlowMin:numIn(env,'US_FLOW_MIN_USD',50,1,1e7),usStaleMin:numIn(env,'US_STALE_MIN',20,5,240,{int:true}),anchorMaxGapMin:numIn(env,'ANCHOR_MAX_GAP_MIN',20,2,120,{int:true}),
    usExtraHolidays:extra,dayBasis,riskStartDate:rsd||null,hlAddress:hlAddr?hlAddr.toLowerCase():null,
-   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),scalp:scm.scalpConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),zones:zoneCfg,revenge:revCfg,flip:flipCfg,mag:magCfg,fresh:fr.freshConfig(env),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
+   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),scalp:scm.scalpConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),zones:zoneCfg,revenge:revCfg,flip:flipCfg,mag:magCfg,fresh:fr.freshConfig(env),riskCmd:rk.readRiskCmdConfig(env),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
    stateDir:String(env.STATE_DIRECTORY||env.ALERT_STATE_DIR||'/var/lib/trade-alert').split(':')[0]};
  }catch(e){if(e.fields)problems.push(...e.fields);else throw e;}
  if(problems.length){const e=Error('CONFIG_INCOMPLETE');e.fields=problems;throw e;}
@@ -222,11 +224,15 @@ export class Alerter{
   this.flip=this.cfg.flip.enabled&&!dryRun?new fl.Flip({cfg:this.cfg.flip,tg:this.tg,rpc:this.rpc,token:this.cfg.token,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist()}):null;this.flipIn=null;
   // 2.16.0 탄창(하위계정) — 데이터·합산은 dry-run에서도, 알림 처리기는 dry-run·--test에선 없음. 상태는 state2.json의 mag
   this.magAlert=this.cfg.mag.enabled&&!dryRun?new mg.Mag({cfg:this.cfg.mag,tg:this.tg,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist()}):null;this.magS=null;this.magLast=null;this.magWarned={};
+  // 2.18.0 텔레그램 /risk(riskboard 보드 답장) — dry-run·--test에선 없음
+  this.riskCmd=this.cfg.riskCmd.enabled&&!dryRun?new rk.RiskCmd({cfg:this.cfg.riskCmd,tg:this.tg,log:this.log,now:this.now}):null;
  }
  /** 2.10.0 텔레그램 메시지(명령) — TELEGRAM_CHAT_ID 대화방의 /zones on|off|status만 */
  async onTgMessage(m){
   if(String(m?.chat?.id??'')!==String(this.cfg.chat))return false;
-  const text=String(m?.text||'');if(!/^\/zones\b/i.test(text.trim()))return false;
+  const text=String(m?.text||'');
+  if(this.riskCmd&&rk.isRiskCmd(text))return this.riskCmd.command(text); // 2.18.0 /risk
+  if(!this.cfg.zones.commands||!/^\/zones\b/i.test(text.trim()))return false;
   let reply;try{reply=await this.zones.command(text);}catch(e){reply='존 명령 처리 실패: '+String(e.message||e).slice(0,80);}
   if(reply){try{await this.tg.send(reply);}catch(e){this.log('WARN','존 명령 답장 실패: '+String(e.message||e).slice(0,80));}}
   return true;
@@ -527,8 +533,9 @@ export class Alerter{
   this.log('INFO',`존 터치 알림 ${this.zones.enabled()?'켜짐':'꺼짐'} · ${zc.symbols.join(',')} ${zc.tf} · ${zc.kinds.join(',')} · ${zc.checkSec}초마다 · 소스 ${zc.source}`+(zc.commands?' · 텔레그램 /zones on|off|status':''));
   // 텔레그램 받기 루프: 즉시 복기(버튼) + 2.10.0 /zones 명령. QUICK_REVIEW=0이어도 ZONE_ALERT=1이면 명령용으로 받음.
   let poller=this.qr;
-  if(!poller&&!this.dryRun&&((zc.commands&&zc.envOn)||this.revenge))poller=new qr.QuickReview({tg:this.tg,rpc:this.rpc,token:this.cfg.token,chat:this.cfg.chat,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist()});
-  if(poller&&zc.commands)poller.onMessage=m=>this.onTgMessage(m);
+  if(!poller&&!this.dryRun&&((zc.commands&&zc.envOn)||this.revenge||this.riskCmd))poller=new qr.QuickReview({tg:this.tg,rpc:this.rpc,token:this.cfg.token,chat:this.cfg.chat,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist()});
+  if(poller&&(zc.commands||this.riskCmd))poller.onMessage=m=>this.onTgMessage(m);
+  this.log('INFO',`텔레그램 /risk ${this.riskCmd?'켜짐 · '+this.cfg.riskCmd.script:'꺼짐(RISK_BOARD_CMD=0)'}`);
   if(poller&&this.revenge)poller.onCallback=cq=>this.revenge.handle(cq); // 2.11.0 'rv|…' 버튼
   if(poller)poller.loop().catch(e=>this.log('ERROR','텔레그램 버튼 응답 루프 종료: '+String(e?.message||e)));
   this.zoneLoop().catch(e=>this.log('ERROR','존 확인 루프 종료: '+String(e?.message||e)));

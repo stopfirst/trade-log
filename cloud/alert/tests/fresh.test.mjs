@@ -18,7 +18,7 @@ const D0=Date.parse('2026-11-06T00:00:00Z'); // HL 하루 11/06 = 09:00 KST 시�
 const CUT=D0+60*MIN,EP='emvfresh01';
 
 test('설정·파싱: 기본 켜짐 · FRESH_START=0 끔 · 켜진(on) 일지만 · 형식 검사 · 2.17.0',()=>{
- assert.equal(VERSION,'2.17.0');
+ assert.equal(VERSION,'2.18.0');
  const E={TELEGRAM_BOT_TOKEN:BOT,TELEGRAM_CHAT_ID:'1'};
  assert.equal(readConfig(E,{needSupabase:false}).fresh.enabled,true);assert.equal(readConfig({...E,FRESH_START:'0'},{needSupabase:false}).fresh.enabled,false);
  const p=fr.parseFresh({ok:true,version:1,journal:{HL:{v126:{on:true,epoch:EP,cutoff:CUT,eq:9600.123,day:'2026-11-06',carry:['a','b']}},US:{v126:{on:false,undone:'x',epoch:'u1',cutoff:CUT}}}});

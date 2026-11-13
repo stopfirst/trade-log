@@ -97,7 +97,7 @@ test('Reminder: 단타 제외 메시지 · 단타만 있는 날 안 보냄(로�
  const R4=new rm.Reminder({rpc,token:'k',cfg:rm.remindConfig({}),state:()=>({sent:{},outbox:[]}),log:()=>{}});assert.match(await R4.afterCheck(at('2026-11-01','09:31')),/거래 5건/); // scalp 안 넘기면(예전 호출) 끔
 });
 test('--remind-dry: 미리 보기·뺀 단타 목록, 보내지 않음 · 단타만 있는 날 "보내지 않습니다" · 채팅 ID 없어도 됨',async()=>{
- const {remindDry,VERSION}=await import('../src/alert.mjs');assert.equal(VERSION,'2.17.0');
+ const {remindDry,VERSION}=await import('../src/alert.mjs');assert.equal(VERSION,'2.18.0');
  const env={SUPABASE_URL:'https://abcdefgh.supabase.co',SUPABASE_KEY:'sb_publishable_'+'k'.repeat(24),KW_COLLECTOR_TOKEN:'kwc_'+'A'.repeat(43),TELEGRAM_BOT_TOKEN:'123456789:AAH'+'x'.repeat(32)};
  const out=[],orig=console.log;let calls=[];const rpc=j=>({call:async(n,b)=>{calls.push([n,b]);return {ok:true,journal:j};}});
  console.log=(...a)=>out.push(a.join(' '));

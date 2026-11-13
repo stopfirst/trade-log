@@ -18,7 +18,7 @@ const T0=Date.parse('2026-11-03T12:00:00+09:00');
 const F=(tid,time,side,sz,start,o={})=>({coin:'BTC',side,sz:String(sz),px:'60000',startPosition:String(start),feeToken:'USDC',tid,time,closedPnl:'0',fee:'0',hash:'0x'+tid,dir:'x',oid:tid,...o});
 
 test('버전 2.13.0 · 설정 기본값(켜짐·5분) · 끄기 · 0 = 창 규칙 끔 · 형식 오류는 CONFIG_INCOMPLETE',()=>{
- assert.equal(VERSION,'2.17.0');
+ assert.equal(VERSION,'2.18.0');
  const c=readConfig(env('/tmp')).flip;assert.deepEqual([c.enabled,c.windowMin],[true,5]);
  assert.equal(readConfig(env('/tmp',{FLIP_ALERT:'0'})).flip.enabled,false);
  assert.equal(readConfig(env('/tmp',{FLIP_WINDOW_MIN:'0'})).flip.windowMin,0);

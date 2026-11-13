@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 매매일지 손실한도 판정 v1.6 알림 + 텔레그램 즉시 복기 · 현물 포함 분모 · 매일 복기 알림 · 서버 일일 백업 · flow-chart 존 터치 알림 · 복수매매 차단 알림 · 방향 전환 감지 · 복기 알림 단타 제외 · 오늘은 여기까지 연속 손실 · 탄창 하위계정 · 앱 새 출발 기준 시각(trade-alert 2.17.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
+# 매매일지 손실한도 판정 v1.6 알림 + 텔레그램 즉시 복기 · 현물 포함 분모 · 매일 복기 알림 · 서버 일일 백업 · flow-chart 존 터치 알림 · 복수매매 차단 알림 · 방향 전환 감지 · 복기 알림 단타 제외 · 오늘은 여기까지 연속 손실 · 탄창 하위계정 · 앱 새 출발 기준 시각 · 텔레그램 /risk(trade-alert 2.18.0) 설치/업데이트 (Ubuntu 22.04/24.04, AWS Lightsail)
 #   curl -fsSL https://raw.githubusercontent.com/stopfirst/trade-log/main/cloud/alert/install-alert.sh | sudo bash
 # 다시 실행하면 코드만 업데이트합니다(.env와 알림 기록은 절대 덮어쓰지 않음).
 # 키움 수집기(kiwoom-collector)와 별개의 서비스입니다. 수집기는 건드리지 않습니다.
@@ -12,7 +12,7 @@ SVC=trade-alert
 USR=tradealert
 STATE=/var/lib/trade-alert
 KWC_ENV=/opt/kiwoom-collector/.env
-FILES="package.json src/alert.mjs src/risk.mjs src/format.mjs src/quick.mjs src/remind.mjs src/spot.mjs src/calendar.mjs src/sources.mjs src/day.mjs src/hl-balance.cjs src/backup.mjs src/zones.mjs src/zonewatch.mjs src/revenge.mjs src/flip.mjs src/scalp.mjs src/mag.mjs src/fresh.mjs env.template trade-alert.service trade-alert-backup.service trade-alert-backup.timer"
+FILES="package.json src/alert.mjs src/risk.mjs src/format.mjs src/quick.mjs src/remind.mjs src/spot.mjs src/calendar.mjs src/sources.mjs src/day.mjs src/hl-balance.cjs src/backup.mjs src/zones.mjs src/zonewatch.mjs src/revenge.mjs src/flip.mjs src/scalp.mjs src/mag.mjs src/fresh.mjs src/riskcmd.mjs env.template trade-alert.service trade-alert-backup.service trade-alert-backup.timer"
 
 say(){ printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 die(){ printf '\n\033[1;31m[중단] %s\033[0m\n' "$*" >&2; exit 1; }

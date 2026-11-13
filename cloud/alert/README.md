@@ -1,5 +1,10 @@
 # 매매일지 손실한도 판정 v1.6 (trade-alert 2.17.0 · alert21)
 
+## 2.18.0 — 텔레그램 `/risk` = 지금 시장 리스크 보드(SQL 없음 · 손실 한도·복기·존·복수매매·방향 전환·탄창·새 출발 변경 없음 · 기본 켜짐)
+- TELEGRAM_CHAT_ID 대화방에서 `/risk`(또는 `/board`)를 보내면 같은 서버의 riskboard(`/opt/riskboard/src/riskboard.mjs --once`)로 보드를 만들어 답장합니다. 몇 초 걸립니다.
+- riskboard는 같은 봇 토큰으로 보내기만 하므로(getUpdates 없음) 메시지 받기는 trade-alert가 맡습니다. 자식 프로세스에는 .env 비밀값을 넘기지 않습니다.
+- riskboard가 없으면 설치 안내로 답합니다. 끄기: `.env` `RISK_BOARD_CMD=0`. 새 파일 `src/riskcmd.mjs`(설치 FILES·SHA256SUMS에 추가).
+
 ## 2.17.0 — 앱 v126 '새 출발' 기준 시각(SQL alert21.sql · 기본 켜짐, 앱에서 새 출발했을 때만 동작 · `FRESH_START=0` = 2.16.0)
 
 - **읽는 것**: 앱 일지 `settings.v126`(기준 시각 cutoff · 세대 epoch · 새 출발 시점 계좌 가치 eq · 이월 id)만. Supabase `fresh_status(token)`(alert21.sql)로 5분마다. 거래·복기·보관함(`v126Archive`)은 안 나감.
