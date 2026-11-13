@@ -588,4 +588,29 @@ module.exports = {
       P('G.on', false); P('G.ta', 4); P('G.big', 0); P('G.inputs', 1); P('G.mood', '잠 부족, 손실 뒤 조급함'); P('Gsaved.mood', '예전 폼에서 고침'); P('Gsaved.text', OLD_TXT + '\n추가 메모'); P('Gsaved.memo', '원격 메모');
     }
   } },
+  /* v130: 차트 중간 끊김 — 코인|봉 받은 구간 목록·보이는 범위 빈 구간 받기·실패 구간 다음 이동 때 재시도·[다시 시도], 확대 안 한 차트 빈 칸 채우기, ?v130=0 예전(재현) */
+  t130: { check(A, o) {
+    for (const k of ['w1440', 'w390']) {
+      const a = o[k] || {}, P = (p, v) => A.eq(k + '.' + p, v), F = m => A.fail(k + ': ' + m);
+      P('dbgOn', true); P('Gb.ok', true); P('Ga.ok', true); P('Ga.iv', '15m'); P('Gsets', true);
+      /* (G) 사용자 사례: 두 BTC 거래 사이 빈 봉 0, 빈 구간만 받음 */
+      P('G.miss', 0); if (!(a.G && a.G.tot > 250 && a.G.drawn >= a.G.tot)) F('G 봉 ' + JSON.stringify(a.G));
+      if (!(a.G && a.G.req >= 1 && a.G.req <= 4 && a.G.reqBars < 700)) F('G 요청(빈 구간만) ' + JSON.stringify(a.G && { req: a.G.req, reqBars: a.G.reqBars }));
+      P('Gdbg.segs', 1); P('Gdbg.fails', 0); P('Gdbg.fail', 0);
+      /* (F) 실패 → 다시 그리기로는 안 받음 → 다음 이동 때 재시도 → [다시 시도] → 채움 */
+      P('F1.btn', false); P('F1.miss', true); if (!(a.F1 && a.F1.req >= 1)) F('F1.req ' + JSON.stringify(a.F1));
+      P('Fmount.req', 0); P('Fmount.skipFail', true);
+      if (!(a.F2 && a.F2.req >= 1 && a.F2.retry >= 1)) F('F2 재시도 ' + JSON.stringify(a.F2));
+      P('F2.btn.txt', '다시 시도'); P('F2.btn.inView', true); A.has(k + '.F2.note', '일부 구간을 불러오지 못했습니다');
+      P('Ftap.btn', true); P('Ftap.miss', 0); P('Ftap.gone', true); P('Ftap.tap', 1); if (!(a.Ftap && a.Ftap.req >= 1)) F('Ftap.req ' + JSON.stringify(a.Ftap));
+      P('P.same', true); P('P.hit', true);
+      /* (V) 확대 안 한 차트 빈 칸 채움 */
+      P('V.open', true); P('V.miss', 0); P('V.view', false); if (!(a.V && a.V.drawn >= a.V.tot)) F('V 그린 봉 ' + JSON.stringify(a.V));
+      P('docScroll', false); P('docScrollF', false);
+    }
+    /* ?v130=0 예전: 사이 구간 통째로 빔(재현), 확대 안 한 차트 빈 칸 그대로 */
+    A.eq('off1440.dbgOn', false); A.eq('off1440.Ga.ok', true);
+    if (!(o.off1440 && o.off1440.G && o.off1440.G.miss > 100 && o.off1440.G.gapH >= 24)) A.fail('off1440.G 예전엔 사이 구간이 비어야 함(재현) ' + JSON.stringify(o.off1440 && o.off1440.G));
+    if (!(o.off1440 && o.off1440.V && o.off1440.V.miss > 0)) A.fail('off1440.V 예전엔 빈 칸 그대로 ' + JSON.stringify(o.off1440 && o.off1440.V));
+  } },
 };

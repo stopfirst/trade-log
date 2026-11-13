@@ -12,10 +12,15 @@ const [,,htmlPath,outDir,tag]=process.argv;fs.mkdirSync(outDir,{recursive:true})
 const html=fs.readFileSync(htmlPath);
 const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(html);}).listen(0);
 const A='0x'+'1'.repeat(40),PRJ='https://abcdefghijklmnop.supabase.co';
-const C={rev:0,payload:null,cas:[],heads:0,fulls:0,calls:0,tok:0};
+const C={rev:0,payload:null,cas:[],heads:0,fulls:0,calls:0,tok:0,sum:[]};
+/* 진단(CI에서만 S 흔들림 원인 찾기): 올린 저장본의 칸별·거래별 지문 → 연속 두 올리기 사이 바뀐 곳 */
+const v117H=v=>require('crypto').createHash('md5').update(JSON.stringify(v)===undefined?'u':JSON.stringify(v)).digest('hex').slice(0,8);
+function v117Sum(P){const top={},tr={};for(const [k,v] of Object.entries(P||{}))if(k!=='trades')top[k]=v117H(v);for(const t of (P&&P.trades)||[]){const f={};for(const [k,v] of Object.entries(t))f[k]=v117H(v);tr[t.id]=f;}return {top,tr};}
+function v117Diff(a,b){if(!a||!b)return null;const out=[];for(const k of new Set([...Object.keys(a.top),...Object.keys(b.top)]))if(a.top[k]!==b.top[k])out.push(k);
+ for(const id of new Set([...Object.keys(a.tr),...Object.keys(b.tr)])){const x=a.tr[id]||{},y=b.tr[id]||{};for(const k of new Set([...Object.keys(x),...Object.keys(y)]))if(x[k]!==y[k])out.push('trades.'+id+'.'+k);}return out.slice(0,20);}
 function cloud(req){const u=new URL(req.url),p=u.pathname;C.calls++;
  if(p==='/rest/v1/journal_cloud'){if(u.search.includes('payload')){C.fulls++;return C.rev?[{revision:C.rev,payload:C.payload,updated_at:new Date().toISOString()}]:[];}C.heads++;return C.rev?[{revision:C.rev,updated_at:new Date().toISOString()}]:[];}
- if(p==='/rest/v1/rpc/journal_cas'){const b=req.body||{};C.cas.push({dev:req.dev,exp:b.p_expected_revision});if(b.p_expected_revision!==C.rev)return null;C.rev++;C.payload=b.p_payload;return C.rev;}
+ if(p==='/rest/v1/rpc/journal_cas'){const b=req.body||{};C.cas.push({dev:req.dev,exp:b.p_expected_revision});if(b.p_expected_revision!==C.rev)return null;C.rev++;C.payload=b.p_payload;try{C.sum.push(v117Sum(C.payload));if(C.sum.length>12)C.sum.shift();}catch{}return C.rev;}
  if(p==='/auth/v1/token'){C.tok=(C.tok||0)+1;return {access_token:'tokNEW115',refresh_token:'rNEW115',expires_in:3600,expires_at:Math.floor(Date.now()/1000)+3600,token_type:'bearer',user:{id:'11111111-2222-3333-4444-555555555555',email:'qa@example.com'}};}
  if(p==='/rest/v1/rpc/hl_status')return {address:A,max_fill_id:0,max_funding_id:0,fills_count:0,funding_count:0,cron_active:true,last_ok_at:new Date().toISOString()};
  return [];}
@@ -83,6 +88,7 @@ const init=([A])=>{
   const s1=await P.evaluate(async()=>{for(let i=0;i<60&&V110.busy;i++)await new Promise(r=>setTimeout(r,250));state.trades[1].v63x={mfe:1,mae:2};state.trades[0].holdNote='S1';await persist();const c0=V112.n.canon;const r=await v110Sync('manual');return {r,canon:V112.n.canon-c0,run:V117.n.run};});
   await P.waitForFunction(()=>!V110.busy,null,{timeout:30000}).catch(()=>{});const ct=cloudT('qa117-0'),c1=cloudT('qa117-1');let b1=await idbBase(P);/* 빠른 CI: 기준 사본 기록(Worker·조각)이 늦게 끝날 수 있음 → 최대 15초 기다림 */for(let i=0;i<60&&!(b1&&b1.rev===C.rev);i++){await P.waitForTimeout(250);b1=await idbBase(P);}
   const s2=await P.evaluate(async()=>{/* 빠른 CI: 앞 올리기 뒤 자동 동기화가 돌고 있으면 v110Sync는 false(이미 도는 중) → 끝난 뒤 확인 */let r;for(let k=0;k<3;k++){for(let i=0;i<120&&V110.busy;i++)await new Promise(r=>setTimeout(r,250));r=await v110Sync('manual');if(r!==false)break;}return {r};});
+  try{const n=C.sum.length;S.Sdbg={s1:s1.r,s2:s2.r,rev:C.rev,brev:b1?b1.rev:null,bh:b1?b1.h:null,cas:C.cas.slice(-6).map(x=>x.exp),diff:n>=2?v117Diff(C.sum[n-2],C.sum[n-1]):null};}catch(e){S.Sdbg={x:String(e&&e.message||e).slice(0,80)};}
   S.S={pushed:s1.r==='pushed',canon:s1.canon,text:!!ct&&ct.holdNote==='S1',v63x:!!c1&&!('v63x' in c1),ident:!!(C.payload&&C.payload.cloudIdentity),n:C.payload&&C.payload.trades.length===260,base:!!b1&&b1.rev===C.rev&&b1.h==='S1'&&!b1.id&&!b1.v63x,same:s2.r==='same',run:s1.run>=1};
   /* (M) 다른 기기 변경 + 이 기기 입력 → 받아 병합 */
   {const t5=cloudT('qa117-5');t5.review='폰 메모 QA';t5.updatedAt=Date.now();C.payload.updatedAt=Date.now();C.rev++;}
