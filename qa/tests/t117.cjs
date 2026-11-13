@@ -63,7 +63,10 @@ const init=([A])=>{
   await ctx.exposeBinding('__cloud',(src,req)=>cloud({...req,dev}));await ctx.addInitScript(init,[A]);
   await ctx.addInitScript(()=>{window.__lt=[];try{new PerformanceObserver(l=>{for(const e of l.getEntries())window.__lt.push([Math.round(e.startTime),Math.round(e.duration)]);}).observe({type:'longtask',buffered:true});}catch{}
    window.__ev=[];try{new PerformanceObserver(l=>{for(const e of l.getEntries())window.__ev.push([e.name,Math.round(e.startTime),Math.round(e.duration)]);}).observe({type:'event',durationThreshold:16,buffered:true});}catch{}});return ctx;};
- const open=async(ctx,name,url)=>{const p=await ctx.newPage();p.on('pageerror',e=>R.errors.push(name+' '+e.message));p.on('dialog',d=>d.accept());await p.goto(url||URL0);await p.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});await p.waitForTimeout(600);return p;};
+ const open=async(ctx,name,url)=>{const p=await ctx.newPage();p.on('pageerror',e=>R.errors.push(name+' '+e.message));p.on('dialog',d=>d.accept());await p.goto(url||URL0);await p.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});
+  /* 한 번만 도는 설정 이전(v64·v82 원칙 반영: 열고 4~4.5초 뒤·로그인 0.8~1.2초 뒤 타이머로 settings 바꾸고 persist)이 빠른 CI에선 (P)(S) 도중에 끼어들어
+     기기 저장 updatedAt·클라우드 저장본(settings)을 한 번 더 바꿈 → (P) same false · (S) 두 번째 올리기(base·same false). 검사 전에 미리 끝내 둠(이미 했으면 바로 돌아옴). */
+  await p.evaluate(async()=>{try{if(typeof v64Apply==='function')await v64Apply();if(typeof v82Apply==='function')await v82Apply();}catch{}});await p.waitForTimeout(600);return p;};
  const S=globalThis.__S={};
  const login=(P)=>P.evaluate(([P0])=>{cloudConfig={url:P0,key:'sb_publishable_'+'q'.repeat(24)};localStorage.setItem(CLOUD_CONFIG_KEY,JSON.stringify(cloudConfig));try{v14Where='local';localStorage.setItem('tj:v14-keep-login','1');}catch{}
   cloudSession={project:P0,user:{id:'11111111-2222-3333-4444-555555555555',email:'qa@example.com'},access_token:'tokSECRETqa117',refresh_token:'rSECRETqa117',expires_at:Math.floor(Date.now()/1000)+36000};cloudSaveSession(cloudSession);v110Paint();},[PRJ]);
@@ -85,7 +88,10 @@ const init=([A])=>{
   const m2=await idbMain(P);S.P={w1:m1&&m1.h==='P1',same:!!m2&&m2.h==='P2'&&m2.u===co.u&&m2.n===260,all:co.all,co:co.co>=3,wput:co.w>=1&&co.w<=2};
   /* (S) */
   await login(P);await P.waitForFunction(()=>!V110.busy,null,{timeout:30000}).catch(()=>{});
-  const s1=await P.evaluate(async()=>{for(let i=0;i<60&&V110.busy;i++)await new Promise(r=>setTimeout(r,250));state.trades[1].v63x={mfe:1,mae:2};state.trades[0].holdNote='S1';await persist();const c0=V112.n.canon;const r=await v110Sync('manual');return {r,canon:V112.n.canon-c0,run:V117.n.run};});
+  const s1=await P.evaluate(async()=>{for(let i=0;i<60&&V110.busy;i++)await new Promise(r=>setTimeout(r,250));state.trades[1].v63x={mfe:1,mae:2};state.trades[0].holdNote='S1';await persist();const c0=V112.n.canon,p0=V110.n.push;let r=await v110Sync('manual');
+   /* 느린 CPU: persist가 깨운 자동 동기화가 먼저 돌고 있으면 v110Sync는 false(이미 도는 중) → 끝나길 기다려 그 자동 동기화가 올렸으면 'pushed', 아니면 다시 */
+   if(r===false){for(let i=0;i<120&&V110.busy;i++)await new Promise(q=>setTimeout(q,250));r=V110.n.push>p0?'pushed':await v110Sync('manual');}
+   return {r,canon:V112.n.canon-c0,run:V117.n.run};});
   await P.waitForFunction(()=>!V110.busy,null,{timeout:30000}).catch(()=>{});const ct=cloudT('qa117-0'),c1=cloudT('qa117-1');let b1=await idbBase(P);/* 빠른 CI: 기준 사본 기록(Worker·조각)이 늦게 끝날 수 있음 → 최대 15초 기다림 */for(let i=0;i<60&&!(b1&&b1.rev===C.rev);i++){await P.waitForTimeout(250);b1=await idbBase(P);}
   const s2=await P.evaluate(async()=>{/* 빠른 CI: 앞 올리기 뒤 자동 동기화가 돌고 있으면 v110Sync는 false(이미 도는 중) → 끝난 뒤 확인 */let r;for(let k=0;k<3;k++){for(let i=0;i<120&&V110.busy;i++)await new Promise(r=>setTimeout(r,250));r=await v110Sync('manual');if(r!==false)break;}return {r};});
   try{const n=C.sum.length;S.Sdbg={s1:s1.r,s2:s2.r,rev:C.rev,brev:b1?b1.rev:null,bh:b1?b1.h:null,cas:C.cas.slice(-6).map(x=>x.exp),diff:n>=2?v117Diff(C.sum[n-2],C.sum[n-1]):null};}catch(e){S.Sdbg={x:String(e&&e.message||e).slice(0,80)};}
