@@ -166,7 +166,7 @@ module.exports = {
     /* 손익비 상자 → 최초 손절·목표·1R·계획 손익비(HL SL 없이 끝난 숏), 끌면 따라감, 손으로 고친 최초 손절·사용자 목표·HL 최초 손절은 그대로 */
     A.eq('rr.pre.stop0', null); A.eq('rr.pre.r1', null);
     A.eq('rr.open', { stop0: 2315.5, src: 'chart', stop: 2315.5, target: 2298.8, r1: 18.026, plan: 2.34, R: 2.289, planRR: 2.34, rrOk: true }); A.eq('rr.text', { noPlan: false, r1: true });
-    A.eq('rr.drag.stop0', 2316.5); A.eq('rr.drag.stop', 2316.5); A.eq('rr.drag.r1', 21.6312); A.eq('rr.drag.plan', 1.95);
+    A.eq('rr.drag.stop0', 2316.5); A.eq('rr.drag.stop', 2316.5); A.eq('rr.drag.r1', 21.6312); A.eq('rr.drag.plan', 2.34); /* v131: 계획 손익비는 첫 청산 때 고정 — 끝난 거래 상자를 끌어도 유지(예전 v103은 1.95로 따라감). 테스트 상자 id(b1)엔 만든 시각이 없어 청산 전 상자로 봄; 실제 상자 id는 만든 시각이 있어 청산 뒤 그린 상자면 따라감(t131 LATE) */
     A.eq('rr.manual.stop0', 2318); A.eq('rr.manual.src', null);
     A.eq('rr.user.stop0', 2320); A.eq('rr.user.target', 2290); A.eq('rr.user.src', null); A.eq('rr.hl.stop0', 2316); A.eq('rr.hl.src', null); A.eq('rr.hl.target', 2298.8);
     A.eq('rr.reload.es.stop0', 2318); A.eq('rr.reload.es.r1', 27.039); A.eq('rr.reload.eu.target', 2290); A.eq('rr.reload.eh.stop0', 2316); } },
@@ -612,5 +612,26 @@ module.exports = {
     A.eq('off1440.dbgOn', false); A.eq('off1440.Ga.ok', true);
     if (!(o.off1440 && o.off1440.G && o.off1440.G.miss > 100 && o.off1440.G.gapH >= 24)) A.fail('off1440.G 예전엔 사이 구간이 비어야 함(재현) ' + JSON.stringify(o.off1440 && o.off1440.G));
     if (!(o.off1440 && o.off1440.V && o.off1440.V.miss > 0)) A.fail('off1440.V 예전엔 빈 칸 그대로 ' + JSON.stringify(o.off1440 && o.off1440.V));
+  } },
+  /* v131: 계획 손익비 = 차트 손익비 상자(진입·SL·TP), 첫 청산 때 고정 유지·'고정됨', 예전 고정값 한 번 상자 값으로, 손으로 고정·상자 없는 거래 그대로, 청산 뒤 그린 상자는 따라감, 1R 그대로, ?v131=0 예전 */
+  t131: { check(A, o) {
+    for (const k of ['w1440', 'w390']) {
+      const a = o[k] || {}, P = (p, v) => A.eq(k + '.' + p, v);
+      P('dbgOn', true);
+      for (const s of ['A', 'B', 'C']) {
+        P(s + '.OPEN.pr', 1.5); P(s + '.OPEN.p0', null); P(s + '.OPEN.chk.bad', true); P(s + '.OPEN.chk.ok', false);
+        P(s + '.LOCK.pr', 2.2); P(s + '.LOCK.p0', { rr: 2.2, src: 'box', v131: true, late: false, manual: false, prev: null });
+        P(s + '.MIG.pr', 2.2); P(s + '.MIG.p0', { rr: 2.2, src: 'box', v131: true, late: false, manual: false, prev: 8.37 });
+        P(s + '.MAN.pr', 3); P(s + '.MAN.p0.manual', true); P(s + '.NOBOX.pr', 6);
+        P(s + '.LATE.pr', s === 'A' ? 2 : 3); P(s + '.LATE.p0.late', true);
+        for (const id of ['OPEN', 'LOCK', 'MIG', 'MAN', 'LATE', 'NOBOX']) { P(s + '.' + id + '.stop0', 99); P(s + '.' + id + '.ir', 1); }
+      }
+      A.has(k + '.cardOpen', '1 : 1.5'); A.has(k + '.cardOpen', '차트 손익비 상자 기준'); A.has(k + '.cardMig', '상자 진입 100 · 손절 95 · 목표 111'); A.has(k + '.cardMig', '지금 값으로 다시 고정');
+      P('lock.before', 2.2); P('lock.after', 2.2); P('lock.boxTp', 107); P('lock.pr', 2.2); A.has(k + '.lock.label', '고정됨 1:2.2');
+      P('late.before', 2); P('late.after', 3); P('late.label', false);
+      P('again.same', true); P('again.noMore', true); P('docScroll', false);
+    }
+    /* ?v131=0 예전 식 */
+    A.eq('off1440.dbgOn', false); A.eq('off1440.A.OPEN.pr', 7.5); A.eq('off1440.A.OPEN.chk.ok', true); A.eq('off1440.A.MIG.pr', 8.37); A.eq('off1440.A.LOCK.pr', 11); A.eq('off1440.lock.label', null);
   } },
 };
