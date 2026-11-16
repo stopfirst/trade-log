@@ -24,6 +24,14 @@ test('23:05 → TRIGGER', () => {
   const r = rawStage(Q({ vix: 26.2, vixPrev: 21, v3m: 24.3, vvix: 124, vvixPrev: 90.4, spxPct: -2.3 }));
   assert.equal(r.stage, 'TRIGGER'); assert.equal(r.core, 'BACKWARDATION');
 });
+test('11-16 10:30 ET 원본: NEAR_BW + SPX → FRACTURE · VIX/3M 0.974 🔴', () => {
+  const d = Q({ vix: 21.37, vixPrev: 19.3, v3m: 21.95, vvix: 106, vvixPrev: 102, spxPct: -1.14 });
+  const r = rawStage(d); assert.equal(r.structure, 'NEAR_BACKWARDATION'); assert.equal(r.stage, 'FRACTURE'); assert.equal(r.core, 'NEAR_BW + SPX');
+  assert.equal(lights(d).ratio, '🔴');
+});
+test('NEAR_BW만(VVIX·SPX 약함) = TENSION', () => {
+  assert.equal(rawStage(Q({ vix: 21, v3m: 21.8, vvix: 105, spxPct: -0.5 })).stage, 'TENSION');
+});
 test('SPX -2% 없으면 TRIGGER 아님', () => {
   assert.equal(rawStage(Q({ vix: 30, vixPrev: 21, v3m: 26, vvix: 130, spxPct: -1.2 })).stage, 'FRACTURE');
 });

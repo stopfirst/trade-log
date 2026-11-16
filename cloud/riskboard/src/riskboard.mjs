@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULTS, STAGES, STAGE_EMOJI, STAGE_KO, derive, rawStage, step, trend, render, esc } from './core.mjs';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const E = process.env;
 const ARGS = new Set(process.argv.slice(2));
 const T = { ...DEFAULTS };

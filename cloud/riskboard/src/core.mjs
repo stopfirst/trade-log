@@ -45,7 +45,7 @@ export function lights(d) {
   return {
     c3m: L(d.c3m, x => x < 1, x => x < 2),
     c63: L(d.c63, x => x < 0, x => x < 0.5),
-    ratio: L(d.ratio, x => x >= 1, x => x >= 0.9),
+    ratio: L(d.ratio, x => x >= 0.97, x => x >= 0.9), // 1.1.0: 원본 0.974 🔴 · 0.962 🟡
     s9d: L(d.s9d, x => x > 1, x => x > 0),
   };
 }
@@ -56,7 +56,8 @@ export function rawStage(d, T = DEFAULTS) {
   const bw = st === 'BACKWARDATION';
   const fVvix = d.vvix >= T.FRACTURE_VVIX || d.vvixPct >= T.FRACTURE_VVIXPCT;
   const fSpx = d.spxPct <= T.FRACTURE_SPX;
-  const fracture = bw && (fVvix || fSpx);
+  // 1.1.0: 원본 봇(2026-11-16 10:30 ET) = NEAR_BW + SPX에서도 FRACTURE → 백워데이션 '근접'부터 균열로 봄
+  const fracture = st !== 'CONTANGO' && (fVvix || fSpx);
   const trigger = fracture
     && (d.vix >= T.TRIGGER_VIX || d.vixPct >= T.TRIGGER_VIXPCT)
     && d.spxPct <= T.TRIGGER_SPX
