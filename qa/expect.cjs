@@ -190,9 +190,10 @@ module.exports = {
     A.eq('dbg.HL정의총액', 50950); A.eq('dbg.앱표시총액', 50950); A.eq('dbg.차이', 0); A.eq('dbg.스테이킹_참고', 800);
     A.eq('stale.err', 'HL 500'); A.has('stale.tile', '⚠ 거래계좌 10분 전 값'); A.eq('recovered.err', null); if (/⚠ 거래계좌/.test((o.recovered || {}).tile || '')) A.fail('recovered.tile still warns'); } },
   /* v108 일지 빈 칸: 1440·390 같은 판정, 카드에 '이 기기 일지 기준 · 앱 버전'(모바일에서도 보임), 클라우드 새 저장본 안내(revision만 조회), 설정 열기 */
-  t108: { check(A) { for (const w of W) { A.eq(w + '.list', ['gB']); A.eq(w + '.src.vis', true); A.eq(w + '.src.hasVer', true); A.has(w + '.src.txt', '이 기기에 저장된 HL 일지 기준'); A.eq(w + '.cloud0', false);
+  /* v132: 일지 빈 칸 새 기준(진입 코멘트·청산 코멘트) → gA도 '청산 코멘트 없음'(청산 쪽 옛 칸 없음)으로 목록에 들어옴. 예전 기준(['gB'])은 ?v132=0 */
+  t108: { check(A) { for (const w of W) { A.eq(w + '.list', ['gA', 'gB']); A.eq(w + '.src.vis', true); A.eq(w + '.src.hasVer', true); A.has(w + '.src.txt', '이 기기에 저장된 HL 일지 기준'); A.eq(w + '.cloud0', false);
     A.eq(w + '.cl.shown', true); A.has(w + '.cl.txt', '버전 7'); A.eq(w + '.cl.urls', ['select=revision,updated_at']); A.eq(w + '.cl.afterSame', false); A.eq(w + '.cl.again', true);
-    A.eq(w + '.page', 'settings'); A.eq(w + '.dbg', { journal: 'HL', local: 5, cloud: 7, gaps: ['gB'], hidden: ['gC'] }); } } },
+    A.eq(w + '.page', 'settings'); A.eq(w + '.dbg', { journal: 'HL', local: 5, cloud: 7, gaps: ['gA', 'gB'], hidden: ['gC'] }); } } },
   /* v110 PC·모바일 자동 동기화(모의 클라우드 · 두 컨텍스트 1440/390): 첫 병합 · 다른 칸 둘 다 · 같은 칸 최신 + 진 값 사본 '충돌 1건' → 진 값으로 바꾸기 양쪽 반영 · 그림 양쪽(V100 경로) ·
      입력 중 칸·포커스 유지(진 값 사본) · kPEPE 체결 지연·순서 뒤바뀜(POSITION_GAP 보류)에도 롱 메모·그림 유지 → 숏 '뒤집힘' 링크 · 예전 사본 1회 되살림 · v83 두 창 칸 병합 · 로컬 기록 되살리기 · 디바운스 자동 저장 · 포커스 자동 받기 */
   t110: { check(A) { A.eq('s0.mobTrades', ['gA', 'gB', 'gC']); A.eq('s0.cas0', [0, 1]);
@@ -633,5 +634,28 @@ module.exports = {
     }
     /* ?v131=0 예전 식 */
     A.eq('off1440.dbgOn', false); A.eq('off1440.A.OPEN.pr', 7.5); A.eq('off1440.A.OPEN.chk.ok', true); A.eq('off1440.A.MIG.pr', 8.37); A.eq('off1440.A.LOCK.pr', 11); A.eq('off1440.lock.label', null);
+  } },
+  /* v132: 거래 상세 매매일지 간략화(마틴 루크) — 진입·청산 코멘트 + 피할 수 있던 실수, 나머지 일지 칸 화면에서만 숨김(값 유지), 옛 글칸 미리 채움·안 고치면 저장 안 함, 일지 빈 칸 새 기준, 통계 한 줄, ?v132=0 예전 */
+  t132: { check(A, o) {
+    for (const k of ['w1440', 'w390']) {
+      const P = (p, v) => A.eq(k + '.' + p, v);
+      P('dbgOn', true); P('H.card', true); P('H.eOld', true); P('H.xOld', true); P('H.avBtns', 2);
+      A.has(k + '.H.eVal', '진입 근거: 인사이드데이 돌파'); A.has(k + '.H.eVal', '스탑 이유: 전일 저가 아래'); A.has(k + '.H.xVal', '청산 이유:\n목표 도달\n둘째 줄'); A.has(k + '.H.xVal', '사후 메모: 반복');
+      for (const h of ['v92', 'oldArea', 'stopArea', 'emo', 'grade', 'setup', 'review', 'fold']) P('H.' + h, false);
+      for (const s of ['rr', 'score', 'process', 'viol']) P('H.' + s, true);
+      P('noEdit.has', false); P('noEdit.hasX', false); P('noEdit.skip', true);
+      P('edit.ec', '진입 근거: 인사이드데이 돌파\n\n스탑 이유: 전일 저가 아래 추격 아님'); P('edit.en', '인사이드데이 돌파'); P('edit.sn', '전일 저가 아래'); P('edit.xc', false); P('edit.oldHidden', true);
+      P('newPre', { e: '', old: false });
+      P('av1', { v: true, on: ['1'] }); P('av2', { v: null, on: [] }); P('av3', { v: false, on: ['0'] }); P('av4', { v: true, on: ['1'] });
+      P('newSaved', { xc: '두 번째 갭업 연장에서 매도\n잘함', av: true }); P('h390.inside', true);
+      P('S.gaps', [{ id: 'NEW', miss: ['진입 코멘트 없음'] }, { id: 'OPEN', miss: ['진입 코멘트 없음'] }]);
+      P('S.stats', true); P('S.statsDone', true); P('S.week', true); P('S.weekSetupSig', false);
+      P('S.kept', { setup: 'EP', conf: 4, tfIn: '1h', react: true, grade: 'A', emo: '차분', review: '반복', postEval: '좋음', exitNote: '목표 도달\n둘째 줄' });
+      P('S.reviewed', true); P('S.user', true); P('S.shape', true); P('docScroll', false);
+      P('C', { oldEc: '진입 근거: 인사이드데이 돌파\n\n스탑 이유: 전일 저가 아래 추격 아님', oldEn: '인사이드데이 돌파', newXc: '두 번째 갭업 연장에서 매도\n잘함', newAv: true, savedAv: true });
+    }
+    /* ?v132=0 예전 화면 · 새 칸 값 유지 · 예전 빈 칸 기준 */
+    A.eq('off1440.dbgOn', false); A.eq('off1440.H', { card: false, v92: true, oldArea: true, review: true, setup: true });
+    A.eq('off1440.S', { ec: '추격 매수', xc: '손절 늦음', av: true, gapNew: false, gapOld: true });
   } },
 };

@@ -31,7 +31,7 @@ const chk=()=>{const W=document.documentElement.clientWidth,bad=[];const dlg=doc
  for(const W of [1440,390]){
  const ctx=await browser.newContext({viewport:{width:W,height:900},bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul'});await ctx.addInitScript(init);const page=await ctx.newPage();
  page.on('pageerror',e=>report.errors.push(e.message));
- await page.goto(URL0+'?journal=hyperliquid');await page.waitForTimeout(2200);await page.evaluate(seed);await page.waitForTimeout(200);
+ await page.goto(URL0+'?v132=0&journal=hyperliquid');await page.waitForTimeout(2200);await page.evaluate(seed);await page.waitForTimeout(200);
  await page.evaluate(()=>setPage('weekly'));await page.waitForTimeout(1500);
  report.scenes.push({W,week:await page.evaluate(()=>({has:!!$('v63Week'),page:$('v63Week')?.closest('[id^=page-]')?.id,txt:$('v63WeekBody').innerText.slice(0,900),exc:state.trades.map(t=>t.id+':'+JSON.stringify(t.v63x&&{m:t.v63x.mfeR,a:t.v63x.maeR,iv:t.v63x.iv,err:t.v63x.err}))}))});
  await page.screenshot({path:outDir+'/'+tag+'-week-'+W+'.png',fullPage:false,clip:undefined});

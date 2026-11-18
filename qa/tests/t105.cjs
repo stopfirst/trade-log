@@ -61,7 +61,7 @@ const H=(page)=>page.evaluate(()=>{const o={};for(const k of ['tp','sl','en']){c
 const dist=(a,b)=>{let m=0;for(const k of ['tp','sl','en']){if(!a[k]||!b[k])return 999;m=Math.max(m,Math.abs(a[k][0]-b[k][0]),Math.abs(a[k][1]-b[k][1]));}return +m.toFixed(1);};
 const op=(page,sel)=>page.evaluate(sel=>{const e=document.querySelector(sel);return e?getComputedStyle(e).opacity:null;},sel);
 (async()=>{
- const browser=await chromium.launch({args:['--no-sandbox']});const R={tag,errors:[]};const URL0='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid';
+ const browser=await chromium.launch({args:['--no-sandbox']});const R={tag,errors:[]};const URL0='http://127.0.0.1:'+srv.address().port+'/?v132=0&journal=hyperliquid';  /* v132: 숨긴 진입 근거 칸 타이핑·예전 일지 빈 칸 기준(v106) 검사 → 예전 화면 */
  const boot=async(ctxOpt)=>{const ctx=await browser.newContext({viewport:{width:1440,height:900},bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul',...(ctxOpt||{})});await ctx.addInitScript(init,['0x'+'1'.repeat(40),'x']);
   const page=await ctx.newPage();page.on('pageerror',e=>R.errors.push(e.message));await page.goto(URL0);await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});
   await page.evaluate(seed);await page.waitForTimeout(800);
