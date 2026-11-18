@@ -26,7 +26,7 @@ const TEXTS=['entryNote','stopNote','holdNote','exitNote','postEval'];
 const ACTS=(process.env.T101_ACTS||'close,esc,switch').split(',');
 const getV=(t,k)=>k==='pre'?[...((t.emo||{}).pre||[])]:k==='react'?!!t.react:k==='conf'?(t.conf??null):(t[k]??'');
 (async()=>{
- const browser=await chromium.launch({args:['--no-sandbox']});const out={errors:[],res:{},bad:[]};const URL0='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid';
+ const browser=await chromium.launch({args:['--no-sandbox']});const out={errors:[],res:{},bad:[]};const URL0='http://127.0.0.1:'+srv.address().port+'/?v132=0&journal=hyperliquid';  /* v132: 숨긴 옛 일지 칸 저장 경로 검사 → 예전 화면 */
  const ctx=await browser.newContext({viewport:{width:1440,height:900},bypassCSP:true,timezoneId:'Asia/Seoul',locale:'ko-KR'});await ctx.addInitScript(init);
  const P=await ctx.newPage();P.on('pageerror',e=>out.errors.push(e.message));
  const ready=async pg=>{await pg.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});await pg.waitForTimeout(700);};

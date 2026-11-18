@@ -31,7 +31,7 @@ const chk=()=>{const W=document.documentElement.clientWidth,bad=[];const dlg=doc
  for(const W of [1440,390]){
  const ctx=await browser.newContext({viewport:{width:W,height:900},bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul'});await ctx.addInitScript(init);const page=await ctx.newPage();
  page.on('pageerror',e=>rep.errors.push(e.message));
- await page.goto(URL0+'?journal=hyperliquid');await page.waitForTimeout(2200);await page.evaluate(seed);await page.waitForTimeout(200);
+ await page.goto(URL0+'?v132=0&journal=hyperliquid');await page.waitForTimeout(2200);await page.evaluate(seed);await page.waitForTimeout(200);
  const r={W};await page.evaluate(()=>openTrade('loss','review'));await page.waitForTimeout(900);
  r.card=await page.evaluate(()=>!!$('v71Card'));r.rr=await page.evaluate(()=>[...document.querySelectorAll('.v71-rr b')].map(e=>e.textContent));
  await page.evaluate(()=>document.querySelector('[data-v71="pre"][data-v71-val="조급"]').click());await page.waitForTimeout(400);

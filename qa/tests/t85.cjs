@@ -30,7 +30,7 @@ const chk=()=>{const W=document.documentElement.clientWidth,bad=[];const dlg=doc
  const out={errors:[]};const URL0='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid';
  for(const W of [1440,390]){
  const ctx=await browser.newContext({viewport:{width:W,height:900},bypassCSP:true,timezoneId:'Asia/Seoul'});await ctx.addInitScript(init);
- const A=await ctx.newPage();A.on('pageerror',e=>out.errors.push(e.message));await A.goto(URL0);await A.waitForTimeout(2500);
+ const A=await ctx.newPage();A.on('pageerror',e=>out.errors.push(e.message));await A.goto(URL0+'&v132=0');await A.waitForTimeout(2500);
  await A.evaluate(seed);await A.evaluate(()=>{state.trades[0].emo={pre:['FOMO','지루함'],mid:[],post:['옛값']};return persist();});
  await A.evaluate(()=>openTrade('loss','review'));await A.waitForTimeout(1200);
  const r={W};
