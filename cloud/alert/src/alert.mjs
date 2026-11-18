@@ -1,4 +1,6 @@
-// trade-alert 2.18.0: 텔레그램 /risk → 같은 서버 riskboard 보드 답장(src/riskcmd.mjs).
+// trade-alert 2.19.0 (alert22): 매일 복기 알림 '일지 빈 칸'을 앱 v132-lukjournal과 같게 — 진입 코멘트 없음 · (끝난 거래) 청산 코멘트 없음(옛 칸에 글이 있으면 채움).
+//   손익비·가격 반응·타임프레임은 빈 칸 아님(remind.mjs gapsV132). 데이터 = alert22.sql(review_gaps v13), 없으면 예전 기준 + WARN 1회. .env JOURNAL_V132=0 = 예전 기준(2.18.0).
+// (이전) 2.18.0: 텔레그램 /risk → 같은 서버 riskboard 보드 답장(src/riskcmd.mjs).
 // trade-alert 2.17.0 (alert21): 앱 v126 '새 출발' — 앱 settings.v126(기준 시각·세대·기준 계좌 가치)을 fresh_status(alert21.sql)로 5분마다 읽어 그 시각 이전 체결·펀딩을 판정에서 뺌
 //   (손실 한도 하루·주·월·연속 손실·복수매매·방향 전환·즉시 복기·탄창 점검 — 이월 포지션은 새 출발 뒤 청산분부터). 새 출발이 든 하루·주·월 분모 = 앱 기준 계좌 가치(fresh.mjs).
 //   alert21.sql 없으면 예전(2.16.0)처럼 전체 체결로 판정 + WARN 1회. .env FRESH_START=0이면 끔. 매일 복기 알림은 앱 일지(활성 거래)를 읽으므로 원래 새 출발 뒤만.
@@ -60,7 +62,7 @@ import * as rk from './riskcmd.mjs';
 const require=createRequire(import.meta.url);
 const {fetchAccountBalance}=require('./hl-balance.cjs');
 
-export const VERSION='2.18.0';
+export const VERSION='2.19.0';
 export const RULES='손실한도 판정 v1.6';
 const MIN=60000;
 const MK={US:'us',HL:'hl'};
@@ -109,7 +111,7 @@ export function readConfig(env,{needSupabase=true,needTelegram=true}={}){
    checkSec:numIn(env,'RISK_CHECK_SEC',60,60,300,{int:true}),idleSec:numIn(env,'RISK_IDLE_SEC',300,60,1800,{int:true}),pushMin:numIn(env,'RISK_PUSH_MIN',5,1,30,{int:true}),
    usFlowMin:numIn(env,'US_FLOW_MIN_USD',50,1,1e7),usStaleMin:numIn(env,'US_STALE_MIN',20,5,240,{int:true}),anchorMaxGapMin:numIn(env,'ANCHOR_MAX_GAP_MIN',20,2,120,{int:true}),
    usExtraHolidays:extra,dayBasis,riskStartDate:rsd||null,hlAddress:hlAddr?hlAddr.toLowerCase():null,
-   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),scalp:scm.scalpConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),zones:zoneCfg,revenge:revCfg,flip:flipCfg,mag:magCfg,fresh:fr.freshConfig(env),riskCmd:rk.readRiskCmdConfig(env),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
+   dailySummary:bool(env,'DAILY_SUMMARY',true),quickReview:qr.qrConfig(env).enabled,remind:rm.remindConfig(env),journal:rm.journalConfig(env),scalp:scm.scalpConfig(env),spotInBasis:bool(env,'SPOT_IN_BASIS',true),telegramHtml:bool(env,'TELEGRAM_HTML',true),zones:zoneCfg,revenge:revCfg,flip:flipCfg,mag:magCfg,fresh:fr.freshConfig(env),riskCmd:rk.readRiskCmdConfig(env),summaryTime:sm?[Number(sm[1]),Number(sm[2])]:[16,15],
    stateDir:String(env.STATE_DIRECTORY||env.ALERT_STATE_DIR||'/var/lib/trade-alert').split(':')[0]};
  }catch(e){if(e.fields)problems.push(...e.fields);else throw e;}
  if(problems.length){const e=Error('CONFIG_INCOMPLETE');e.fields=problems;throw e;}
@@ -215,7 +217,7 @@ export class Alerter{
   // 2.6.0 즉시 복기(dry-run·--test에선 없음). 상태는 state2.json의 qr에, 저장은 persist()로 직렬화(버튼 루프와 확인 루프가 같은 파일을 씀)
   this.qr=this.cfg.quickReview&&!dryRun?new qr.QuickReview({tg:this.tg,rpc:this.rpc,token:this.cfg.token,chat:this.cfg.chat,log:this.log,now:this.now,state:()=>this.state,save:()=>this.persist(),...(sleep?{sleep}:{})}):null;this.qrSeen=null;
   // 2.8.0 매일 복기 알림(dry-run에선 메시지 출력만)
-  this.reminder=new rm.Reminder({rpc:this.rpc,token:this.cfg.token,cfg:this.cfg.remind,scalp:this.cfg.scalp,state:()=>this.state,log:this.log});
+  this.reminder=new rm.Reminder({rpc:this.rpc,token:this.cfg.token,cfg:this.cfg.remind,scalp:this.cfg.scalp,journal:this.cfg.journal,state:()=>this.state,log:this.log});
   // 2.10.0 존 터치 알림(별도 1분 루프 · 상태는 state2.json의 zones · 판정과 무관)
   this.zones=new zw.ZoneWatch({cfg:this.cfg.zones,fetcher,now:this.now,log:this.log,state:()=>this.state,save:()=>this.persist(),send:t=>this.tg.send(t),dryRun});
   // 2.11.0 복수매매 차단 알림(dry-run·--test에선 없음). 상태는 state2.json의 rv
@@ -526,6 +528,7 @@ export class Alerter{
   this.log('INFO',`trade-alert ${VERSION} 시작 · ${RULES} · 하루 한도 ${c.dayBasis==='realized'?'실현손익÷전일 마감(HL UTC 00:00) · 주·월(÷ 기간 시작 직전 마감)·연속 실현손익(alert5.sql 있으면)':'자산 변화(v1.2)'} · US ${fmtL(c.limits.US)} · HL ${fmtL(c.limits.HL)} · 연속 손실 ${c.streakDays}일(≤−${c.streakLossPct}%)→${c.streakStopDays}거래일 · 재시작 위험 ×${c.restartFactor} · ${c.checkSec}초마다`+(c.riskStartDate?` · 한도 기준일 ${c.riskStartDate}(HL UTC 00:00 · US 그 날짜 거래일)부터`:'')+` · 텔레그램 즉시 복기 ${c.quickReview?'켜짐(HL 청산, alert9.sql 필요)':'꺼짐(QUICK_REVIEW=0)'}`+` · 매일 복기 알림 ${c.remind.enabled?c.remind.atText+' KST(alert11.sql 필요)':'꺼짐(REVIEW_REMIND=0)'}`);
   const rc=c.revenge;
   this.log('INFO',`복수매매 차단 알림 ${rc.enabled?'켜짐':'꺼짐(REVENGE_ALERT=0)'}`+(rc.enabled?` · 쿨다운 ${rc.cooldownMin||'끔'}분 · 오늘은 여기까지 ${rc.streakMax?rv.streakWord(rc.streakMode)+' '+rc.streakMax+'회'+(rc.streakMode==='count'?'(횟수, DAILY_LOSS_STREAK_MODE=count)':'(이익 청산이면 리셋)'):'끔'} · US 갈아타기 ${rc.usSwitch?'켬':'끔'} · 위험 증가 ${rc.riskUp?'켬':'끔'} · 기록 alert15.sql`:''));
+  this.log('INFO',`매일 복기 알림 일지 빈 칸 기준 ${c.journal.v132?'앱 v132(진입 코멘트 · 끝난 거래 청산 코멘트, 옛 칸 글 있으면 채움) · alert22.sql 필요(없으면 예전 기준)':'예전(진입 근거·스탑 이유·손익비·가격 반응·TF — JOURNAL_V132=0)'}`);
   {const sp=c.scalp;this.log(sp.bad?'WARN':'INFO',`매일 복기 알림 단타 제외 ${c.remind.enabled?(sp.enabled?`켜짐 · 앱 설정 단타 기준(없으면 ${sp.min}분) 미만 끝난 거래는 규칙 위반·−1R 넘긴 손실 아니면 뺌 · alert18.sql 필요`:'꺼짐(SCALP_MIN=0)'):'(복기 알림 꺼짐)'}${sp.bad?` · SCALP_MIN='${sp.raw}' 형식 오류 → 30분`:''}`);}
   {const g=c.mag,A=g.alerts;this.log('INFO',`탄창(하위계정) ${g.enabled?`켜짐 · 목록 앱 설정(alert20.sql)${g.envSubs.length?` → 없으면 .env HL_SUBS ${g.envSubs.length}개`:' (HL_SUBS 없음)'} · 분모·실현손익 = 주계정 + 탄창 · 주↔탄창 이체 = 내부 이동 · 알림 소진 ${A.empty?'켬':'끔'} · 장중 재충전 ${A.refill?'켬':'끔'} · 금고에서 거래 ${A.vault?'켬':'끔'} · 09:${String(g.openMin).padStart(2,'0')} 점검 ${A.open?`켬(±${g.openTolPct}%)`:'끔'}`:'꺼짐(MAG=0 — 2.15.0처럼 주계정만)'}`);}
   this.log('INFO',`방향 전환 감지 ${c.flip.enabled?`켜짐 · 한 주문 반전 + 청산 뒤 ${c.flip.windowMin?c.flip.windowMin+'분 안 반대 진입':'반대 진입 규칙 끔'} · 기록 alert17.sql`:'꺼짐(FLIP_ALERT=0)'}`);
@@ -625,18 +628,19 @@ export async function flipDry(argv,env,log,{fetcher=fetch,out=l=>console.log(l),
  return 0;
 }
 const DAY_MS=86400000;
-/** 2.14.0 --remind-dry [--day YYYY-MM-DD]: 그날(기본 어제 KST) 매일 복기 알림 미리 보기 + 뺀 단타 목록. 보내지 않음 · 저장 안 함(서버 .env 그대로 사용). */
+/** 2.14.0 --remind-dry [--day YYYY-MM-DD] (2.19.0: 일지 빈 칸 기준 표시): 그날(기본 어제 KST) 매일 복기 알림 미리 보기 + 뺀 단타 목록. 보내지 않음 · 저장 안 함(서버 .env 그대로 사용). */
 export async function remindDry(argv,env,log,{rpc}={}){
  let cfg;try{cfg=readConfig(env,{needTelegram:false});}catch(e){explainConfig(e,log);return 2;}
  const di=argv.indexOf('--day'),day=di>=0?String(argv[di+1]||''):rm.prevDate(rm.kstParts(Date.now()).date);if(!/^\d{4}-\d{2}-\d{2}$/.test(day)){log('ERROR','--day는 YYYY-MM-DD');return 2;}
  let d;try{d=await (rpc||new SupabaseRpc(cfg)).call('review_gaps',{p_token:cfg.token,p_since:day});}catch(e){log('ERROR',/SQL_NOT_INSTALLED/.test(String(e.message))?'alert11.sql(review_gaps)이 없습니다 → Supabase SQL Editor에서 alert11.sql, alert18.sql 실행':'review_gaps 실패: '+String(e.message||e).slice(0,120));return 1;}
- let nh=0;const sk=[],mins=new Set();const rows=rm.pick(d.journal,day,{onHidden:()=>nh++,scalp:cfg.scalp,onScalp:(t,i,m)=>{sk.push({t,i});mins.add(m);}});
+ let nh=0;const sk=[],mins=new Set(),v132=rm.useV132(cfg.journal,d.journal);const rows=rm.pick(d.journal,day,{onHidden:()=>nh++,scalp:cfg.scalp,onScalp:(t,i,m)=>{sk.push({t,i});mins.add(m);},v132});
+ const jt=!cfg.journal.v132?'일지 빈 칸 예전 기준(JOURNAL_V132=0)':v132?'일지 빈 칸 앱 v132 기준 · alert22.sql 확인됨':'alert22.sql 없음 → 일지 빈 칸 예전 기준';
  const st=!cfg.scalp.enabled?'단타 제외 꺼짐(SCALP_MIN=0)':scm.hasScalpData(d.journal)?`단타 제외 켜짐 · alert18.sql 확인됨 · 기준 ${[...mins].join('/')||'앱 설정(없으면 '+cfg.scalp.min+')'}분`:'alert18.sql 없음 → 단타 제외 안 됨(예전처럼 알림)';
- console.log(`매일 복기 알림 미리 보기 · ${day} · ${st}${nh?` · 숨긴 거래 ${nh}건 제외`:''}`);
+ console.log(`매일 복기 알림 미리 보기 · ${day} · ${st} · ${jt}${nh?` · 숨긴 거래 ${nh}건 제외`:''}`);
  for(const {t,i} of sk)console.log(`  뺀 단타: ${t.market||''} ${String(t.name||'?')} ${t.direction==='short'?'숏':'롱'} · 보유 ${scm.holdText(i.hold)} · R ${i.R===null?'모름(1R 없음)':i.R}`);
  for(const r of rows.filter(r=>r.scalp))console.log(`  남은 단타(예외): ${r.market} ${r.name} · ${scm.holdText(r.scalp.hold)} · ${r.scalp.exc.join(', ')}`);
  if(!rm.shouldSend(rows,sk.length)){console.log('\n→ 이 날은 알림을 보내지 않습니다('+(rows.length?'남은 게 빈 칸 없는 예외 단타뿐':'대상 거래 없음')+').');return 0;}
- console.log('\n'+rm.text(rows,day,{scalpSkip:sk.length,scalpMin:mins.size===1?[...mins][0]:null})+'\n\n(보내지 않았습니다)');return 0;}
+ console.log('\n'+rm.text(rows,day,{scalpSkip:sk.length,scalpMin:mins.size===1?[...mins][0]:null,v132})+'\n\n(보내지 않았습니다)');return 0;}
 
 /** 2.16.0 --mag-dry (= --dry): 오늘 탄창 상태 + 지금 조건이면 보낼 탄창 알림. 보내지 않음 · 저장 안 함(판정 1회 dry-run과 같은 데이터) */
 export async function magDry(argv,env,log,{fetcher=fetch,now=Date.now,out=l=>console.log(l)}={}){
@@ -681,7 +685,8 @@ export async function main(argv=process.argv.slice(2),env=process.env){
    else console.log('텔레그램 즉시 복기: 꺼짐 (QUICK_REVIEW=0)');
    if(cfg.remind.enabled){let q;try{const dy=rm.prevDate(rm.kstParts(Date.now()).date),d=await new SupabaseRpc(cfg).call('review_gaps',{p_token:cfg.token,p_since:dy});let ns=0;const rows=rm.pick(d.journal,dy,{scalp:cfg.scalp,onScalp:()=>ns++});
     const sq=!cfg.scalp.enabled?' · 단타 제외 꺼짐(SCALP_MIN=0)':scm.hasScalpData(d.journal)?` · alert18.sql 확인됨 · 단타 제외 켜짐(앱 기준, 없으면 ${cfg.scalp.min}분)${ns?` · 어제 단타 ${ns}건 제외`:''}`:' · alert18.sql 없음(단타 제외 안 됨 — 예전처럼 알림)';
-    q=`켜짐 · 매일 ${cfg.remind.atText} KST · alert11.sql 확인됨 · 어제 대상 거래 ${rows.length}건${sq}`;}catch(e){q=/SQL_NOT_INSTALLED/.test(String(e.message))?`켜짐 · 매일 ${cfg.remind.atText} KST · alert11.sql 없음(실행해야 알림이 감)`:'켜짐 · 확인 실패 '+String(e.message||e).slice(0,60);}console.log('매일 복기 알림: '+q);}
+    const jq=!cfg.journal.v132?' · 일지 빈 칸 예전 기준(JOURNAL_V132=0)':rm.hasV132Data(d.journal)?' · alert22.sql 확인됨(앱 v132 기준)':' · alert22.sql 없음(일지 빈 칸 예전 기준)';
+    q=`켜짐 · 매일 ${cfg.remind.atText} KST · alert11.sql 확인됨 · 어제 대상 거래 ${rows.length}건${sq}${jq}`;}catch(e){q=/SQL_NOT_INSTALLED/.test(String(e.message))?`켜짐 · 매일 ${cfg.remind.atText} KST · alert11.sql 없음(실행해야 알림이 감)`:'켜짐 · 확인 실패 '+String(e.message||e).slice(0,60);}console.log('매일 복기 알림: '+q);}
    else console.log('매일 복기 알림: 꺼짐 (REVIEW_REMIND=0)');
    {const z=cfg.zones;let on=z.envOn;try{const st=await loadState(cfg.stateDir);const o=st.zones?.override;if(o&&o.envOn===z.envOn)on=!!o.on;}catch{}
     console.log(`존 터치 알림: ${on?'켜짐':'꺼짐'} · ${z.symbols.join(',')} ${z.tf.toUpperCase()} · ${z.kinds.join(',')} (지금 목록: --zones-dry)`);}

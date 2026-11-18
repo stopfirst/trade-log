@@ -5,7 +5,7 @@ import {Alerter,readConfig,VERSION} from '../src/alert.mjs';
 const env={SUPABASE_URL:'https://abcdefgh.supabase.co',SUPABASE_KEY:'sb_publishable_'+'k'.repeat(24),KW_COLLECTOR_TOKEN:'kwc_'+'A'.repeat(43),TELEGRAM_BOT_TOKEN:'123456789:AAH'+'x'.repeat(32),TELEGRAM_CHAT_ID:'987654321',ALERT_STATE_DIR:'/tmp/ta-rk'};
 const fakeTg=()=>{const calls=[];return {chat:'987654321',calls,api:async(m,b)=>{calls.push({m,b});return true;},send:async t=>{calls.push({m:'send',b:{text:t}});return true;}};};
 test('버전·설정',()=>{
- assert.equal(VERSION,'2.18.0');
+ assert.equal(VERSION,'2.19.0');
  assert.equal(readConfig(env).riskCmd.enabled,true);
  assert.equal(readConfig({...env,RISK_BOARD_CMD:'0'}).riskCmd.enabled,false);
  assert.equal(readConfig(env).riskCmd.script,'/opt/riskboard/src/riskboard.mjs');
