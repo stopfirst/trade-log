@@ -42,7 +42,7 @@ async function mclick(P,sel){await P.locator(sel).first().scrollIntoViewIfNeeded
  const browser=await chromium.launch({args:['--no-sandbox']});const out={errors:[]};const URL0='http://127.0.0.1:'+srv.address().port+'/';
  for(const W of [1440,390]){const r={};out['w'+W]=r;
   const ctx=await browser.newContext({viewport:{width:W,height:900},bypassCSP:true,timezoneId:'Asia/Seoul',locale:'ko-KR'});await ctx.addInitScript(init);
-  const P=await ctx.newPage();P.on('pageerror',e=>out.errors.push(W+' '+e.message));await P.goto(URL0+'?v132=0&journal=hyperliquid');await P.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});await P.waitForTimeout(1200);
+  const P=await ctx.newPage();P.on('pageerror',e=>out.errors.push(W+' '+e.message));await P.goto(URL0+'?v132=0&v134=0&journal=hyperliquid');await P.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});await P.waitForTimeout(1200);
   r.n=await P.evaluate(seedHL,320);await P.waitForTimeout(1500);
   const tid=await P.evaluate(()=>{const c=state.trades.filter(t=>calcTrade(t).done).sort((a,b)=>b.at-a.at)[0];return c.id;});r.tid=tid;
   await P.evaluate(id=>openTrade(id,'review'),tid);await P.waitForTimeout(2500);
@@ -91,7 +91,7 @@ async function mclick(P,sel){await P.locator(sel).first().scrollIntoViewIfNeeded
   delete r.state;delete r.saved;delete r.ui;await ctx.close();}
  // US: v99 진입 이유 칩
  {const ctx=await browser.newContext({viewport:{width:1440,height:900},bypassCSP:true,timezoneId:'Asia/Seoul',locale:'ko-KR'});await ctx.addInitScript(init);const U=await ctx.newPage();U.on('pageerror',e=>out.errors.push('US '+e.message));
-  await U.goto(URL0+'?v132=0&journal=us');await U.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});await U.waitForTimeout(1000);
+  await U.goto(URL0+'?v132=0&v134=0&journal=us');await U.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});await U.waitForTimeout(1000);
   await U.evaluate(async N=>{const ev=(id,date,time,sh,px)=>({id,date,time,shares:sh,price:px,fee:0,seq:Date.parse(date+'T'+time+'Z')/1000});const nm=['AAPL','TSLA','NVDA','MSFT','META'],T=[],base=Date.parse('2026-10-30T00:00:00Z');
    for(let i=0;i<N;i++){const d=new Date(base-Math.floor(i/4)*864e5).toISOString().slice(0,10),hh=9+(i%4)*1.5,h=String(Math.floor(hh)).padStart(2,'0'),m=hh%1?'30':'00',loss=i%2===0;
     T.push(normaliseTrade({schema:5,currency:CURRENCY,market:MARKET,id:'u'+i,at:Date.parse(d+'T'+h+':'+m+':00Z'),name:nm[i%5],direction:'long',date:d,stop:98,stop0:98,initialRisk:20,riskR:1,setup:'미분류',process:'compliant',review:'',violations:[],

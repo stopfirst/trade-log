@@ -682,4 +682,25 @@ module.exports = {
     if (!(f.B && f.B.netStart >= 3000)) A.fail('off1440.B 예전엔 예산 대기 ' + JSON.stringify(f.B));
     A.eq('off1440.B.ld', false);
   } },
+  /* v134: 거래 상세 간소화 — 거래 채점 제목·점수·항목, 계획 준수 폼(자동 감지·텔레그램 줄 포함), 진입 당시 관리 계획, 타임라인 미평가 배지 숨김(MFE·MAE 줄·매매일지·초기 위험 기준·포지션 운영은 남김),
+     주간 리뷰 과정 점수·복기 안 한 거래·가장 점검할 거래·점수 열 숨김, 거래 기록 '과정' 열 미평가 → —, 데이터 그대로, ?v134=0 예전 */
+  t134: { check(A, o) {
+    for (const k of ['w1440', 'w390']) {
+      const P = (p, v) => A.eq(k + '.' + p, v);
+      P('dbgOn', true);
+      for (const h of ['head', 'items', 'score', 'form', 'auto', 'save', 'tg', 'eval', 'plan', 'planTitle', 'planFold']) P('H.' + h, false);
+      for (const s of ['card', 'exc', 'mfe', 'basis', 'journal', 'j132', 'chart', 'summary', 'manage', 'timeline', 'del', 'autoExists']) P('H.' + s, true);
+      P('H.mt', 'MFE · MAE'); P('H.tlPill', []); P('H.tlNote', ['수수료 0.1', '수수료 0.1']); P('dlgScroll', []);
+      P('D', { same: true, score: true, pending: true });
+      P('W', { has: true, trades: true, procScore: false, unrev: false, worst: false, scoreCol: false, scoreCell: false, meta: '셋업 · MFE/MAE · 목표' });
+      P('docScroll', false);
+    }
+    A.eq('w1440.Rec', { n: 3, proc: ['—', '—', '—'] });
+    /* ?v134=0 예전 화면 */
+    A.eq('off1440.dbgOn', false);
+    for (const s of ['head', 'items', 'score', 'form', 'auto', 'save', 'tg', 'eval', 'plan', 'planTitle', 'planFold', 'exc', 'mfe', 'basis']) A.eq('off1440.H.' + s, true);
+    A.eq('off1440.H.mt', null); A.eq('off1440.H.tlPill', ['미평가']);
+    A.eq('off1440.W', { has: true, trades: true, procScore: true, unrev: true, worst: true, scoreCol: true, scoreCell: true, meta: '셋업 · 과정 점수 · MFE/MAE · 목표' });
+    A.eq('off1440.Rec', { n: 3, proc: ['미평가', '미평가', '미평가'] });
+  } },
 };
