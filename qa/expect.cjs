@@ -658,4 +658,28 @@ module.exports = {
     A.eq('off1440.dbgOn', false); A.eq('off1440.H', { card: false, v92: true, oldArea: true, review: true, setup: true });
     A.eq('off1440.S', { ec: '추격 매수', xc: '손절 늦음', av: true, gapNew: false, gapOld: true });
   } },
+  /* v133: 차트 겹층(가로선·그림·축 라벨·마커)과 봉·평균 진입/스탑 점선이 같은 세로 범위(각 프레임), 세로 확대·이동이 다시 그린 뒤에도 유지, 예산 소진 때 사용자 차트 즉시 + '불러오는 중', ?v133=0 예전 재현 */
+  t133: { check(A, o) {
+    for (const k of ['w1440', 'w390']) {
+      const a = o[k] || {}, P = (p, v) => A.eq(k + '.' + p, v), F = m => A.fail(k + ': ' + m);
+      P('dbgOn', true);
+      if (!(a.frames >= 20)) F('frames ' + a.frames);
+      for (const m of ['maxEntry', 'maxWick', 'maxHline']) if (!(a[m] <= 0.6)) F(m + ' 어긋남 ' + a[m] + 'px (기대 ≤ 0.6) ' + JSON.stringify(a.worst));
+      if (!(a.drift !== null && a.drift <= 0.6)) F('v133Debug drift ' + a.drift);
+      if (!(a.zoom >= 1.3)) F('세로 확대 안 됨 zoom ' + a.zoom);
+      P('zoomKept', 1); P('zoomRangeSame', true); P('panMoved', true); P('panZoomKept', 1); P('panKept', true);
+      if (k === 'w1440' && !(a.wheelY >= 1.2)) F('가격축 휠 세로 배율 ' + a.wheelY);
+      const b = a.B || {};
+      if (!(b.netStart !== null && b.netStart >= 0 && b.netStart < 600)) F('B.netStart 예산 소진 때 차트 요청 ' + b.netStart + 'ms (기대 < 600)');
+      P('B.req', 1); P('B.ld', true); P('B.ldGone', true); P('B.part.ld', true); P('B.ldBox.txt', '· 불러오는 중…'); P('B.ldBox.inView', true);
+      if (!(b.lane >= 1)) F('B.lane ' + b.lane);
+      if (!(b.full && b.full.ms < 2500)) F('B.full ' + JSON.stringify(b.full));
+      P('Bshot', true); P('docScroll', false); P('docScroll2', false);
+    }
+    const f = o.off1440 || {};
+    A.eq('off1440.dbgOn', false);
+    if (!(f.zoom < 1.1 || f.maxEntry > 3 || f.maxHline > 3)) A.fail('off1440 예전 어긋남·확대 취소가 재현돼야 함 ' + JSON.stringify({ zoom: f.zoom, e: f.maxEntry, h: f.maxHline }));
+    if (!(f.B && f.B.netStart >= 3000)) A.fail('off1440.B 예전엔 예산 대기 ' + JSON.stringify(f.B));
+    A.eq('off1440.B.ld', false);
+  } },
 };

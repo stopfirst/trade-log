@@ -3,7 +3,7 @@
    시간을 줄이려고 켬 모드는 V128.NET=1500ms(실제 15초)로 바꿔 검사.
    (Q) 배경 봉 12·체결 3·MFE 4를 쏜 직후 상세 열기 → 차트가 배경 봉보다 먼저 나감(앞선 BG ≤ 4 = 이미 진행 중이던 것만), 빨리 그림, 대기열의 배경 우선순위(2·0) 그대로
        + 확대·스크롤 모자란 구간(v44Fetch처럼 다른 구간) 요청도 사용자 요청으로 빨리
-   (W) 분당 예산 1100 사용 중(3초 뒤부터 빠짐) → 차트는 3초 기다린 뒤 성공(대기 > 시간 제한 1.5초인데 시간 초과 없음, 재시도 0)
+   (W) 분당 예산 1170 사용 중(3초 뒤부터 빠짐 — v133 사용자 차트 여유분 상한 1150보다 위) → 차트는 3초 기다린 뒤 성공(대기 > 시간 제한 1.5초인데 시간 초과 없음, 재시도 0)
    (R) 첫 요청 응답 없음 → 1.5초 뒤 자동 재시도 1회 → 그림(요청 2)
    (F) 두 번 다 응답 없음 → '차트를 불러오지 못했습니다' + [다시 시도] → 누르면 그 자리에서 그림, 모바일 390 넘침 없음
    (T) 429 한 번 → v104 처리(짧은 쿨다운 뒤 v104가 다시)로 그림, v128 재시도 안 씀
@@ -93,7 +93,7 @@ const RUN=(page,id,opt)=>page.evaluate(`(${OPEN})(${JSON.stringify(id)},${JSON.s
   if(mode==='on'){
    await page.evaluate(()=>{V128.NET=1500;});
    o.Q=await RUN(page,'gold',{busy:true,extra:true});await idle(page);
-   o.W=await RUN(page,'gold2',{book:[1100,3000]});
+   o.W=await RUN(page,'gold2',{book:[1170,3000]}); /* v133: 사용자 차트 전용 여유분(상한 1150) 위로 채워야 예전처럼 기다림 */
    o.Wdbg=await page.evaluate(()=>{const r=v128Debug().recent.at(-1);return {retry:!!r.retry,wait:r.tries[0]['대기ms'],tries:r.tries.length,netTo:V128.st.netTo};});
    await page.evaluate(()=>localStorage.setItem('tj:v104:w','[]'));await idle(page);
    await page.evaluate(()=>{window.__hang=1;});
