@@ -703,4 +703,23 @@ module.exports = {
     A.eq('off1440.W', { has: true, trades: true, procScore: true, unrev: true, worst: true, scoreCol: true, scoreCell: true, meta: '셋업 · 과정 점수 · MFE/MAE · 목표' });
     A.eq('off1440.Rec', { n: 3, proc: ['미평가', '미평가', '미평가'] });
   } },
+  t135: { check(A, o) {
+    const W = 'w1440.', K = 'w390.', F = 'off1440.';
+    A.eq(W + 'dbg.on', true); A.eq(W + 'dbg.field', 'oneLine');
+    A.eq(W + 'T', { th: ['종목 / 셋업', '한줄평가', '진입일', '진입 방식', '상태', '실현 R', '순손익', '과정', '차트'], n: 3, cells: 3, ph: '한줄평가 쓰기', phFaded: true, a: 'A 기존 평가', bEll: true, bTitle: true, wide: true, status: 3 });
+    A.eq(W + 'C1', { dlg: false, ed: true, v: '좋은 진입, 계획대로', cell: '좋은 진입, 계획대로', edGone: true, dlg2: false });
+    A.eq(W + 'Esc', { v: 'A 기존 평가', cell: 'A 기존 평가', edGone: true, dlg: false });
+    A.eq(W + 'Blur', { v: 'A 기존 평가 (아웃)', edGone: true });
+    A.eq(W + 'Re', { conn: true, val: '좋은 진입, 계획대로 abcdef', v: '좋은 진입, 계획대로 abcdef', st: { d: true, f: true }, cell: '좋은 진입, 계획대로 abcdef' });
+    A.eq(W + 'Ime', { comp: true, stillOpen: true, v: '한줄 평가', n: true });
+    A.eq(W + 'Row', { dlg: true, field: { v: '좋은 진입, 계획대로 abcdef', vis: true, inJ: true, afterHead: true } });
+    A.eq(W + 'Det', { v: '상세에서 고친 평가', dlg: true, nl: false, escV: '상세에서 고친 평가', escDlg: true, cell: '상세에서 고친 평가' });
+    A.eq(W + 'Csv', { h3: ['종목', '한줄평가'], hasVal: true });
+    A.eq(W + 'Reload', { A: 'A 기존 평가 (아웃)', B: '한줄 평가', OPEN: '상세에서 고친 평가', cell: '상세에서 고친 평가' });
+    A.eq(W + 'Draft', { A: '엔터 안 누름', cell: '엔터 안 누름' });
+    A.eq(K + 'K', { n: 3, vis: true, ph: '한줄평가 쓰기', bEll: true, over: false, ed: { focus: true, overlap: true, inView: true }, dlg: false, v: '모바일 평가', cell: '모바일 평가', dlg2: false, open: true, field: { v: '모바일 평가', vis: true, fit: true }, dlgOver: [] });
+    A.eq(F + 'dbg.on', false);
+    A.eq(F + 'T.th', ['종목 / 셋업', '진입일', '진입 방식', '상태', '실현 R', '순손익', '과정', '차트']);
+    A.eq(F + 'Off', { cells: 0, A: 'A 기존 평가', detail: false, csv: false });
+  } },
 };
