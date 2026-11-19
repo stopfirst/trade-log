@@ -131,7 +131,7 @@ const seed=()=>{
  for(const W of [1440,390]){const ctx=await browser.newContext({viewport:{width:W,height:900},bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul',hasTouch:W<500});await ctx.addInitScript(init);const page=await ctx.newPage();
  page.on('pageerror',e=>rep.errors.push(e.message));const dlgs=[];page.on('dialog',d=>{dlgs.push(d.type());d.dismiss().catch(()=>{});});
  const ready=async()=>{await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});await page.waitForTimeout(700);};
- await page.goto(URL0+'?journal=hyperliquid');await ready();
+ await page.goto(URL0+'?journal=hyperliquid&v134=0');await ready();  /* v134: 상세 자동 감지 상자는 숨김 → 예전 화면에서 감지 숨기기 검사 */
  await page.evaluate(async()=>{const now=Date.now(),D=now-6*3600e3;const ev=(id,ts,sh,px,fill)=>{const d=new Date(ts).toISOString();return {id,date:d.slice(0,10),time:d.slice(11,19),timestamp:ts,shares:sh,price:px,fee:0.1,seq:ts/1000,...(fill?{fillId:fill,sourceKey:'hyperliquid:abc:'+fill,planKey:'other',planned:'',actual:'',compliance:'unreviewed'}:{})};};
   const mk=o=>normaliseTrade({schema:5,currency:CURRENCY,market:MARKET,id:o.id,at:o.e[0][0],name:o.name,direction:'long',date:new Date(o.e[0][0]).toISOString().slice(0,10),stop:o.stop,stop0:o.stop,initialRisk:o.R,riskR:1,setup:'미분류',leverage:5,marginMode:'cross',process:'unreviewed',review:'',violations:[],entries:o.e.map((x,i)=>ev(o.id+'e'+i,...x)),fills:(o.f||[]).map((x,i)=>ev(o.id+'f'+i,...x)),funding:[],images:[]});
   Object.assign(state.settings,{account:10000,riskMax:2.5,openMax:6,v99Cool:15});

@@ -49,7 +49,7 @@ const vis=sel=>{const el=document.querySelector(sel);return !!(el&&el.getClientR
   const ctx=await browser.newContext({viewport:{width:W,height:W<500?844:900},isMobile:W<500,hasTouch:W<500,bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul'});
   await ctx.addInitScript(init);
   const page=await ctx.newPage();page.on('pageerror',e=>R.errors.push(key+': '+e.message));
-  await page.goto(base+(mode==='off'?'&v132=0':''));await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});
+  await page.goto(base+'&v134=0'+(mode==='off'?'&v132=0':''));await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});
   const E=(f,a)=>page.evaluate(f,a);
   await page.evaluate(`window.__vis=${vis.toString()}`);
   await E(seed);await page.waitForTimeout(600);
@@ -98,7 +98,7 @@ const vis=sel=>{const el=document.querySelector(sel);return !!(el&&el.getClientR
  const off=async()=>{const key='off1440',o={};
   const ctx=await browser.newContext({viewport:{width:1440,height:900},bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul'});await ctx.addInitScript(init);
   const page=await ctx.newPage();page.on('pageerror',e=>R.errors.push(key+': '+e.message));
-  await page.goto(base+'&v132=0');await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});
+  await page.goto(base+'&v132=0&v134=0');await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});
   await page.evaluate(`window.__vis=${vis.toString()}`);const E=(f,a)=>page.evaluate(f,a);
   await E(seed);await page.waitForTimeout(600);
   o.dbgOn=await E(()=>v132Debug().on);
