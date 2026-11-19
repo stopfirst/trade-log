@@ -722,4 +722,36 @@ module.exports = {
     A.eq(F + 'T.th', ['종목 / 셋업', '진입일', '진입 방식', '상태', '실현 R', '순손익', '과정', '차트']);
     A.eq(F + 'Off', { cells: 0, A: 'A 기존 평가', detail: false, csv: false });
   } },
+  /* v136: 한줄평가 여러 줄 전체 표시 — 표·카드 말줄임 없음·줄바꿈 표시, 그 자리 편집 textarea(Shift+Enter 줄바꿈·Enter 저장·Esc 취소·잠금 중에도),
+     줄바꿈 보존·500자, 상세 칸 같은 방식, CSV 줄바꿈 값 한 칸, 새로고침 유지, ?v136=0 v135 동작 */
+  t136: { check(A, o) {
+    const W = 'w1440.', K = 'w390.', F = 'off1440.';
+    const FULL = (lines) => ({ full: true, clip: false, ws: 'pre-wrap', ell: false, lines });
+    A.eq(W + 'dbg', { on: true, v135: true, max: 500, multiLine: 1, clipped: 0 });
+    A.eq(W + 'T.A', FULL(3)); A.eq(W + 'T.B.full', true); A.eq(W + 'T.B.clip', false); A.eq(W + 'T.B.ell', false);
+    if (!(o.w1440.T.B.lines >= 3)) A.fail('w1440 긴 글이 여러 줄로 줄바꿈돼야 함 ' + JSON.stringify(o.w1440.T.B));
+    if (!(o.w1440.T.rowB >= 100)) A.fail('w1440 긴 글 행 높이가 늘어나야 함 ' + o.w1440.T.rowB);
+    A.eq(W + 'T.th', ['종목 / 셋업', '한줄평가', '진입일', '진입 방식', '상태', '실현 R', '순손익', '과정', '차트']);
+    A.eq(W + 'C1', { dlg: false, tag: 'TEXTAREA', focus: true, inTd: true, max: 500, val: '첫 줄\n둘째 줄\n셋째 줄', grew: true, noScroll: true, open: true, v: '첫 줄\n둘째 줄\n셋째 줄', edGone: true, dlg2: false, cell: FULL(3) });
+    A.eq(W + 'Esc', { v: true, edGone: true, dlg: false });
+    A.eq(W + 'Blur', { v: true, edGone: true, lines: 4 });
+    A.eq(W + 'Lock', { busy: true, val: '첫 줄\n둘째 줄\n셋째 줄\n잠금 중' });
+    A.eq(W + 'Re', { conn: true, v: '첫 줄\n둘째 줄\n셋째 줄\n잠금 중 abcdef', cell: FULL(4) });
+    A.eq(W + 'Ime', { comp: true, stillOpen: true, v: '한줄 평가' });
+    A.eq(W + 'Max.len', 500); A.eq(W + 'Max.nl', true); A.eq(W + 'Max.cell.full', true); A.eq(W + 'Max.cell.clip', false);
+    A.eq(W + 'Det', { dlg: true, f: { same: true, vis: true, full: true, max: 500, old: false }, mid: '상세 첫 줄\n상세 둘째 줄', v: '상세 첫 줄\n상세 둘째 줄', dlg2: true, full2: true, escV: '상세 첫 줄\n상세 둘째 줄', escDlg: true, cell: FULL(2) });
+    A.eq(W + 'Csv', { col: 3, rows: 4, same: true, A: true, quoted: true });
+    A.eq(W + 'Reload.A', '상세 첫 줄\n상세 둘째 줄'); A.eq(W + 'Reload.OPEN', '첫 줄\n둘째 줄\n셋째 줄\n잠금 중 abcdef'); A.eq(W + 'Reload.Blen', 500);
+    A.eq(W + 'Reload.cellA', FULL(2)); A.eq(W + 'Reload.cellB.clip', false);
+    A.eq(W + 'dbg2', { multiLine: 3, clipped: 0, max: 500 });
+    A.eq(W + 'docScroll', false);
+    A.eq(K + 'K.A', FULL(3)); A.eq(K + 'K.B.full', true); A.eq(K + 'K.B.clip', false); A.eq(K + 'K.over', false);
+    A.eq(K + 'K.ed', { tag: 'TEXTAREA', focus: true, overlap: true, inView: true });
+    A.eq(K + 'K.dlg', false); A.eq(K + 'K.v', '모바일 첫 줄\n모바일 둘째 줄'); A.eq(K + 'K.cell', FULL(2)); A.eq(K + 'K.dlg2', false); A.eq(K + 'K.over2', false);
+    A.eq(K + 'K.open', true); A.eq(K + 'K.field', { same: true, vis: true, fit: true, full: true }); A.eq(K + 'K.dlgOver', []); A.eq(K + 'docScroll', false);
+    /* ?v136=0: v135 동작(한 줄·말줄임·input 80자), 저장된 여러 줄 글 그대로 */
+    A.eq(F + 'dbg.on', false); A.eq(F + 'T.A.ws', 'nowrap'); A.eq(F + 'T.B.ell', true); A.eq(F + 'T.B.clip', true);
+    A.eq(F + 'Off', { ed: 'INPUT', max: 80, A: true, detail: { v135: true, v136: false } });
+    A.eq(F + 'docScroll', false);
+  } },
 };
