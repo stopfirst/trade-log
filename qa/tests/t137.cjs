@@ -52,7 +52,7 @@ const seed=async([PRJ,UID,login])=>{
 const vis=el=>{if(typeof el==='string')el=document.querySelector(el);return !!(el&&el.getClientRects().length&&getComputedStyle(el).display!=='none'&&(el.offsetWidth||el.offsetHeight));};
 (async()=>{
  const browser=await chromium.launch({args:['--no-sandbox']});const R={tag,errors:[]};
- const base='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid';
+ const base='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid&v138=0';   /* v138: 일지별 v137 저장 전제 검사 → v137 동작으로 */
  const one=async([W,mode])=>{
   const key=(mode==='on'?'w':'off')+W,o={};const M=W<500;
   const ctx=await browser.newContext({viewport:{width:W,height:M?844:900},isMobile:M,hasTouch:M,locale:'ko-KR',timezoneId:'Asia/Seoul'});

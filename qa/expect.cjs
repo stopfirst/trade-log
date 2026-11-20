@@ -793,4 +793,29 @@ module.exports = {
     A.eq(K + 'Img', { n: 1, fit: { in: true, below: true }, wait: '클라우드 대기 · 클라우드 로그인 전' }); A.eq(K + 'Lb', { fit: true, close: true, closed: true });
     A.eq(F + 'Off', { nav: false, page: false, on: false, title: '대시보드', kept: true, weekly: true }); A.eq(F + 'docScroll', false);
   } },
+  /* v138 아침 전망 하나로 합치기(HL·US 같은 글, v137 → v138 이전·멱등·원본 보관) + 서식(B·U·크기·단축키·sanitize·평문 붙여넣기·IME·양식·전날 복사) · ?v138=0 */
+  t138: { check(A, o) { const W = 'w1440.', K = 'w390.', F = 'off1440.';
+    A.eq(W + 'Mig.dates', ['2026-10-28', '2026-10-29', '2026-10-30']);
+    A.eq(W + 'Mig.sel', { scope: 'US', sel: 'revision,o:payload->v138Outlook,s7:payload->v137Outlook,t:payload->v119T' });
+    A.eq(W + 'Mig.d30', { line: 'US 한줄', bias: 'long', conf: 3, grade: 'hit', text: 'US 10/30 글\n\n— (HL 일지에서 합침)\n한줄평: HL 한줄\n바이어스: 숏 우세\nHL 10/30 글', imgs: ['aaaa-1', 'uuuu-1'] });
+    A.eq(W + 'Mig.d28', '10/28 US 글'); A.eq(W + 'Mig.d29', 'HL만'); A.eq(W + 'Mig.kept', true); A.has(W + 'Mig.foot', '어느 일지'); A.eq(W + 'Mig.again', ['same', 'same']); A.eq(W + 'Mig.idem', true); A.eq(W + 'Mig.appendOnce', 1);
+    A.eq(W + 'Show', { ed: true, line: 'US 한줄', thumbs: 2 });
+    A.eq(W + 'Us', { same: true, ed: true, dates: ['2026-10-28', '2026-10-29', '2026-10-30'], line: 'US 한줄', foot: false, sel: 'HL' });
+    A.eq(W + 'Back', { line: 'US에서 고친 한줄', img: ['uuuu-1'], gone: ['aaaa-1'], ui: 'US에서 고친 한줄', bc: true, noRes: true });
+    A.eq(W + 'Fmt', { empty: true, fs: 17, menu: true, menuClosed: true, focus: true, tbB: { b: 'true', u: 'false', sz: '보통' }, tbL: { b: 'false', u: 'false', sz: '크게' }, tbN: { b: 'false', u: 'false', sz: '보통' },
+      saved: { b: true, u: true, l: true, cont: true, text: '기본 굵게 밑줄 크게 이어서 보통', noFont: true }, undo: true });
+    A.eq(W + 'Paste', { prevented: true, red: false, img: false, has: true, saved: true });
+    A.eq(W + 'San', { fn: '<b>a</b><span data-size="xl">b</span><span data-size="l">c</span>de<div>f</div><b>g</b>', saved: '<div>위험<b>굵</b></div>', recv: '<div>남의<u>밑줄</u></div>', dom: '<div>남의<u>밑줄</u></div>', xss: 0 });
+    A.eq(W + 'Ime', { comp: true, block: true, noSave: true, b: 'false', done: true, focus: true });
+    A.eq(W + 'Tpl', { keep: true, sep: true, end: true, bold: true, fmtKept: true, undo: true, empty: { text: true, bold: 5 } });
+    A.eq(W + 'Copy', { en: true, same: true, ui: true }); A.eq(W + 'Reload', { b: true, u: true, l: true, txt: true });
+    A.eq(W + 'Merge', { html: '<div><b>T-pc</b></div>', text: 'T-pc', line: 'L-mobile', bGone: true, gone: { b: 1 }, conf: 0 });
+    A.eq(W + 'Cross', { pcKeep: '내 글', pcConf: [['text', 'pc', 'mine', '남 글']], bump: true, otherPc: '남 글', otherConf: [['pc', 'other', '내 글']], seq: '남 글', seqConf: 0 });
+    A.eq(W + 'Res', { now1: '다른 일지 값', conf: { kept: '다른 일지 값', lost: '이 기기 값', rule: 'pc', label: '아침 전망 2026-10-25 · 한줄평' }, after: '이 기기 값', atBump: true });
+    A.eq(W + 'Chk', { ok: true, b64: true, html: true, dataWord: true });
+    A.eq(W + 'dbg', { on: true, journal: 'HL', other: 'US', v137Kept: true, b64: false, logged: true }); A.eq(W + 'Lay', []);
+    A.eq(K + 'Bar', { vis: true, in: true, h: 38, btn: true, hint: false }); A.eq(K + 'Lay', []); A.eq(K + 'Lay2', []); A.eq(K + 'Menu', { open: true, in: true });
+    A.eq(K + 'Typ.text', '모바일 굵게큰'); A.eq(K + 'Typ.b', true); A.eq(K + 'Typ.xl', true);
+    A.eq(F + 'Off', { on: false, ta: true, ed: false, foot: true, line: 'v137 원본', kept: '<div><b>공용</b> 글</div>' });
+  } },
 };
