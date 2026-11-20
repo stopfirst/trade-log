@@ -182,4 +182,33 @@ export function render({ d, raw, stage, title, trend: t, kst, et, footer, T = DE
   return lines.join('\n');
 }
 
+// ── 재진입 후보(2026-11-10 백테스트) ──
+// TRIGGER(원시 단계) 다음 거래일부터, VIX/3M 종가가 BW(1.0) 미만인 첫날 → 다음 거래일 시가 진입 후보.
+// TRIGGER 뒤 3거래일 안의 신호는 무작위 수준이었으므로 '비중 작게'로 표시. 마감에 하루 한 번 호출.
+// rs: {trigDate, days, lastDate, done}
+export function reentryClose(rs, { date, ratio }, T = DEFAULTS, maxDays = 60) {
+  if (!rs || !rs.trigDate || rs.done) return { rs, signal: null };
+  if (date <= rs.trigDate || date === rs.lastDate) return { rs, signal: null };
+  const s = { ...rs, lastDate: date, days: (rs.days || 0) + 1 };
+  if (ratio < T.BW) { s.done = true; return { rs: s, signal: { trigDate: s.trigDate, days: s.days, fast: s.days <= 3, ratio } }; }
+  if (s.days >= maxDays) return { rs: null, signal: null };
+  return { rs: s, signal: null };
+}
+
+export function renderReentry(sig, d, { kst, et } = {}) {
+  const L = [
+    '🟢 재진입 후보 — TRIGGER 뒤 VIX/3M 첫 1 미만 종가',
+    '',
+    `TRIGGER      ${sig.trigDate} (${sig.days}거래일 전)`,
+    `VIX/3M 종가  ${sig.ratio.toFixed(3)}`,
+    `VIX ${d.vix.toFixed(2)} · VVIX ${d.vvix.toFixed(0)} · SPX ${d.spx.toFixed(0)}${Number.isFinite(d.spxPct) ? ` (${d.spxPct >= 0 ? '+' : ''}${d.spxPct.toFixed(2)}%)` : ''}`,
+    '',
+    '→ 다음 거래일 시가 진입 후보(백테스트 기준)',
+  ];
+  if (sig.fast) L.push('⚡ TRIGGER 뒤 3거래일 안의 빠른 신호 — 근거 약함, 비중 작게');
+  L.push('청산 기준: VIX/3M ≥ 1 이면서 TRIGGER 재발', '원칙: 1R(계좌 2%) 안에서만');
+  if (kst) L.push('', `🕒 🇰🇷 ${kst} KST · 🇺🇸 ${et} ET`);
+  return L.join('\n');
+}
+
 export const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

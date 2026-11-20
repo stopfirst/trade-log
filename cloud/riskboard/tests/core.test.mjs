@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { derive, rawStage, step, wilder, trend, render, lights } from '../src/core.mjs';
+import { derive, rawStage, step, wilder, trend, render, lights, reentryClose, renderReentry } from '../src/core.mjs';
 
 // 스크린샷 값으로 만든 시세(vix, vix3m, vvix/prev, spx%)
 function Q({ vix, vixPrev = vix, v3m, v6m = v3m + 0.5, v9d = vix, vvix, vvixPrev = vvix, spxPct = 0 }) {
@@ -56,4 +56,27 @@ test('ADX/ATR 계산과 보드 렌더', () => {
   const d = Q({ vix: 26.2, vixPrev: 21, v3m: 24.3, vvix: 124, vvixPrev: 90.4, spxPct: -2.3 });
   const txt = render({ d, raw: rawStage(d), stage: 'TRIGGER', title: 'x', trend: t, kst: '01:05', et: '11:05', footer: 'f' });
   assert.match(txt, /현재 단계\s+🔴 TRIGGER/); assert.match(txt, /⚠ FRACTURE/); assert.match(txt, /30W TREND\s+BELOW/);
+});
+
+// ── 1.2.0 재진입 후보 ──
+test('재진입: TRIGGER 다음날부터 VIX/3M 첫 1 미만 종가에서 한 번', () => {
+  let rs = { trigDate: '2026-11-17', days: 0, done: false };
+  let r = reentryClose(rs, { date: '2026-11-17', ratio: 0.98 }); assert.equal(r.signal, null); rs = r.rs; // 당일은 안 셈
+  r = reentryClose(rs, { date: '2026-11-18', ratio: 1.03 }); assert.equal(r.signal, null); assert.equal(r.rs.days, 1); rs = r.rs;
+  r = reentryClose(rs, { date: '2026-11-18', ratio: 0.9 }); assert.equal(r.signal, null); // 같은 날 두 번 안 셈
+  r = reentryClose(rs, { date: '2026-11-19', ratio: 0.99 });
+  assert.deepEqual(r.signal, { trigDate: '2026-11-17', days: 2, fast: true, ratio: 0.99 }); rs = r.rs;
+  assert.equal(reentryClose(rs, { date: '2026-11-20', ratio: 0.9 }).signal, null); // 한 번만
+});
+test('재진입: 4거래일째부터는 빠른 신호 아님 · 60일 넘으면 접음', () => {
+  let rs = { trigDate: '2026-11-02', days: 3, lastDate: '2026-11-05' };
+  assert.equal(reentryClose(rs, { date: '2026-11-06', ratio: 0.95 }).signal.fast, false);
+  assert.equal(reentryClose({ trigDate: '2026-08-01', days: 59 }, { date: '2026-11-06', ratio: 1.1 }).rs, null);
+  assert.equal(reentryClose(null, { date: '2026-11-06', ratio: 0.9 }).signal, null);
+});
+test('재진입 메시지', () => {
+  const d = Q({ vix: 21, v3m: 21.5, vvix: 100, spxPct: 0.8 });
+  const t = renderReentry({ trigDate: '2026-11-17', days: 2, fast: true, ratio: 0.977 }, d, { kst: '06:15', et: '16:15' });
+  assert.match(t, /재진입 후보/); assert.match(t, /0\.977/); assert.match(t, /비중 작게/); assert.match(t, /1R/);
+  assert.doesNotMatch(renderReentry({ trigDate: 'x', days: 5, fast: false, ratio: 0.9 }, d), /비중 작게/);
 });
