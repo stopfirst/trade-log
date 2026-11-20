@@ -6,9 +6,9 @@
 //   node --env-file=.env src/riskboard.mjs --send     지금 보드를 텔레그램으로 한 번 보냄
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULTS, STAGES, STAGE_EMOJI, STAGE_KO, derive, rawStage, step, trend, render, esc } from './core.mjs';
+import { DEFAULTS, STAGES, STAGE_EMOJI, STAGE_KO, derive, rawStage, step, trend, render, esc, reentryClose, renderReentry } from './core.mjs';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const E = process.env;
 const ARGS = new Set(process.argv.slice(2));
 const T = { ...DEFAULTS };
@@ -18,6 +18,11 @@ const DOWN_CONFIRM = Number(E.RB_DOWN_CONFIRM || 3);
 const PERSIST_MIN = Number(E.RB_PERSIST_MIN || 10);
 const CLOSE_REPORT = (E.RB_CLOSE_REPORT ?? '1') !== '0';
 const STATE_FILE = E.RB_STATE || '/var/lib/riskboard/state.json';
+// 1.2.0: 서비스가 쓰는 기준값을 공유 파일로 남김 → 텔레그램 /risk(--once, .env를 못 읽는 trade-alert)도 같은 기준·확정 단계로 보드를 만듦
+const SHARED_FILE = path.join(path.dirname(STATE_FILE), 'config.json');
+const REENTRY = (E.RB_REENTRY ?? '1') !== '0';
+const REENTRY_MAX = Number(E.RB_REENTRY_MAXDAYS || 60);
+const FAIL_ALERT = Number(E.RB_FAIL_ALERT ?? 3);
 const TOKEN = E.RB_BOT_TOKEN || E.TELEGRAM_BOT_TOKEN;
 const CHAT = E.RB_CHAT_ID || E.TELEGRAM_CHAT_ID;
 
@@ -76,8 +81,24 @@ const etDateOf = sec => etParts(new Date(sec * 1000)).date;
 // 상태
 function load() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return {}; } }
 function save(s) {
-  try { fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true }); fs.writeFileSync(STATE_FILE + '.tmp', JSON.stringify(s)); fs.renameSync(STATE_FILE + '.tmp', STATE_FILE); }
+  try { fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true }); fs.writeFileSync(STATE_FILE + '.tmp', JSON.stringify(s), { mode: 0o644 }); fs.renameSync(STATE_FILE + '.tmp', STATE_FILE); }
   catch (e) { log('상태 저장 실패', e.message); }
+}
+
+function saveShared() {
+  try {
+    fs.mkdirSync(path.dirname(SHARED_FILE), { recursive: true });
+    fs.writeFileSync(SHARED_FILE + '.tmp', JSON.stringify({ version: VERSION, T, DOWN_CONFIRM, at: new Date().toISOString() }), { mode: 0o644 });
+    fs.renameSync(SHARED_FILE + '.tmp', SHARED_FILE);
+  } catch (e) { log('공유 설정 저장 실패', e.message); }
+}
+// --once: 환경변수로 안 받은 기준값은 서비스가 남긴 공유 파일 값을 씀
+function loadShared() {
+  try {
+    const j = JSON.parse(fs.readFileSync(SHARED_FILE, 'utf8'));
+    for (const k of Object.keys(T)) if ((E['RB_' + k] === undefined || E['RB_' + k] === '') && Number.isFinite(j?.T?.[k])) T[k] = j.T[k];
+    return true;
+  } catch { return false; }
 }
 
 async function tg(text) {
@@ -114,7 +135,8 @@ async function tick(S) {
   if (inSession && nowMs - (S.lastPoll || 0) >= POLL_MIN * 60e3 - 5e3) {
     S.lastPoll = nowMs;
     const b0 = await board(null, '', LIVE);
-    if (etDateOf(b0.q.SPX.t) !== et.date) { log('오늘 장 데이터 없음(휴장?) — 건너뜀'); return; }
+    if (etDateOf(b0.q.SPX.t) !== et.date) { log('오늘 장 데이터 없음(휴장?) — 건너뜀'); return true; }
+    if (b0.raw.stage === 'TRIGGER') S.reentry = { trigDate: et.date, days: 0, done: false }; // TRIGGER 재발이면 다시 셈
     const first = !S.stage;
     const { state, changed } = step(S.stage ? { stage: S.stage, since: S.since, lowerCount: S.lowerCount, lowerMax: S.lowerMax, persistSent: S.persistSent } : { stage: b0.raw.stage, since: nowMs }, b0.raw.stage, nowMs, DOWN_CONFIRM);
     Object.assign(S, state);
@@ -128,21 +150,56 @@ async function tick(S) {
       const b = await board(S.stage, `🔁 TRIGGER ${PERSIST_MIN}분 지속`, LIVE); await tg(b.text);
     }
     save(S);
-    return;
+    return true;
   }
 
-  if (CLOSE_REPORT && weekday && et.min >= 16 * 60 + 15 && S.closeSent !== et.date) {
+  if ((CLOSE_REPORT || REENTRY) && weekday && et.min >= 16 * 60 + 15 && S.closeSent !== et.date) {
     const b = await board(S.stage || null, '', CLOSE);
     S.closeSent = et.date; save(S);
-    if (etDateOf(b.q.SPX.t) !== et.date) { log('오늘 휴장 — 마감 보고 없음'); return; }
-    const stg = S.stage || b.raw.stage;
-    const b2 = await board(stg, `📌 마감 · ${ttl(stg)}${b.raw.stage !== stg ? ` (지표만 보면 ${b.raw.stage})` : ''}`, CLOSE);
-    await tg(b2.text);
+    if (etDateOf(b.q.SPX.t) !== et.date) { log('오늘 휴장 — 마감 보고 없음'); return true; }
+    if (CLOSE_REPORT) {
+      const stg = S.stage || b.raw.stage;
+      const b2 = await board(stg, `📌 마감 · ${ttl(stg)}${b.raw.stage !== stg ? ` (지표만 보면 ${b.raw.stage})` : ''}`, CLOSE);
+      await tg(b2.text);
+    }
+    if (b.raw.stage === 'TRIGGER') S.reentry = { trigDate: et.date, days: 0, done: false }; // 종가가 TRIGGER여도 셈
+    if (REENTRY && S.reentry) {
+      const r = reentryClose(S.reentry, { date: et.date, ratio: b.d.ratio }, T, REENTRY_MAX);
+      S.reentry = r.rs; save(S);
+      log(`재진입 확인 ${et.date} VIX/3M=${b.d.ratio.toFixed(3)} ${r.signal ? '→ 신호' : r.rs ? `대기 ${r.rs.days}일` : '종료'}`);
+      if (r.signal) { const now = new Date(); await tg(renderReentry(r.signal, b.d, { kst: fmt('Asia/Seoul', now), et: fmt('America/New_York', now) })); }
+    }
+    return true;
+  }
+  return false;
+}
+
+// 1.2.0: 고장 알림 — 시세·전송이 RB_FAIL_ALERT회 연속 실패하면 한 번 알리고, 다시 되면 한 번 알림
+async function guarded(S) {
+  try {
+    const worked = await tick(S);
+    if (worked && S.fail) {
+      if (S.failAlerted) { try { await tg(`✅ 리스크 보드 복구 — ${S.fail}회 실패 뒤 다시 받고 있습니다.`); } catch (e) { log('복구 알림 실패', e.message); } }
+      S.fail = 0; S.failAlerted = false;
+  // 설치·재시작 직후: 마지막 장 종가가 TRIGGER면 거기서부터 재진입 후보를 기다림(장중에 놓친 TRIGGER 보완)
+  if (REENTRY && !S.reentry) {
+    try { const b = await board(null, '', CLOSE); if (b.raw.stage === 'TRIGGER') { S.reentry = { trigDate: etDateOf(b.q.SPX.t), days: 0, done: false }; save(S); log('마지막 종가 TRIGGER — 재진입 대기 시작', S.reentry.trigDate); } }
+    catch (e) { log('시작 확인 실패', e.message); }
+  }
+    }
+  } catch (e) {
+    S.fail = (S.fail || 0) + 1; S.lastErr = String(e.message || e).slice(0, 120);
+    log('오류', S.fail + '회 연속', S.lastErr);
+    if (FAIL_ALERT > 0 && S.fail >= FAIL_ALERT && !S.failAlerted) {
+      try { await tg(`⚠ 리스크 보드 고장 — ${S.fail}회 연속 실패\n마지막 오류: ${S.lastErr}\n복구될 때까지 단계 알림이 멈춥니다. 확인: journalctl -u riskboard -n 50`); S.failAlerted = true; }
+      catch (e2) { log('고장 알림 실패', e2.message); }
+    }
   }
 }
 
 async function main() {
   if (ARGS.has('--once') || ARGS.has('--send')) {
+    loadShared();
     const S = load();
     const b0 = await board(null, '', LIVE);
     const stg = S.stage || b0.raw.stage;
@@ -151,11 +208,18 @@ async function main() {
     if (ARGS.has('--send')) { await tg(b.text); console.log('\n텔레그램으로 보냈습니다.'); }
     return;
   }
-  log(`riskboard ${VERSION} 시작 · ${POLL_MIN}분 간격 · 하향 확인 ${DOWN_CONFIRM}회 · 상태 ${STATE_FILE}`);
+  log(`riskboard ${VERSION} 시작 · ${POLL_MIN}분 간격 · 하향 확인 ${DOWN_CONFIRM}회 · 재진입 ${REENTRY ? '켬' : '끔'} · 고장 알림 ${FAIL_ALERT || '끔'} · 상태 ${STATE_FILE}`);
   if (!TOKEN || !CHAT) log('경고: 텔레그램 토큰/채팅 ID 없음');
+  saveShared();
   const S = load();
+  S.fail = 0; S.failAlerted = false;
+  // 설치·재시작 직후: 마지막 장 종가가 TRIGGER면 거기서부터 재진입 후보를 기다림(장중에 놓친 TRIGGER 보완)
+  if (REENTRY && !S.reentry) {
+    try { const b = await board(null, '', CLOSE); if (b.raw.stage === 'TRIGGER') { S.reentry = { trigDate: etDateOf(b.q.SPX.t), days: 0, done: false }; save(S); log('마지막 종가 TRIGGER — 재진입 대기 시작', S.reentry.trigDate); } }
+    catch (e) { log('시작 확인 실패', e.message); }
+  }
   for (let n = 1; ; n++) {
-    try { await tick(S); } catch (e) { log('오류', e.message); }
+    await guarded(S);
     if (E.RB_MAX_TICKS && n >= +E.RB_MAX_TICKS) break;
     await sleep(+(E.RB_TICK_MS || 60e3));
   }
