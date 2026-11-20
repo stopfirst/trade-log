@@ -754,4 +754,43 @@ module.exports = {
     A.eq(F + 'Off', { ed: 'INPUT', max: 80, A: true, detail: { v135: true, v136: false } });
     A.eq(F + 'docScroll', false);
   } },
+  /* v137: '아침 전망' 페이지 시험판 — 메뉴·2열/1열·그 자리 입력 자동 저장·양식 넣기(덮어쓰기 없음)·전날 글 복사·바이어스·확신도·무효 조건·채점·어제 채점 줄·IME·잠금·
+     이미지(붙여넣기·파일·축소 webp·라벨·순서·삭제 확인·라이트박스)·TradingView(링크 카드/미리보기)·Storage 대기→올림·다른 기기 signed URL·payload base64 없음·병합·?v137=0 */
+  t137: { check(A, o) {
+    const W = 'w1440.', K = 'w390.', F = 'off1440.';
+    for (const P of [W, K]) { A.eq(P + 'Nav', { after: 'weekly', label: '아침 전망', active: true, n: 7, vis: true, clip: false, inView: true, title: '아침 전망' }); A.eq(P + 'Yd.row', { d: '2026-10-30', vis: true, chips: 3 }); A.eq(P + 'docScroll', false); }
+    A.eq(W + 'Lay', { side: true, below: false, sticky: 'sticky', fs: 17, date: '2026-10-31' });
+    A.eq(W + 'Yd.grade', 'hit'); A.eq(W + 'Yd.done', true); A.eq(W + 'Yd.text', true);
+    A.eq(W + 'Typ.mid', '입력 중…'); A.eq(W + 'Typ.line', 'Long bias 유지'); A.eq(W + 'Typ.bias', 'long'); A.eq(W + 'Typ.text', '기존 메모 첫 줄\nSPX 6850'); A.has(W + 'Typ.st', '저장됨'); A.eq(W + 'Typ.grew', true);
+    A.eq(W + 'Tpl', { keep: true, has: true, sep: true, focus: true });
+    A.eq(W + 'More', { conf: 4, inval: 'NDX 25000 회복', sum: '확신 4 · 무효 조건 있음', blur: 'BODY' });
+    A.eq(W + 'Grade', { g: 'miss', why: '갭 상승' });
+    A.eq(W + 'Ime', { comp: true, focus: 'line', saved: 'Long bias 유지', comp2: false, v: 'Long bias 유지숏', blur: 'BODY', n: 1 });
+    A.eq(W + 'Lock', { busy: true, has: true }); A.eq(W + 'Re', { focus: true, end: true, saved: true });
+    A.eq(W + 'Img.p1', { prevented: true, same: null }); A.eq(W + 'Img.p2', { prevented: true, same: true }); A.eq(W + 'Img.txt', false);
+    A.eq(W + 'Img.n', 3); A.eq(W + 'Img.kinds', 'img,img,img');
+    A.eq(W + 'Img.idb', [{ w: 2000, h: 1000, type: 'image/webp', up: 0 }, { w: 2000, h: 1000, type: 'image/webp', up: 0 }, { w: 800, h: 500, type: 'image/webp', up: 0 }]);
+    A.eq(W + 'Img.thumbs', 3); A.eq(W + 'Img.wait', ['클라우드 대기', '클라우드 대기', '클라우드 대기']); A.has(W + 'Img.cloudLine', '클라우드 대기 3장'); A.has(W + 'Img.cloudLine', '이 기기에는 저장됨');
+    A.eq(W + 'Img.cerr', '저장소 버킷 없음(SQL 실행 전)'); A.eq(W + 'Img.noB64', true); A.eq(W + 'Img.paths', '');
+    if (!(o.w1440.Img.chars < 3000)) A.fail('w1440 전망 payload 가 작아야 함(경로만): ' + o.w1440.Img.chars);
+    A.eq(W + 'Lab', 'NDX 일봉'); A.eq(W + 'Ord', 1); A.eq(W + 'OrdDom', 1);
+    A.eq(W + 'Del', { ask: true, keep: 3, n: 2, gone: true, idb: 2 });
+    A.eq(W + 'Tv', { tv: 'https://www.tradingview.com/x/AbCdEf12/', card: { href: 'https://www.tradingview.com/x/AbCdEf12/', vis: true }, st: 'TradingView', input: '', ok: { nw: 320, src: 'https://s3.tradingview.com/snapshots/z/Zx9yW8vU.png' }, s3: 'https://s3.tradingview.com/snapshots/z/Zx9yW8vU.png' });
+    A.eq(W + 'Lb', { a: { txt: '2 / 3 · NDX 일봉', blob: true, nw: 2000, fit: true }, b: { txt: '3 / 3 · TradingView', blob: false, nw: 320, fit: true }, c: { txt: '2 / 3 · NDX 일봉', blob: true, nw: 2000, fit: true }, closed: true });
+    A.eq(W + 'Up.rls', '저장소 권한 없음(SQL 정책 확인)'); A.eq(W + 'Up.res', 'ok:2'); A.eq(W + 'Up.cloud', [1, 1]); A.eq(W + 'Up.path', true);
+    A.eq(W + 'Up.mock', [{ type: 'image/webp', upsert: 'true', auth: 'Bearer tok', big: true }, { type: 'image/webp', upsert: 'true', auth: 'Bearer tok', big: true }]);
+    A.eq(W + 'Up.st', ['클라우드 ✓', '클라우드 ✓', 'TradingView', 'TradingView']); A.eq(W + 'Up.line', '클라우드 ✓ 모두 올라감'); A.eq(W + 'Up.idb', [1, 1]);
+    A.eq(W + 'Dl', { sign: 1, get: 1, shown: true, idb: { remote: true, up: 1 } });
+    A.eq(W + 'Chk', { ok: true, b64: true, bad: true, vp: '백업 형식 오류 · 아침 전망 이미지 경로' });
+    A.eq(W + 'Merge', { text: 'T-pc', line: 'L-mobile', label: 'PC 라벨', bGone: true, nd: true, at: 6 });
+    A.eq(W + 'Fresh', { maps: true, label: '아침 전망', user: true });
+    A.eq(W + 'Copy', { date: '2026-11-01', en: true, yd: false, same: true, noGrade: true, ui: true, dis: true });
+    A.eq(W + 'Days', ['2026-11-01', '2026-10-31', '2026-10-30', '2026-10-29']); A.eq(W + 'Days2', { date: '2026-10-30', line: '숏 우세, 반등 실패', grade: 'hit' });
+    A.eq(W + 'Reload', { line: 'Long bias 유지숏', bias: 'long', conf: 4, inval: 'NDX 25000 회복', grade: 'miss', why: '갭 상승', draft: true, imgs: 4, lab: 'NDX 일봉', ui: true, thumbs: 2, y30: 'hit' });
+    A.eq(W + 'dbg', { on: true, page: 'v137', written: 4, b64: false, imgs: { total: 4, img: 2, tv: 2, cloud: 2, waiting: 0 }, logged: true });
+    A.eq(K + 'Lay', { side: false, below: true, sticky: 'static', fs: 16, date: '2026-10-31' });
+    A.eq(K + 'Lay2', []); A.eq(K + 'Lay2b', []); A.eq(K + 'Typ', { line: '모바일 한줄', bias: 'short', text: '모바일 글' });
+    A.eq(K + 'Img', { n: 1, fit: { in: true, below: true }, wait: '클라우드 대기 · 클라우드 로그인 전' }); A.eq(K + 'Lb', { fit: true, close: true, closed: true });
+    A.eq(F + 'Off', { nav: false, page: false, on: false, title: '대시보드', kept: true, weekly: true }); A.eq(F + 'docScroll', false);
+  } },
 };
