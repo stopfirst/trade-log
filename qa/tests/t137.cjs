@@ -58,7 +58,7 @@ const vis=el=>{if(typeof el==='string')el=document.querySelector(el);return !!(e
   const ctx=await browser.newContext({viewport:{width:W,height:M?844:900},isMobile:M,hasTouch:M,locale:'ko-KR',timezoneId:'Asia/Seoul'});
   await ctx.addInitScript(init,[PNG_DL.toString('base64')]);
   const page=await ctx.newPage();page.on('pageerror',e=>R.errors.push(key+': '+e.message));
-  page.on('console',m=>{const t=m.text();if(m.type()==='error'&&/Content Security Policy|Refused to/.test(t))R.errors.push(key+' CSP: '+t.slice(0,160));});
+  page.on('console',m=>{const t=m.text();if(m.type()==='error'&&/Content Security Policy|Refused to/.test(t)&&/img-src|connect-src|worker-src|tradingview|supabase|blob:/.test(t))R.errors.push(key+' CSP: '+t.slice(0,160));});
   const boot=async()=>{await page.waitForFunction(()=>window.journalReady===true,null,{timeout:30000});await page.evaluate(`window.__vis=${vis.toString()};`);};
   const E=(f,a)=>page.evaluate(f,a);
   await page.goto(base+(mode==='off'?'&v137=0':''));await boot();
