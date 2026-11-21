@@ -1,4 +1,4 @@
-/* v139 QA — 아침 전망 자동 양식 + 등락률 자동 반영. 모의 HL·모의 CNBC(quote.cnbc.com·ts-api.cnbc.com 은 window.fetch 모의가 답함) — 외부 연결 없음.
+/* v139 QA (v140 뒤로는 &v140=0 — 16:00 ET 기준 v139 동작 검사) — 아침 전망 자동 양식 + 등락률 자동 반영. 모의 HL·모의 CNBC(quote.cnbc.com·ts-api.cnbc.com 은 window.fetch 모의가 답함) — 외부 연결 없음.
    1440 HL: 빈 날 자동 양식(저장 안 된 보기·값 채움·못 받은 종목 (±x.xx%)·굵게) · 기록 chg 저장(asOf·src) · 하루 1회 캐시(다시 안 받음, 새로고침 뒤에도) ·
      바이어스 칩 → 바이어스 줄(미리 채움·쓴 글·다른 말이면 그대로) · 입력하면 양식+글 저장 · 기존 글 자동 변경 없음 · [등락률 채우기] 자리만(코멘트·커서 보존) ·
      [양식 넣기] 새 양식(빈 날 미리 채움 → 저장, 글 있으면 커서 위치에 덧붙임) · 7일 넘은 날은 자동으로 안 받음 · IME 조합 중 채우기 미룸 · 기준일 계산(주말·휴장일) · 형식 검사
@@ -61,7 +61,7 @@ const over=()=>{const pg=document.getElementById('page-v137');const bad=[];pg.qu
    o.docScroll=await E(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1);
    R[key]=o;await ctx.close();return;}
   if(M){
-   const page=await open('journal=hyperliquid');const E=(f,a)=>page.evaluate(f,a);
+   const page=await open('journal=hyperliquid&v140=0');const E=(f,a)=>page.evaluate(f,a);
    await E(()=>{V110.auto=false;setPage('v137');});await page.waitForTimeout(1500);
    o.Fail={pre:await E(()=>v139Test.pristine()),ph:await E(()=>(document.querySelector('#page-v137 .v138-ed').innerText.match(/±x\.xx%/g)||[]).length),
     miss:await E(()=>{const m=document.querySelector('#v139Chg .v139-miss');return m?m.textContent:'';}),saved:await E(()=>{const r=state.v138Outlook&&state.v138Outlook.all[v137Test.today()];return r?Object.keys(r).sort():null;}),
@@ -74,7 +74,7 @@ const over=()=>{const pg=document.getElementById('page-v137');const bad=[];pg.qu
    o.docScroll=await E(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1);
    R[key]=o;await ctx.close();return;}
   /* ===== 1440 ===== */
-  const hl=await open('journal=hyperliquid');const E=(f,a)=>hl.evaluate(f,a);
+  const hl=await open('journal=hyperliquid&v140=0');const E=(f,a)=>hl.evaluate(f,a);
   o.AsOf=await E(()=>({sat:v139Test.asOf('2026-10-31'),mon:v139Test.asOf('2026-11-02'),tue:v139Test.asOf('2026-10-27'),thx:v139Test.asOf('2026-11-27'),ny:v139Test.asOf('2026-01-02'),
    ready:v139Test.ready('2026-10-30'),notYet:v139Test.ready('2026-10-31'),et:new Date(v139Test.etMs('2026-11-20',16,0)).toISOString(),etS:new Date(v139Test.etMs('2026-07-01',16,0)).toISOString()}));
   await E(async()=>{V110.auto=false;state.v138Outlook={all:{'2026-10-29':{text:'x',html:'<div>- <b>SPX(±x.xx%)</b> : 내 코멘트</div><div>- NDX(…) : 둘째</div><div>- MOVE(±x.xx%) : 무브</div><div>- 바이어스 :</div><div>기존 글 끝</div>',textAt:5,updatedAt:5},
