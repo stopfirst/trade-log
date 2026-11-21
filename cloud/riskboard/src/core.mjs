@@ -11,6 +11,7 @@ export const DEFAULTS = {
   TENSION_VIXPCT: 15,   // VIX 전일비 ≥ +% → 긴장
   FRACTURE_VVIX: 110, FRACTURE_VVIXPCT: 20, FRACTURE_SPX: -1.0,
   TRIGGER_VIX: 28, TRIGGER_VIXPCT: 20, TRIGGER_SPX: -2.0, TRIGGER_VVIX: 120, TRIGGER_3M: -3,
+  MOVE_PCT: 10,         // 1.2.1: MOVE 전일비 ≥ +% → 핵심 신호에 MOVE(금리 변동성). 원본 11-20 +10.70%에 표시 · 근사치
 };
 
 const r1 = x => Math.round(x * 10) / 10;
@@ -68,8 +69,11 @@ export function rawStage(d, T = DEFAULTS) {
   if (fVvix || d.vvix >= T.TENSION_VVIX) sig.push('VVIX');
   if (d.vixPct >= T.TENSION_VIXPCT) sig.push('VIX↑');
   if (fSpx) sig.push('SPX');
+  const fMove = d.movePct >= T.MOVE_PCT;
+  if (fMove) sig.push('MOVE');
   const stage = trigger ? 'TRIGGER' : fracture ? 'FRACTURE' : tension ? 'TENSION' : 'STABLE';
-  const core = stage === 'TRIGGER' ? 'BACKWARDATION' : (sig.join(' + ') || '—');
+  // TRIGGER: 원본은 'BACKWARDATION'에 교차자산 신호만 덧붙임(11-20 마감 'BACKWARDATION + MOVE')
+  const core = stage === 'TRIGGER' ? ['BACKWARDATION', ...(fMove ? ['MOVE'] : [])].join(' + ') : (sig.join(' + ') || '—');
   return { stage, structure: st, core };
 }
 

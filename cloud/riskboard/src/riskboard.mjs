@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULTS, STAGES, STAGE_EMOJI, STAGE_KO, derive, rawStage, step, trend, render, esc, reentryClose, renderReentry } from './core.mjs';
 
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 const E = process.env;
 const ARGS = new Set(process.argv.slice(2));
 const T = { ...DEFAULTS };
@@ -17,6 +17,8 @@ const POLL_MIN = Number(E.RB_POLL_MIN || 5);
 const DOWN_CONFIRM = Number(E.RB_DOWN_CONFIRM || 3);
 const PERSIST_MIN = Number(E.RB_PERSIST_MIN || 10);
 const CLOSE_REPORT = (E.RB_CLOSE_REPORT ?? '1') !== '0';
+// 1.2.1: 마감 보드 시각(ET) — 원본처럼 16:55. VIX 계열 지수는 16:15에 끝나므로 그 직후는 값이 덜 굳을 수 있음
+const CLOSE_AT = (([h, m]) => +h * 60 + +m)(String(E.RB_CLOSE_AT || '16:55').split(':'));
 const STATE_FILE = E.RB_STATE || '/var/lib/riskboard/state.json';
 // 1.2.0: 서비스가 쓰는 기준값을 공유 파일로 남김 → 텔레그램 /risk(--once, .env를 못 읽는 trade-alert)도 같은 기준·확정 단계로 보드를 만듦
 const SHARED_FILE = path.join(path.dirname(STATE_FILE), 'config.json');
@@ -46,12 +48,29 @@ async function yahoo(sym, interval, range) {
   throw err;
 }
 
+// 1.2.1: 전일 종가는 일봉에서 직접 계산. 5분봉 meta의 previousClose/chartPreviousClose는 지수에 따라 이틀 전 값이 섞여
+// (2026-11-20 VVIX 118.37·MOVE 97.9로 계산 → 원본 +8.60%·+10.70%와 어긋남) 등락률이 틀렸음. 날짜별로 캐시.
+const prevCache = {};
+async function prevClose(sym, today, fallback) {
+  const c = prevCache[sym];
+  if (c && c.date === today) return c.prev;
+  try {
+    const d = await yahoo(sym, '1d', '10d');
+    const cl = d.indicators?.quote?.[0]?.close || [];
+    let prev = NaN;
+    (d.timestamp || []).forEach((ts, i) => { if (etDateOf(ts) < today && Number.isFinite(cl[i])) prev = cl[i]; });
+    if (Number.isFinite(prev)) { prevCache[sym] = { date: today, prev }; return prev; }
+  } catch (e) { log('전일 종가 실패', sym, e.message); }
+  return fallback;
+}
+
 async function quotes() {
   const out = {};
   await Promise.all(Object.entries(SYM).map(async ([k, s]) => {
     const m = (await yahoo(s, '5m', '1d')).meta;
-    const v = m.regularMarketPrice, prev = m.previousClose ?? m.chartPreviousClose;
+    const v = m.regularMarketPrice;
     if (!Number.isFinite(v)) throw new Error(`${s} 가격 없음`);
+    const prev = await prevClose(s, etDateOf(m.regularMarketTime), m.previousClose ?? m.chartPreviousClose);
     out[k] = { v, prev, t: m.regularMarketTime };
   }));
   return out;
@@ -153,7 +172,7 @@ async function tick(S) {
     return true;
   }
 
-  if ((CLOSE_REPORT || REENTRY) && weekday && et.min >= 16 * 60 + 15 && S.closeSent !== et.date) {
+  if ((CLOSE_REPORT || REENTRY) && weekday && et.min >= CLOSE_AT && S.closeSent !== et.date) {
     const b = await board(S.stage || null, '', CLOSE);
     S.closeSent = et.date; save(S);
     if (etDateOf(b.q.SPX.t) !== et.date) { log('오늘 휴장 — 마감 보고 없음'); return true; }

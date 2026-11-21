@@ -80,3 +80,15 @@ test('재진입 메시지', () => {
   assert.match(t, /재진입 후보/); assert.match(t, /0\.977/); assert.match(t, /비중 작게/); assert.match(t, /1R/);
   assert.doesNotMatch(renderReentry({ trigDate: 'x', days: 5, fast: false, ratio: 0.9 }, d), /비중 작게/);
 });
+
+// ── 1.2.1 원본 11-20 마감: TRIGGER · 'BACKWARDATION + MOVE' ──
+test('11-20 마감 원본: TRIGGER 핵심 신호에 MOVE', () => {
+  const q = Q({ vix: 35.89, vixPrev: 28.44, v3m: 30.94, vvix: 138.03, vvixPrev: 127.1, spxPct: -3.70 });
+  q.movePct = (106.31 / 96.04 - 1) * 100;
+  const r = rawStage(q); assert.equal(r.stage, 'TRIGGER'); assert.equal(r.core, 'BACKWARDATION + MOVE');
+  q.movePct = 2; assert.equal(rawStage(q).core, 'BACKWARDATION');
+});
+test('MOVE 신호는 다른 단계에도 붙음', () => {
+  const q = Q({ vix: 21.37, vixPrev: 19.3, v3m: 21.95, vvix: 106, vvixPrev: 102, spxPct: -1.14 }); q.movePct = 12;
+  assert.equal(rawStage(q).core, 'NEAR_BW + SPX + MOVE');
+});
