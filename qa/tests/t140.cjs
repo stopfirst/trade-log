@@ -1,4 +1,4 @@
-/* v140 QA — 아침 전망 등락률 = 전일 종가(정산가) 기준. 모의 HL·모의 CNBC·모의 Binance(window.fetch 모의) — 외부 연결 없음.
+/* v140 QA (v141 뒤로는 &v141=0 — v140 정산가 기준 동작 검사) — 아침 전망 등락률 = 전일 종가(정산가) 기준. 모의 HL·모의 CNBC·모의 Binance(window.fetch 모의) — 외부 연결 없음.
    1440 HL(토 10-31 12:00 KST, 기준일 10-30 금):
      · 선물 WTI = quote settlePrice(settleDate=D) ÷ 그 월물(altSymbol CLZ26) 일봉 직전 정산가 — 대표 월물(@CL.1) 일봉·5분봉 안 씀
      · GOLD 정산 전(settleDate 가 전날) → '아직: GOLD(정산 전)' + 자리 그대로 → 소스가 정산되면 10분 뒤 자동 다시 확인 → 채움(16:00 ET 대체 없음)
@@ -80,7 +80,7 @@ const LINES=()=>{const t=document.querySelector('#page-v137 .v138-ed').innerText
     src:await E(()=>{const r=state.v138Outlook.all[v137Test.today()];return r&&r.chg&&r.chg.src;}),five:await E(()=>__cn.urls.some(u=>u.includes('/5D.json')))};
    R[key]=o;await ctx.close();return;}
   if(mode==='am'){   /* 토 07:00 KST: 기준일 10-30 은 받을 수 있음, BTC UTC 일봉(10-30)은 09:00 KST 마감 전 */
-   const page=await open('journal=hyperliquid','2026-10-30T22:00:00Z');const E=(f,a)=>page.evaluate(f,a);
+   const page=await open('journal=hyperliquid&v141=0','2026-10-30T22:00:00Z');const E=(f,a)=>page.evaluate(f,a);
    await E(()=>{V110.auto=false;setPage('v137');});await page.waitForTimeout(1600);
    o.Am={lines:await E(()=>window.__lines()),stat:await stat(E),bn:await E(()=>__cn.b),pend:await E(()=>v140Debug().cache.pend),retry:await E(()=>v140Debug().cache.retryAt),
     ready:await E(()=>new Date(v140Test.readyAt('BTC','2026-10-30')).toISOString())};
@@ -89,7 +89,7 @@ const LINES=()=>{const t=document.querySelector('#page-v137 .v138-ed').innerText
     chg:(await rec(E,await E(()=>v137Test.today()))).chg.BTC};
    R[key]=o;await ctx.close();return;}
   if(M){
-   const page=await open('journal=hyperliquid');const E=(f,a)=>page.evaluate(f,a);
+   const page=await open('journal=hyperliquid&v141=0');const E=(f,a)=>page.evaluate(f,a);
    await E(()=>{V110.auto=false;setPage('v137');});await page.waitForTimeout(1800);
    o.Mob={lines:await E(()=>window.__lines()),m:await E(()=>v140Debug().cache.m.BTC),fb:await E(()=>v140Debug().st.btcFallback),stat:await stat(E)};
    o.Lay=await E(()=>window.__over());
@@ -97,7 +97,7 @@ const LINES=()=>{const t=document.querySelector('#page-v137 .v138-ed').innerText
    o.docScroll=await E(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1);
    R[key]=o;await ctx.close();return;}
   /* ===== 1440 토 12:00 KST ===== */
-  const hl=await open('journal=hyperliquid');const E=(f,a)=>hl.evaluate(f,a);
+  const hl=await open('journal=hyperliquid&v141=0');const E=(f,a)=>hl.evaluate(f,a);
   o.Fn=await E(()=>({kind:['SPX','WTI','GOLD','SILVER','DXY','US10Y','BTC','MOVE','VIX'].map(n=>v140Test.kind(n)),
    sess:[v140Test.sess({last_time:'2026-11-20T17:05:00.000-0500'}),v140Test.sess({last_time:'2026-11-20T18:30:00.000-0500'}),v140Test.sess({last_time:'2026-10-30'}),v140Test.sess({last_time:'2026-11-21T10:00:00.000-0500'}),v140Test.sess({last_time:'x'})],
    ready:['WTI','DXY','BTC'].map(n=>new Date(v140Test.readyAt(n,'2026-11-20')).toISOString()),nextT:[v140Test.nextT('2026-11-25'),v140Test.nextT('2026-10-30')]}));

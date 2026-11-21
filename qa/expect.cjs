@@ -866,4 +866,41 @@ module.exports = {
     A.eq(K + 'Mob', { lines: Object.assign({}, L, { BTC: '-3.00%' }), m: 'u5', fb: 1, stat: '등락률: 10/30(금) 전일 종가(정산) 기준 · BTC UTC 일봉 · CNBC · 아직: MOVE(종가 전), GOLD(정산 전)' }); A.eq(K + 'Lay', []);
     A.eq(F + 'Off', { on: false, v139: true, stat: '등락률: 10/30(금) 미국 종가 기준 · CNBC · 못 받음: DXY, MOVE', bn: 0, v139key: true, v140key: false, src: 'cnbc', five: true });
   } },
+  /* v141 아침 전망 등락률 = 트레이딩뷰(TVC) 종가 기준: scanner 일봉 종가 ÷ 전 일봉(새 세션이면 전 봉끼리)·WTI CNBC 근월물 17:00 ET·BTC UTC 일봉·종가 전 → 자동 다시 확인·지난 날짜/실패 시 CNBC 대체(GOLD·SILVER 제외)·예전 chg 보존·?v141=0 */
+  t141: { check(A, o) { const W = 'w1440.', K = 'w390.', M = 'am1440.', F = 'off1440.';
+    const T = (d, h, m) => new Date(Date.UTC(2026, 10, d, h, m)).toISOString();
+    A.eq(W + 'Fn', { kind: ['t', 'w', 't', 't', 't', 't', 'u', 't', 't', 't'], sess: ['2026-11-20', '2026-11-20', '2026-11-23', '2026-11-20', null],
+      ready: [T(20, 21, 20), T(20, 21, 20), T(20, 22, 5), T(20, 22, 5), T(20, 22, 5), T(21, 0, 2)],
+      times: ['지수·VIX 06:20 · 금·은·DXY·10년물·MOVE·WTI 07:05 · BTC 09:02 KST부터', '지수·VIX 05:20 · 금·은·DXY·10년물·MOVE·WTI 06:05 · BTC 09:02 KST부터'] });
+    const L = { SPX: '-3.70%', VIX: '+26.28%', WTI: '+0.46%', GOLD: '-2.41%', SILVER: '-3.84%', DXY: '±x.xx%', US10Y: '-1.98%', BTC: '-2.00%', MOVE: '+10.69%' };
+    A.eq(W + 'Pre.lines', L); A.eq(W + 'Pre.pristine', true); A.eq(W + 'Pre.stat', '등락률: 10/30(금) 트레이딩뷰(TVC) 종가 기준 · 아직: DXY');
+    A.eq(W + 'Pre.m', { SPX: 't', NDX: 't', DJI: 't', RUT: 't', SOXX: 't', MAGS: 't', VIX: 't', MOVE: 't', US10Y: 't', GOLD: 't', SILVER: 't1', BTC: 'b', WTI: 'w' });
+    A.eq(W + 'Pre.pend', { DXY: '종가 전' }); A.eq(W + 'Pre.why', {}); A.eq(W + 'Pre.fb', []);
+    A.eq(W + 'Pre.px.GOLD', [3537.83, 3625.18]); A.eq(W + 'Pre.px.SILVER', [41.222, 42.8697]); A.eq(W + 'Pre.px.WTI', [84.828, 84.437]);
+    A.eq(W + 'Chg', { src: 'tv-close', asOf: '2026-10-30', WTI: 0.46, GOLD: -2.41, SILVER: -3.84, DXY: false, US10Y: -1.98, VIX: 26.28, MOVE: 10.69, SOXX: -10.55, BTC: -2, noText: true, v141key: true, v140key: false });
+    A.eq(W + 'Net', { tv: 1, tvReq: [{ m: 'POST', ct: 'text/plain;charset=UTF-8', n: 12, cols: 'time,close,close[1],close[2],time[1],time[2],update_mode', cred: 'omit' }], q: 1, qs: ['@CL.1'], b: 1, charts: ['5D.json?symbol=CLZ26'] });
+    A.eq(W + 'Fresh', { lines: Object.assign({}, L, { DXY: '-0.08%' }), stat: '등락률: 10/30(금) 트레이딩뷰(TVC) 종가 기준', dxy: -0.08, tv: 2, m: 't', retry: true });
+    const OLDH = '<div>- <b>SPX(+1.00%)</b> : 내 코멘트</div><div>- WTI(±x.xx%) : 유가</div><div>- GOLD(-9.99%) : 예전 숫자</div>';
+    const FB = ' · 대체(CNBC): SPX, NDX, DJI, RUT, SOXX, MAGS, DXY, VIX, MOVE, US10Y · 못 받음: GOLD, SILVER';
+    A.eq(W + 'Old.chg', { src: 'cnbc-settle', SPX: 1, WTI: 0.5 }); A.eq(W + 'Old.html', OLDH); A.eq(W + 'Old.skip', true); A.eq(W + 'Old.recOld', true);
+    A.eq(W + 'Old.stat', '등락률: 10/28(수) 트레이딩뷰(TVC) 종가 기준' + FB + ' · 저장값은 예전 기준');
+    A.eq(W + 'Old.why', { GOLD: '지난 날짜(트레이딩뷰는 최근 2봉까지만)', SILVER: '지난 날짜(트레이딩뷰는 최근 2봉까지만)' });
+    A.eq(W + 'Fill', { html: OLDH.replace('WTI(±x.xx%)', 'WTI(+1.00%)'), chg: { src: 'tv-close', asOf: '2026-10-28', SPX: 1.25, WTI: 1, GOLD: false, DXY: 0.12 }, stat: '등락률: 10/28(수) 트레이딩뷰(TVC) 종가 기준' + FB });
+    A.eq(W + 'Empty', { src: 'tv-close', asOf: '2026-10-26', WTI: 1.23, noText: true, bias: 'long', lines: { SPX: '-0.40%', VIX: '+3.00%', WTI: '+1.23%', GOLD: '±x.xx%', SILVER: '±x.xx%', DXY: '+0.10%', US10Y: '+0.50%', BTC: '+2.00%', MOVE: '+1.00%' } });
+    A.eq(W + 'Lay', []); A.eq(W + 'dbg.on', true); A.eq(W + 'dbg.ver', 'v141-tvbasis');
+    A.eq(W + 'dbg.hosts', ['https://scanner.tradingview.com', 'https://quote.cnbc.com', 'https://ts-api.cnbc.com', 'https://data-api.binance.vision']);
+    A.eq(W + 'Reload', { net: 0, gold: '-2.41%', stat: '등락률: 10/30(금) 트레이딩뷰(TVC) 종가 기준' });
+    const P0 = { SPX: '±x.xx%', VIX: '±x.xx%', WTI: '±x.xx%', GOLD: '±x.xx%', SILVER: '±x.xx%', DXY: '±x.xx%', US10Y: '±x.xx%', BTC: '±x.xx%', MOVE: '±x.xx%' };
+    A.eq(M + 'Early', { stat: '등락률: 10/30(금) 종가는 지수·VIX 05:20 · 금·은·DXY·10년물·MOVE·WTI 06:05 · BTC 09:02 KST부터', tv: 0, lines: P0 });
+    A.eq(M + 'Am.lines', Object.assign({}, P0, { SPX: '-3.70%', VIX: '+26.28%' }));
+    A.eq(M + 'Am.stat', '등락률: 10/30(금) 트레이딩뷰(TVC) 종가 기준 · 아직: WTI(06:05~), DXY(06:05~), MOVE(06:05~), US10Y(06:05~), BTC(09:02~), GOLD(06:05~), SILVER(06:05~)');
+    A.eq(M + 'Am.retry', '05:40'); A.eq(M + 'Am.tv', 1); A.eq(M + 'Am.q', 0); A.eq(M + 'Am.b', 0);
+    A.eq(M + 'Am2', { lines: Object.assign({}, L, { BTC: '±x.xx%' }), stat: '등락률: 10/30(금) 트레이딩뷰(TVC) 종가 기준 · 아직: DXY, BTC(09:02~)', pend: { DXY: '종가 전', BTC: 'UTC 일봉 마감 전(09:02 KST~)' }, b: 0, chg: { GOLD: -2.41, WTI: 0.46, SPX: -3.7, BTC: false } });
+    A.eq(K + 'Mob.lines', { SPX: '-3.70%', VIX: '+26.20%', WTI: '+0.46%', GOLD: '±x.xx%', SILVER: '±x.xx%', DXY: '-0.05%', US10Y: '-2.02%', BTC: '-2.00%', MOVE: '+10.70%' });
+    A.eq(K + 'Mob.fb', ['SPX', 'NDX', 'DJI', 'RUT', 'SOXX', 'MAGS', 'DXY', 'VIX', 'MOVE', 'US10Y']);
+    A.eq(K + 'Mob.why', { GOLD: '트레이딩뷰 응답 없음(HTTP 500)', SILVER: '트레이딩뷰 응답 없음(HTTP 500)' });
+    A.eq(K + 'Mob.stat', '등락률: 10/30(금) 트레이딩뷰(TVC) 종가 기준' + FB); A.eq(K + 'Mob.qs', ['@CL.1|.SPX|.NDX|.DJI|.RUT|SOXX|MAGS|.DXY|.VIX|.MOVE|US10Y']);
+    A.eq(K + 'Lay', []); A.eq(K + 'docScroll', false);
+    A.eq(F + 'Off', { on: false, v140: true, stat: '등락률: 10/30(금) 전일 종가(정산) 기준 · BTC UTC 일봉 · CNBC', tv: 0, v140key: true, v141key: false, src: 'cnbc-settle' });
+  } },
 };
