@@ -1,4 +1,4 @@
-/* v138 QA — 아침 전망 하나로 합치기 + 서식(굵게·밑줄·글자 크기). 모의 HL·모의 Supabase(REST) — 외부 연결 없음.
+/* (v139: 옛 양식·빈 편집기 전제라 &v139=0 으로 실행) v138 QA — 아침 전망 하나로 합치기 + 서식(굵게·밑줄·글자 크기). 모의 HL·모의 Supabase(REST) — 외부 연결 없음.
    1440 HL(로그인): v137 → v138 이전(HL 기기 v137 + 다른 일지(US) 클라우드 행 v137 → 겹치는 날짜 칸별·진 쪽 글 덧붙임·이미지 합집합·원본 보관·멱등) ·
      같은 브라우저에서 US 일지를 열면 같은 글(기기 공용 사본) · US 에서 고치면 HL 에 반영(BroadcastChannel) · 지운 이미지 안 되살아남 ·
      서식: 선택 → B·U·크기(메뉴) · 선택 없이 B → 이어 쓰는 글자 · 도구줄 상태 · Ctrl+B/Ctrl+U · Ctrl+Z · 저장 html/평문 · 새로고침 뒤 유지 ·
@@ -48,7 +48,7 @@ const over=()=>{const pg=document.getElementById('page-v137');const bad=[];pg.qu
    o.docScroll=await E(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1);
    R[key]=o;await ctx.close();return;}
   if(M){
-   const page=await open('journal=hyperliquid');const E=(f,a)=>page.evaluate(f,a);
+   const page=await open('journal=hyperliquid&v139=0');const E=(f,a)=>page.evaluate(f,a);
    await E(()=>{V110.auto=false;setPage('v137');});await page.waitForTimeout(900);
    o.Bar=await E(()=>{const b=document.querySelector('#page-v137 .v138-fmt');const r=b.getBoundingClientRect();return {vis:window.__vis(b),in:r.right<=innerWidth+1&&r.left>=-1,h:Math.round(r.height),btn:[...b.querySelectorAll('.v138-fb')].map(x=>window.__vis(x)).every(Boolean),hint:window.__vis(b.querySelector('.v138-hint'))};});
    o.Lay=await E(()=>window.__over());
@@ -62,7 +62,7 @@ const over=()=>{const pg=document.getElementById('page-v137');const bad=[];pg.qu
    o.docScroll=await E(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1);
    R[key]=o;await ctx.close();return;}
   /* ===== 1440 ===== */
-  const hl=await open('journal=hyperliquid');const E=(f,a)=>hl.evaluate(f,a);
+  const hl=await open('journal=hyperliquid&v139=0');const E=(f,a)=>hl.evaluate(f,a);
   await E(login,[PRJ,UID]);
   /* HL 기기 v137(10-29 HL만, 10-30 양쪽 · HL 이 오래됨) + US 클라우드 행 v137(10-30 더 새로움, 10-28 US만) */
   await E(async()=>{state.v137Outlook={us:{'2026-10-29':{line:'HL만',bias:'neutral',text:'10/29 HL 글',updatedAt:1000},
@@ -85,7 +85,7 @@ const over=()=>{const pg=document.getElementById('page-v137');const bad=[];pg.qu
   o.Show={ed:await E(()=>document.querySelector('#page-v137 .v138-ed').innerText.includes('US 10/30 글')),line:await E(()=>document.querySelector('#page-v137 input[data-v137-f="line"]').value),
    thumbs:await E(()=>document.querySelectorAll('#v137Imgs [data-v137-im]').length)};
   /* ===== 같은 브라우저 US 일지: 같은 글 ===== */
-  const us=await open('journal=us');const U=(f,a)=>us.evaluate(f,a);
+  const us=await open('journal=us&v139=0');const U=(f,a)=>us.evaluate(f,a);
   await U(login,[PRJ,UID]);await U(()=>{setPage('v137');});await us.waitForTimeout(1500);await U(()=>v137Test.go('2026-10-30'));await us.waitForTimeout(500);
   o.Us={same:await U(()=>JSON.stringify(state.v138Outlook.all['2026-10-30'].text))===JSON.stringify(r30.text),ed:await U(()=>document.querySelector('#page-v137 .v138-ed').innerText.includes('HL 일지에서 합침')),
    dates:await U(()=>Object.keys(state.v138Outlook.all).sort()),line:await U(()=>document.querySelector('#page-v137 input[data-v137-f="line"]').value),

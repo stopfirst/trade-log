@@ -818,4 +818,28 @@ module.exports = {
     A.eq(K + 'Typ.text', '모바일 굵게큰'); A.eq(K + 'Typ.b', true); A.eq(K + 'Typ.xl', true);
     A.eq(F + 'Off', { on: false, ta: true, ed: false, foot: true, line: 'v137 원본', kept: '<div><b>공용</b> 글</div>' });
   } },
+  /* v139 아침 전망 자동 양식(빈 날 미리 채움·저장 안 된 보기·글 있으면 안 건드림) + 등락률(CNBC 모의: 현물 quote·24시간 5분봉 16:00 ET·금 일봉 대체·캐시·[등락률 채우기] 자리만·바이어스 줄) · 실패 표시 · ?v139=0 */
+  t139: { check(A, o) { const W = 'w1440.', K = 'w390.', F = 'off1440.';
+    A.eq(W + 'AsOf', { sat: '2026-10-30', mon: '2026-10-30', tue: '2026-10-26', thx: '2026-11-25', ny: '2025-12-31', ready: true, notYet: false, et: new Date(Date.UTC(2026, 10, 20, 21)).toISOString(), etS: new Date(Date.UTC(2026, 6, 1, 20)).toISOString() });
+    A.eq(W + 'Pre', { pristine: true, spx: true, hdr: 5, move: true, lines: ['1. 지수', '- SPX(-3.70%) :', '- NDX(-5.61%) :'], wti: true, gold: true, us10y: true, btc: true, silver: true, dxy: true, vix: true, soxx: true, mm: true, plan: true, bias: true, empty: false });
+    A.eq(W + 'Chg', { asOf: '2026-10-30', src: 'cnbc', spx: -3.7, n: 13, move: false, noText: true, written: ['2026-10-29', '2026-10-28'], m: { SPX: 'q', WTI: 'i', GOLD: 'i', BTC: 'i', US10Y: 'i', SILVER: 'i', DXY: 'd', move: '기준일 일봉 아직 없음' }, stat: '등락률: 10/30(금) 미국 종가 기준 · CNBC · 못 받음: MOVE', hdr: 0 });
+    A.eq(W + 'Net', { first: { q: 1, c: 8 }, again: { q: 1, c: 8 } });
+    A.eq(W + 'Bias', { pre: true, still: true, noText: true, bias: 'short' });
+    A.eq(W + 'Typ', { line: '- SPX(-3.70%) : 반등 실패', bold: true, biasLine: true, pristine: false, head: '1. 지수', plan: true });
+    A.eq(W + 'Bias2', { text: true, keep: true });
+    A.eq(W + 'Exist', { same: true, pristine: false, chg: '2026-10-28', dom: true });
+    A.eq(W + 'Fill.text', '- SPX(+1.25%) : 내 코멘트\n- NDX(+0.90%) : 둘째\n- MOVE(+2.50%) : 무브\n- 바이어스 :\n기존 글 끝');
+    A.eq(W + 'Fill.html', '<div>- <b>SPX(+1.25%)</b> : 내 코멘트</div><div>- NDX(+0.90%) : 둘째</div><div>- MOVE(+2.50%) : 무브</div><div>- 바이어스 :</div><div>기존 글 끝</div>');
+    A.eq(W + 'Fill.caret', { node: '기존 글 끝', off: 2, focus: true }); A.eq(W + 'Fill.chg', { asOf: '2026-10-28', SPX: 1.25, NDX: 0.9, MOVE: 2.5 }); A.eq(W + 'Fill.stat', '등락률: 10/28(수) 미국 종가 기준 · CNBC');
+    A.eq(W + 'Bias3', '<div>- 바이어스 : 내 생각</div>');
+    A.eq(W + 'Tpl', { pre: true, spx: true, saved: true, bold: 24, first: ['1. 지수', '- SPX(-0.40%) :', '- NDX(+0.10%) :'], once: 1, last: ['5. 매매계획 및 총평', '- 바이어스 :', '- '], append: true });
+    A.eq(W + 'Old', { net: 0, ph: 14, pre: true, stat: '등락률: 10/19(월) 미국 종가 기준 · [등락률 채우기]로 받기', rec: null });
+    A.eq(W + 'Ime', { comp: true, defer: true, done: true });
+    A.eq(W + 'Fn', { rep: { html: '<div>- <b>SPX(-3.70%)</b> : a (SPX 6800)</div><div>NDX(+1.23%) b · RUT(-1.00%) c · XSPX(…)</div>', n: 2, miss: [] }, bias: { html: '<div>- <b>바이어스</b> : 롱 우세</div><div>- 바이어스 : 내 말</div>', n: 1 }, fmt: ['0.00%', '+1.50%', '0.00%'], chk: { ok: true, bad: true, bad2: true } });
+    A.eq(W + 'dbg', { on: true, syms: 14, hosts: ['https://quote.cnbc.com', 'https://ts-api.cnbc.com'] }); A.eq(W + 'Lay', []);
+    A.eq(W + 'Reload', { net: 0, today: true, chg: -3.7, stat: '등락률: 10/30(금) 미국 종가 기준 · CNBC · 못 받음: MOVE' });
+    A.eq(K + 'Fail', { pre: true, ph: 14, miss: '· 못 받음: 14종목(소스 응답 없음 · [등락률 채우기]로 다시)', saved: null, net: true });
+    A.eq(K + 'Lay', []); A.eq(K + 'Tools', { in: true, btn: true }); A.eq(K + 'Typ', { start: true, end: true });
+    A.eq(F + 'Off', { on: false, v138: true, empty: true, btn: false, chgLine: false, net: 0, tpl: true, kept: -1.5 });
+  } },
 };
