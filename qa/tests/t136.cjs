@@ -47,7 +47,7 @@ const csvParse=s=>{const rows=[];let row=[],f='',q=false;for(let i=0;i<s.length;
  else if(c==='"')q=true;else if(c===','){row.push(f);f='';}else if(c==='\n'){row.push(f);rows.push(row);row=[];f='';}else f+=c;}row.push(f);rows.push(row);return rows;};
 (async()=>{
  const browser=await chromium.launch({args:['--no-sandbox']});const R={tag,errors:[]};
- const base='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid';
+ const base='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid&v142=0';  /* v142: '손실 유형' 열은 t142 — 여기선 v136 열 구성 그대로 */
  const one=async([W,mode])=>{
   const key=(mode==='on'?'w':'off')+W,o={};const M=W<500;
   const ctx=await browser.newContext({viewport:{width:W,height:M?844:900},isMobile:M,hasTouch:M,bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul'});

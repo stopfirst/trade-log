@@ -77,7 +77,7 @@ const vis=sel=>{const el=typeof sel==='string'?document.querySelector(sel):sel;r
     meta:(document.querySelector('#v63Week .card-head .meta')||{}).textContent||''};});
   /* 거래 기록 표 '과정' 열 */
   o.Rec=await E(async()=>{setPage('records');renderAll();await new Promise(r=>setTimeout(r,800));const rows=[...document.querySelectorAll('.record-desktop tbody tr')].filter(window.__vis);
-   return {n:rows.length,proc:rows.map(r=>{const td=r.querySelectorAll('td:not(.v135-td)')[6];return td?td.textContent.trim():null;}).sort()};});
+   return {n:rows.length,proc:rows.map(r=>{const td=r.querySelectorAll('td:not(.v135-td):not(.v142-td)')[6];return td?td.textContent.trim():null;}).sort()};});
   o.docScroll=await E(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1);
   R[key]=o;await ctx.close();};
  await Promise.all([one([1440,'on']),one([390,'on']),one([1440,'off'])]);
