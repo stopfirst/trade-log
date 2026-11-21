@@ -903,4 +903,30 @@ module.exports = {
     A.eq(K + 'Lay', []); A.eq(K + 'docScroll', false);
     A.eq(F + 'Off', { on: false, v140: true, stat: '등락률: 10/30(금) 전일 종가(정산) 기준 · BTC UTC 일봉 · CNBC', tv: 0, v140key: true, v141key: false, src: 'cnbc-settle' });
   } },
+  /* v142: 손실 유형(lossType A~F) — 손실로 끝난 거래만 칩(표 '순손익' 다음 열·모바일 카드·상세 '피할 수 있던 실수' 다음), 단일 선택·다시 누르면 해제·누른 자리 반영(상세 안 열림),
+     E 제안(v99 복수매매 의심·연패 후 진입) 표시만, 주간 복기 표(유형별 횟수·R 합·미분류·쓸데없는 R 비율·다음 주 과제 후보), CSV 칸, 새로고침 유지, 형식 검사, 일지 빈 칸·복기 필요 불변, ?v142=0 = v141 */
+  t142: { check(A, o) {
+    const W = 'w1440.', K = 'w390.', F = 'off1440.';
+    const TY = ['A 계획된 손실', 'B 역추세', 'C 선진입', 'D 셋업 밖', 'E 복구 매매', 'F 실행 실수'];
+    A.eq(W + 'dbg', { on: true, field: 'lossType', types: TY, losses: 4, lossUnclassified: 4, suggestE: ['L2'] });
+    A.eq(W + 'T', { th: ['종목 / 셋업', '한줄평가', '진입일', '진입 방식', '상태', '실현 R', '순손익', '손실 유형', '과정', '차트'], rows: 6, cells: ['L1', 'L2', 'L3', 'L4'], titleA: true, over: false });
+    A.eq(W + 'L2a', { on: [], sug: ['E'], n: 6, st: 'E 제안 미분류' }); A.eq(W + 'L2v', 'undef');
+    A.eq(W + 'P1', { dlg: false, v: 'C', box: { on: ['C'], sug: [], n: 6, st: 'C 선진입' } });
+    A.eq(W + 'P2', { v: null, box: { on: [], sug: [], n: 6, st: '미분류' } });
+    A.eq(W + 'P3', { L1: 'B', L2: 'E', L2box: { on: ['E'], sug: [], n: 6, st: 'E 복구 매매' }, dlg: false });
+    A.eq(W + 'D', { vis: true, afterAv: true, inJ: true, n: 6, labels: TY, hint: true, crit: true, cols: 2, efLast: true, fit: true, v1: 'D', on1: ['D'], dlg: true, v2: null, v3: 'F', cell: { on: ['F'], sug: [], n: 6, st: 'F 실행 실수' } });
+    A.eq(W + 'Wd', false);
+    A.eq(W + 'All', { L1: 'B', L2: 'E', L3: 'F', L4: 'A', W: 'undef', OPEN: 'undef' });
+    A.eq(W + 'Gaps', true);
+    A.eq(W + 'Wk', { vis: true, rows: [['A 계획된 손실', '1', '-4.2R'], ['B 역추세', '1', '-2.2R'], ['C 선진입', '0', '—'], ['D 셋업 밖', '0', '—'], ['E 복구 매매', '1', '-1.2R'], ['F 실행 실수 다음 주 과제 후보', '1', '-3.2R'], ['미분류', '0', '—']],
+      top: ['F 실행 실수 다음 주 과제 후보'], ratio: '61%', task: '다음 주 과제 후보: F 실행 실수 -3.2R', over: false });
+    A.eq(W + 'WkDbg.top', 'F'); A.eq(W + 'WkDbg.uncls', 0); A.near(W + 'WkDbg.ratio', 6.6 / 10.8, 1e-6);
+    A.eq(W + 'Csv', { after: '한줄평가', i: true, vals: ['A', 'B', 'E', 'F'] });
+    A.eq(W + 'Shape', ['err', 'err', 'ok', 'ok']);
+    A.eq(W + 'Reload', { L1: 'B', L2: 'E', L3: 'F', L4: 'A', L1box: { on: ['B'], sug: [], n: 6, st: 'B 역추세' } });
+    A.eq(K + 'K', { ids: ['L1', 'L2', 'L3', 'L4'], vis: true, over: false, chipOut: false, sug: ['E'], v: 'F', dlg: false, box: { on: ['F'], sug: [], n: 6, st: 'F 실행 실수' }, v2: null,
+      d: { vis: true, cols: 1, fit: true, sugLine: true, bad: [] }, dv: 'E', wk: { vis: true, rows: 2, over: false } });
+    A.eq(F + 'dbg.on', false);
+    A.eq(F + 'Off', { th: false, cells: 0, L1: 'B', detail: false, csv: false, week: false });
+  } },
 };
