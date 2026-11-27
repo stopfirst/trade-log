@@ -29,6 +29,12 @@ test('11-16 10:30 ET 원본: NEAR_BW + SPX → FRACTURE · VIX/3M 0.974 🔴', (
   const r = rawStage(d); assert.equal(r.structure, 'NEAR_BACKWARDATION'); assert.equal(r.stage, 'FRACTURE'); assert.equal(r.core, 'NEAR_BW + SPX');
   assert.equal(lights(d).ratio, '🔴');
 });
+test('11-27 11:23 ET: BW + VVIX 110 하락·SPX 상승 → FRACTURE 아님(1.2.2)', () => {
+  const r = rawStage(Q({ vix: 25.50, vixPrev: 26.80, v3m: 24.9, vvix: 110.1, vvixPrev: 115.3, spxPct: 1.22 }));
+  assert.equal(r.structure, 'BACKWARDATION'); assert.equal(r.stage, 'TENSION'); assert.equal(r.core, 'BACKWARDATION');
+  // 같은 수준이라도 VVIX가 오르는 중이면 균열
+  assert.equal(rawStage(Q({ vix: 25.50, v3m: 24.9, vvix: 110.1, vvixPrev: 108, spxPct: 0.2 })).stage, 'FRACTURE');
+});
 test('NEAR_BW만(VVIX·SPX 약함) = TENSION', () => {
   assert.equal(rawStage(Q({ vix: 21, v3m: 21.8, vvix: 105, spxPct: -0.5 })).stage, 'TENSION');
 });

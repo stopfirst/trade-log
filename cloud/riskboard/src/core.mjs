@@ -55,7 +55,10 @@ export function lights(d) {
 export function rawStage(d, T = DEFAULTS) {
   const st = structure(d.ratio, T);
   const bw = st === 'BACKWARDATION';
-  const fVvix = d.vvix >= T.FRACTURE_VVIX || d.vvixPct >= T.FRACTURE_VVIXPCT;
+  // 1.2.2: VVIX 수준은 '오르는 중'(전일비 ≥ 0)일 때만 균열로 셈. 11-27 11:23 ET VVIX 110(−4.5%)·VIX −4.9%·SPX +1.2%에
+  // 110을 살짝 넘었다는 이유만으로 FRACTURE가 켜짐 → 가짜 신호. 급등(전일비 ≥ +20%)은 수준과 무관하게 그대로.
+  const vvixUp = !(d.vvixPct < 0);
+  const fVvix = (d.vvix >= T.FRACTURE_VVIX && vvixUp) || d.vvixPct >= T.FRACTURE_VVIXPCT;
   const fSpx = d.spxPct <= T.FRACTURE_SPX;
   // 1.1.0: 원본 봇(2026-11-16 10:30 ET) = NEAR_BW + SPX에서도 FRACTURE → 백워데이션 '근접'부터 균열로 봄
   const fracture = st !== 'CONTANGO' && (fVvix || fSpx);
@@ -66,7 +69,7 @@ export function rawStage(d, T = DEFAULTS) {
   const tension = st !== 'CONTANGO' || d.vvix >= T.TENSION_VVIX || d.vixPct >= T.TENSION_VIXPCT;
   const sig = [];
   if (bw) sig.push('BACKWARDATION'); else if (st === 'NEAR_BACKWARDATION') sig.push('NEAR_BW');
-  if (fVvix || d.vvix >= T.TENSION_VVIX) sig.push('VVIX');
+  if (fVvix || (d.vvix >= T.TENSION_VVIX && vvixUp)) sig.push('VVIX');
   if (d.vixPct >= T.TENSION_VIXPCT) sig.push('VIX↑');
   if (fSpx) sig.push('SPX');
   const fMove = d.movePct >= T.MOVE_PCT;
