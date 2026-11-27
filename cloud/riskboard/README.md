@@ -12,7 +12,7 @@ trade-alert와 같은 봇·같은 방을 쓰지만 별도 서비스입니다(보
 | 🔴 TRIGGER | FRACTURE + (VIX ≥ 28 또는 VIX% ≥ +20) + SPX ≤ −2.0% + (VVIX ≥ 120 또는 3M−VIX ≤ −3) |
 
 - 올라갈 때는 즉시, 내려갈 때는 3번 연속(약 15분) 낮아야 바뀜 → 깜빡임 방지.
-- 보내는 때: 단계가 바뀔 때, TRIGGER가 10분 이어질 때 한 번, 16:55 ET 종가 보드(1.2.1, 원본과 같은 시각).
+- 보내는 때: 단계가 바뀔 때(1.2.3부터 TENSION·FRACTURE로 오를 땐 5분 간격 2회 연속 확인, TRIGGER는 즉시, 내려갈 땐 3회 연속), TRIGGER가 10분 이어질 때 한 번, 16:55 ET 종가 보드(1.2.1, 원본과 같은 시각).
 - 🟢 재진입 후보(1.2.0): TRIGGER가 난 다음 거래일부터 VIX/3M 종가가 1 미만인 첫날 마감 뒤 한 번 → 다음 거래일 시가 진입 후보(2026-11-10 백테스트). TRIGGER 뒤 3거래일 안이면 '비중 작게' 표시. TRIGGER가 다시 나면(장중·종가) 처음부터 셈. 설치·재시작 때 마지막 종가가 TRIGGER면 거기서부터 셈. 60거래일 안에 안 나오면 접음.
 - ⚠ 고장 알림(1.2.0): 시세·전송이 3번 연속 실패하면 한 번, 다시 되면 ✅ 한 번.
 - 텔레그램 /risk(trade-alert)는 1.2.0부터 서비스와 같은 기준값(/var/lib/riskboard/config.json)과 확정 단계(state.json)로 보드를 만듦 → 자동 알림과 단계가 일치.
@@ -28,3 +28,10 @@ sudo riskboard-now        # 지금 보드 한 번 받기
 journalctl -u riskboard -f
 ```
 기준값 바꾸기: `sudo nano /opt/riskboard/.env` → `sudo systemctl restart riskboard`. 끄기: `sudo systemctl disable --now riskboard`.
+
+## 1.2.3
+- 상향 확인 `RB_UP_CONFIRM`(기본 2): 한 번 튄 값으로 올라갔다 내려오는 알림 두 번을 막음. TRIGGER는 즉시.
+- 데이터 시각: 보드 바닥에 'VIX 계열 HH:MM ET 기준'. Yahoo의 VIX 계열은 약 15분 지연, SPX는 실시간.
+- 멈춤 감지 `RB_STALE_MIN`(기본 30): 장중 VIX 시세가 30분 넘게 그대로면 단계를 바꾸지 않음(장 시작 직후 전날 값 포함).
+- SKEW는 Yahoo가 하루 한 번 갱신 → 오늘 값이 아니면 날짜를 표시.
+- 조기 폐장일: Yahoo가 준 정규장 종료 시각(예: 13:00 ET)에 폴링 종료.

@@ -80,23 +80,27 @@ export function rawStage(d, T = DEFAULTS) {
   return { stage, structure: st, core };
 }
 
-// 단계 상태기계: 올라갈 땐 즉시, 내려갈 땐 downConfirm 회 연속 낮아야
-// st: {stage, since, lowerCount, lowerMax, persistSent}
-export function step(st, raw, now, downConfirm = 3) {
-  const s = { stage: 'STABLE', since: now, lowerCount: 0, lowerMax: null, persistSent: false, ...st };
+// 단계 상태기계: TRIGGER는 즉시, 그 밖의 상향은 upConfirm 회 연속(1.2.3), 내려갈 땐 downConfirm 회 연속 낮아야
+// st: {stage, since, lowerCount, lowerMax, upCount, upMin, persistSent}
+export function step(st, raw, now, downConfirm = 3, upConfirm = 1) {
+  const s = { stage: 'STABLE', since: now, lowerCount: 0, lowerMax: null, upCount: 0, upMin: null, persistSent: false, ...st };
   const I = x => STAGES.indexOf(x);
   let changed = null;
+  const go = to => {
+    changed = { from: s.stage, to };
+    Object.assign(s, { stage: to, since: now, lowerCount: 0, lowerMax: null, upCount: 0, upMin: null, persistSent: false });
+  };
   if (I(raw) > I(s.stage)) {
-    changed = { from: s.stage, to: raw };
-    Object.assign(s, { stage: raw, since: now, lowerCount: 0, lowerMax: null, persistSent: false });
+    s.lowerCount = 0; s.lowerMax = null;
+    s.upCount = (s.upCount || 0) + 1;
+    s.upMin = s.upMin && I(s.upMin) < I(raw) ? s.upMin : raw;
+    if (raw === 'TRIGGER' || s.upCount >= upConfirm) go(raw === 'TRIGGER' ? raw : s.upMin);
   } else if (I(raw) < I(s.stage)) {
+    s.upCount = 0; s.upMin = null;
     s.lowerCount += 1;
     s.lowerMax = s.lowerMax && I(s.lowerMax) > I(raw) ? s.lowerMax : raw;
-    if (s.lowerCount >= downConfirm) {
-      changed = { from: s.stage, to: s.lowerMax };
-      Object.assign(s, { stage: s.lowerMax, since: now, lowerCount: 0, lowerMax: null, persistSent: false });
-    }
-  } else { s.lowerCount = 0; s.lowerMax = null; }
+    if (s.lowerCount >= downConfirm) go(s.lowerMax);
+  } else { s.lowerCount = 0; s.lowerMax = null; s.upCount = 0; s.upMin = null; }
   return { state: s, changed };
 }
 
