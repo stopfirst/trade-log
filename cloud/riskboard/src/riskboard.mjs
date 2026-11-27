@@ -8,13 +8,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULTS, STAGES, STAGE_EMOJI, STAGE_KO, derive, rawStage, step, trend, render, esc, reentryClose, renderReentry } from './core.mjs';
 
-const VERSION = '1.2.2';
+const VERSION = '1.2.3';
 const E = process.env;
 const ARGS = new Set(process.argv.slice(2));
 const T = { ...DEFAULTS };
 for (const k of Object.keys(T)) if (E['RB_' + k] !== undefined && E['RB_' + k] !== '') T[k] = Number(E['RB_' + k]);
 const POLL_MIN = Number(E.RB_POLL_MIN || 5);
 const DOWN_CONFIRM = Number(E.RB_DOWN_CONFIRM || 3);
+// 1.2.3: TENSION·FRACTURE로 올라갈 땐 2회 연속(10분) 확인. TRIGGER는 즉시. 1이면 예전처럼 즉시
+const UP_CONFIRM = Number(E.RB_UP_CONFIRM || 2);
+// 1.2.3: 장중 VIX 시세가 이 분 넘게 그대로면 단계를 바꾸지 않음(오래된 값으로 가짜 알림 방지). Yahoo VIX 계열은 평소 약 15분 지연
+const STALE_MIN = Number(E.RB_STALE_MIN || 30);
 const PERSIST_MIN = Number(E.RB_PERSIST_MIN || 10);
 const CLOSE_REPORT = (E.RB_CLOSE_REPORT ?? '1') !== '0';
 // 1.2.1: 마감 보드 시각(ET) — 원본처럼 16:55. VIX 계열 지수는 16:15에 끝나므로 그 직후는 값이 덜 굳을 수 있음
@@ -71,7 +75,7 @@ async function quotes() {
     const v = m.regularMarketPrice;
     if (!Number.isFinite(v)) throw new Error(`${s} 가격 없음`);
     const prev = await prevClose(s, etDateOf(m.regularMarketTime), m.previousClose ?? m.chartPreviousClose);
-    out[k] = { v, prev, t: m.regularMarketTime };
+    out[k] = { v, prev, t: m.regularMarketTime, end: m.currentTradingPeriod?.regular?.end };
   }));
   return out;
 }
@@ -137,27 +141,37 @@ async function board(stage, title, footer) {
   const raw = rawStage(d, T);
   let t = null; try { t = await spxTrend(); } catch (e) { log('SPX 추세 실패', e.message); }
   const now = new Date();
-  const text = render({ d, raw, stage: stage ?? raw.stage, title: title ?? '', trend: t, kst: fmt('Asia/Seoul', now), et: fmt('America/New_York', now), footer, T });
+  // 1.2.3: 바닥에 데이터 시각. VIX 계열은 Yahoo에서 약 15분 늦고 SPX는 실시간이라 같은 보드에 시각이 섞임
+  const ft = [footer];
+  if (footer === LIVE) ft[0] = `${footer} · VIX 계열 ${fmt('America/New_York', new Date(q.VIX.t * 1000))} ET 기준`;
+  const skewDate = etDateOf(q.SKEW.t), spxDate = etDateOf(q.SPX.t);
+  if (skewDate !== spxDate) ft.push(`ℹ SKEW는 ${skewDate.slice(5)} 값(하루 한 번 갱신)`);
+  const text = render({ d, raw, stage: stage ?? raw.stage, title: title ?? '', trend: t, kst: fmt('Asia/Seoul', now), et: fmt('America/New_York', now), footer: ft.join('\n'), T });
   return { q, d, raw, text };
 }
 
 const ttl = s => `${STAGE_EMOJI[s]} ${s}${s === 'TRIGGER' ? '' : ' (' + STAGE_KO[s] + ')'}`;
-const LIVE = '📡 장중 실시간 · Yahoo 시세(지연 가능)';
+const LIVE = '📡 장중 · Yahoo 시세';
 const CLOSE = '📌 종가 기준 구조 확인용';
 
 async function tick(S) {
   const et = etParts();
   const weekday = !['Sat', 'Sun'].includes(et.wd);
-  const inSession = weekday && et.min >= 9 * 60 + 30 && et.min < 16 * 60;
   const nowMs = Date.now();
+  // 1.2.3: 조기 폐장일(예: 추수감사절 다음 날 13:00 ET)은 Yahoo가 준 그날 정규장 종료 시각에 폴링을 멈춤
+  const earlyEnd = S.sessEnd?.date === et.date && Number.isFinite(S.sessEnd.end) && nowMs >= S.sessEnd.end * 1000;
+  const inSession = weekday && et.min >= 9 * 60 + 30 && et.min < 16 * 60 && !earlyEnd;
 
   if (inSession && nowMs - (S.lastPoll || 0) >= POLL_MIN * 60e3 - 5e3) {
     S.lastPoll = nowMs;
     const b0 = await board(null, '', LIVE);
     if (etDateOf(b0.q.SPX.t) !== et.date) { log('오늘 장 데이터 없음(휴장?) — 건너뜀'); return true; }
+    if (Number.isFinite(b0.q.SPX.end)) S.sessEnd = { date: et.date, end: b0.q.SPX.end };
+    const vixAge = (nowMs / 1000 - b0.q.VIX.t) / 60;
+    if (vixAge > STALE_MIN) { log(`VIX 시세 ${vixAge.toFixed(0)}분 전 값 — 단계 판단 건너뜀`); save(S); return true; }
     if (b0.raw.stage === 'TRIGGER') S.reentry = { trigDate: et.date, days: 0, done: false }; // TRIGGER 재발이면 다시 셈
     const first = !S.stage;
-    const { state, changed } = step(S.stage ? { stage: S.stage, since: S.since, lowerCount: S.lowerCount, lowerMax: S.lowerMax, persistSent: S.persistSent } : { stage: b0.raw.stage, since: nowMs }, b0.raw.stage, nowMs, DOWN_CONFIRM);
+    const { state, changed } = step(S.stage ? { stage: S.stage, since: S.since, lowerCount: S.lowerCount, lowerMax: S.lowerMax, upCount: S.upCount, upMin: S.upMin, persistSent: S.persistSent } : { stage: b0.raw.stage, since: nowMs }, b0.raw.stage, nowMs, DOWN_CONFIRM, UP_CONFIRM);
     Object.assign(S, state);
     log(`raw=${b0.raw.stage} stage=${S.stage} VIX/3M=${b0.d.ratio.toFixed(3)} VVIX=${b0.d.vvix} SPX%=${b0.d.spxPct.toFixed(2)}`);
     if (first) {
@@ -200,11 +214,6 @@ async function guarded(S) {
     if (worked && S.fail) {
       if (S.failAlerted) { try { await tg(`✅ 리스크 보드 복구 — ${S.fail}회 실패 뒤 다시 받고 있습니다.`); } catch (e) { log('복구 알림 실패', e.message); } }
       S.fail = 0; S.failAlerted = false;
-  // 설치·재시작 직후: 마지막 장 종가가 TRIGGER면 거기서부터 재진입 후보를 기다림(장중에 놓친 TRIGGER 보완)
-  if (REENTRY && !S.reentry) {
-    try { const b = await board(null, '', CLOSE); if (b.raw.stage === 'TRIGGER') { S.reentry = { trigDate: etDateOf(b.q.SPX.t), days: 0, done: false }; save(S); log('마지막 종가 TRIGGER — 재진입 대기 시작', S.reentry.trigDate); } }
-    catch (e) { log('시작 확인 실패', e.message); }
-  }
     }
   } catch (e) {
     S.fail = (S.fail || 0) + 1; S.lastErr = String(e.message || e).slice(0, 120);
@@ -227,7 +236,7 @@ async function main() {
     if (ARGS.has('--send')) { await tg(b.text); console.log('\n텔레그램으로 보냈습니다.'); }
     return;
   }
-  log(`riskboard ${VERSION} 시작 · ${POLL_MIN}분 간격 · 하향 확인 ${DOWN_CONFIRM}회 · 재진입 ${REENTRY ? '켬' : '끔'} · 고장 알림 ${FAIL_ALERT || '끔'} · 상태 ${STATE_FILE}`);
+  log(`riskboard ${VERSION} 시작 · ${POLL_MIN}분 간격 · 상향 확인 ${UP_CONFIRM}회 · 하향 확인 ${DOWN_CONFIRM}회 · 재진입 ${REENTRY ? '켬' : '끔'} · 고장 알림 ${FAIL_ALERT || '끔'} · 상태 ${STATE_FILE}`);
   if (!TOKEN || !CHAT) log('경고: 텔레그램 토큰/채팅 ID 없음');
   saveShared();
   const S = load();

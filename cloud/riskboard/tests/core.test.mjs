@@ -98,3 +98,15 @@ test('MOVE 신호는 다른 단계에도 붙음', () => {
   const q = Q({ vix: 21.37, vixPrev: 19.3, v3m: 21.95, vvix: 106, vvixPrev: 102, spxPct: -1.14 }); q.movePct = 12;
   assert.equal(rawStage(q).core, 'NEAR_BW + SPX + MOVE');
 });
+
+test('1.2.3 상향 확인: FRACTURE는 2회 연속, 한 번 튀면 무시, TRIGGER는 즉시', () => {
+  let s = { stage: 'TENSION', since: 0 };
+  let r = step(s, 'FRACTURE', 1, 3, 2); assert.equal(r.changed, null); s = r.state;
+  r = step(s, 'TENSION', 2, 3, 2); assert.equal(r.changed, null); assert.equal(r.state.upCount, 0); s = r.state; // 한 번 튄 것 → 무시
+  r = step(s, 'FRACTURE', 3, 3, 2); s = r.state; r = step(s, 'FRACTURE', 4, 3, 2);
+  assert.deepEqual(r.changed, { from: 'TENSION', to: 'FRACTURE' }); s = r.state;
+  r = step({ stage: 'TENSION', since: 0 }, 'TRIGGER', 5, 3, 2); assert.deepEqual(r.changed, { from: 'TENSION', to: 'TRIGGER' });
+  // FRACTURE→TRIGGER 섞여 올라가면 낮은 쪽(FRACTURE)으로 확정
+  r = step({ stage: 'STABLE', since: 0 }, 'TENSION', 6, 3, 2); r = step(r.state, 'FRACTURE', 7, 3, 2);
+  assert.deepEqual(r.changed, { from: 'STABLE', to: 'TENSION' });
+});
