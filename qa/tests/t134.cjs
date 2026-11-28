@@ -40,7 +40,7 @@ const seed=async()=>{
 const vis=sel=>{const el=typeof sel==='string'?document.querySelector(sel):sel;return !!(el&&el.getClientRects().length&&getComputedStyle(el).display!=='none'&&(el.offsetWidth||el.offsetHeight));};
 (async()=>{
  const browser=await chromium.launch({args:['--no-sandbox']});const R={tag,errors:[]};
- const base='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid';
+ const base='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid&v143=0';  /* v143: '진입 방식' 열이 빠지면 과정 열 순번이 바뀜 — 여기선 v142 열 구성 */
  const one=async([W,mode])=>{
   const key=(mode==='on'?'w':'off')+W,o={};
   const ctx=await browser.newContext({viewport:{width:W,height:W<500?844:900},isMobile:W<500,hasTouch:W<500,bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul'});

@@ -929,4 +929,34 @@ module.exports = {
     A.eq(F + 'dbg.on', false);
     A.eq(F + 'Off', { th: false, cells: 0, L1: 'B', detail: false, csv: false, week: false });
   } },
+  /* v143: 펀딩비 목록 접기(기본 접힘·N건·[펼치기]/[접기]·기기 기억·촘촘한 한 줄·수정/삭제 유지) + 진입 방식(t.trigger) 화면에서 숨김(표 열·카드·정정 폼(폼 안 숨김·값 보존)·새 거래 폼·방식별 성과 옵션), 저장값·CSV 그대로, ?v143=0 v142 */
+  t143: { check(A, o) {
+    const W = 'w1440.', K = 'w390.', F = 'off1440.';
+    const CLOSED = { sum: '누적 −0.98', count: '24건', btn: '펼치기', exp: 'false', rows: 24, shown: 0, maxH: 0, oneLine: false, bad: [] };
+    const OPEN = { sum: '누적 −0.98', count: '24건', btn: '접기', exp: 'true', rows: 24, shown: 24 };
+    for (const k of [W, K]) {
+      A.eq(k + 'dbg', { on: true, tableCol: false, compare: [], newFormVisible: false });
+      A.eq(k + 'F0', CLOSED); A.eq(k + 'sub', false);
+      for (const p of ['F1', 'F2']) { for (const [x, v] of Object.entries(OPEN)) A.eq(k + p + '.' + x, v); A.eq(k + p + '.oneLine', true);
+        if (!(o[k.slice(0, -1)][p].maxH <= 34)) A.fail(k + p + ' 펼친 줄이 촘촘해야 함(≤34px) ' + o[k.slice(0, -1)][p].maxH); }
+      A.eq(k + 'F1.dlg', true); A.eq(k + 'F1.ls', '1'); A.eq(k + 'Edit', { open: true, amt: true }); A.eq(k + 'docScroll', false);
+    }
+    A.eq(W + 'T.th', ['종목 / 셋업', '한줄평가', '진입일', '상태', '실현 R', '순손익', '손실 유형', '과정', '차트']); A.eq(W + 'T.tds', 9); A.eq(W + 'T.trigText', false);
+    if (!(o.w1440.T.onePct > o.off1440.T.onePct)) A.fail('한줄평가 열이 넓어져야 함 ' + o.w1440.T.onePct + ' vs ' + o.off1440.T.onePct);
+    for (const [x, v] of Object.entries(OPEN)) A.eq(W + 'R1.' + x, v);
+    A.eq(W + 'R2', { ...CLOSED, ls: '0' });
+    A.eq(W + 'Z', { sum: '누적 0.00', count: null, btn: null, exp: null, rows: 0, shown: 0, maxH: 0, oneLine: false, bad: [] });
+    A.eq(W + 'Fix', { inForm: true, vis: false, val: '돌파 순간', setupVis: false, label: false, after: { trigger: '돌파 순간', setup: 'EP' } });
+    A.eq(W + 'New', { exists: true, vis: false, val: '미분류', setupVis: true });
+    A.eq(W + 'Cmp', { opts: [], val: 'setup', setup: true });
+    A.eq(W + 'Csv', { h: true, val: true });
+    A.eq(W + 'Stored', 'F1:5분봉 마감,F2:1분봉 마감,W:돌파 순간');
+    A.eq(K + 'K', { n: 3, trig: false, over: false });
+    for (const [x, v] of Object.entries(OPEN)) A.eq(K + 'F3.' + x, v);
+    /* ?v143=0: v142 그대로 */
+    A.eq(F + 'dbg.on', false); A.eq(F + 'dbg.tableCol', true); A.eq(F + 'dbg.compare', ['trigger', 'setupTrigger']);
+    A.eq(F + 'T.th', ['종목 / 셋업', '한줄평가', '진입일', '진입 방식', '상태', '실현 R', '순손익', '손실 유형', '과정', '차트']); A.eq(F + 'T.trigText', true);
+    A.eq(F + 'F0.count', null); A.eq(F + 'F0.btn', null); A.eq(F + 'F0.rows', 24); A.eq(F + 'F0.shown', 24);
+    A.eq(F + 'Off.opts', ['trigger', 'setupTrigger']); A.eq(F + 'docScroll', false);
+  } },
 };

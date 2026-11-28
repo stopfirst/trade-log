@@ -39,7 +39,7 @@ const vis=sel=>{const el=typeof sel==='string'?document.querySelector(sel):sel;r
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
  const browser=await chromium.launch({args:['--no-sandbox']});const R={tag,errors:[]};
- const base='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid&v136=0&v142=0';  /* v142: '손실 유형' 열은 t142. v136: 여러 줄·전체 표시는 t136, 여기선 v135 동작(한 줄·말줄임·80자) */
+ const base='http://127.0.0.1:'+srv.address().port+'/?journal=hyperliquid&v136=0&v142=0&v143=0';  /* v143: '진입 방식' 열 숨김은 t143 */  /* v142: '손실 유형' 열은 t142. v136: 여러 줄·전체 표시는 t136, 여기선 v135 동작(한 줄·말줄임·80자) */
  const one=async([W,mode])=>{
   const key=(mode==='on'?'w':'off')+W,o={};const M=W<500;
   const ctx=await browser.newContext({viewport:{width:W,height:M?844:900},isMobile:M,hasTouch:M,bypassCSP:true,locale:'ko-KR',timezoneId:'Asia/Seoul'});
